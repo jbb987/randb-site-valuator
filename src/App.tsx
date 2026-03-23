@@ -7,7 +7,7 @@ import ValuatorTool from './tools/ValuatorTool';
 
 export default function App() {
   return (
-    <BrowserRouter basename="/randb-site-valuator">
+    <BrowserRouter>
       <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
