@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import type { SiteInputs, ValuationResult } from '../types';
+import type { SiteInputs, AppraisalResult } from '../types';
 import ValueCard from './ValueCard';
 import EnergyBridge from './EnergyBridge';
 import OutcomeBar from './OutcomeBar';
@@ -9,7 +9,7 @@ import PowerScale from './PowerScale';
 
 interface Props {
   inputs: SiteInputs;
-  result: ValuationResult;
+  result: AppraisalResult;
   onMWChange: (mw: number) => void;
   onSiteNameChange: (name: string) => void;
 }
@@ -69,7 +69,7 @@ function InlineEditName({ value, onChange }: { value: string; onChange: (v: stri
       aria-label="Edit site name"
     >
       <span className="text-sm font-semibold text-[#201F1E]">
-        {value || 'Site Valuation'}
+        {value || 'Site Appraisal'}
       </span>
       <svg
         className="w-3 h-3 text-slate-300 group-hover:text-[#C1121F] transition no-print"

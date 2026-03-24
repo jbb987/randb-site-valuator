@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { SiteInputs, ValuationResult } from '../types';
+import type { SiteInputs, AppraisalResult } from '../types';
 
 /**
  * Power cost curve fitted to real data points:
@@ -26,7 +26,7 @@ export function calculateBuildCost(mw: number): number {
   return CURVE_A * Math.pow(mw, CURVE_B);
 }
 
-export function useValuation(inputs: SiteInputs): ValuationResult {
+export function useAppraisal(inputs: SiteInputs): AppraisalResult {
   return useMemo(() => {
     const currentValue = inputs.totalAcres * inputs.currentPPA;
     const buildCost = calculateBuildCost(inputs.mw);

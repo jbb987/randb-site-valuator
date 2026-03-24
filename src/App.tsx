@@ -3,7 +3,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
-import ValuatorTool from './tools/ValuatorTool';
+import SiteAppraiserTool from './tools/SiteAppraiserTool';
 
 export default function App() {
   return (
@@ -16,9 +16,9 @@ export default function App() {
               <Dashboard />
             </ProtectedRoute>
           } />
-          <Route path="/valuator" element={
+          <Route path="/site-appraiser" element={
             <ProtectedRoute>
-              <ValuatorTool />
+              <SiteAppraiserTool />
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" />} />

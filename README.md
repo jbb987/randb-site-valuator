@@ -1,6 +1,6 @@
-# R&B Power — Site Valuator
+# R&B Power — Site Appraiser
 
-Internal tool for estimating energy site value based on power capacity, acreage, and project parameters.
+Internal tool for appraising energy site value based on power capacity, acreage, and project parameters.
 
 ## Stack
 

@@ -10,7 +10,7 @@ export interface SiteInputs {
   county: string;
 }
 
-export interface ValuationResult {
+export interface AppraisalResult {
   currentValue: number;           // acres × currentPPA
   buildCost: number;              // from cost curve
   buildCostPerMW: number;         // buildCost / mw
