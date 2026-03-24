@@ -5,6 +5,7 @@ const routeLabels: Record<string, string> = {
   '/site-appraiser': 'Site Appraiser',
   '/site-request': 'Site Request',
   '/site-request/form': 'Submit Request',
+  '/user-management': 'User Management',
 };
 
 export default function Breadcrumb() {
