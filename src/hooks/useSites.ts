@@ -114,12 +114,13 @@ export function useSites() {
     });
   }, [activeId, debouncedSave]);
 
-  const createSite = useCallback((name?: string) => {
+  const createSite = useCallback((name?: string, projectId?: string) => {
     const id = generateId();
     const newSite: SavedSite = {
       id,
       inputs: {
         id,
+        projectId: projectId ?? 'unassigned',
         siteName: name ?? 'New Site',
         totalAcres: 0,
         currentPPA: 0,
@@ -127,6 +128,9 @@ export function useSites() {
         parcelId: '',
         substationName: '',
         county: '',
+        utilityTerritory: '',
+        iso: '',
+        description: '',
       },
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -135,6 +139,29 @@ export function useSites() {
     setActiveId(id);
     saveSite(newSite); // Save immediately (not debounced)
     return id;
+  }, []);
+
+  const moveSite = useCallback((siteId: string, targetProjectId: string) => {
+    localChangeRef.current.add(siteId);
+    setSites((prev) => {
+      const updated = prev.map((s) => {
+        if (s.id === siteId) {
+          const newSite = {
+            ...s,
+            inputs: { ...s.inputs, projectId: targetProjectId },
+            updatedAt: Date.now(),
+          };
+          saveSite(newSite).then(() => {
+            localChangeRef.current.delete(siteId);
+          }).catch(() => {
+            localChangeRef.current.delete(siteId);
+          });
+          return newSite;
+        }
+        return s;
+      });
+      return updated;
+    });
   }, []);
 
   const deleteSite = useCallback((id: string) => {
@@ -163,5 +190,6 @@ export function useSites() {
     createSite,
     deleteSite,
     switchSite,
+    moveSite,
   };
 }

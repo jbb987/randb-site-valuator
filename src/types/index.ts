@@ -1,5 +1,13 @@
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface SiteInputs {
   id: string;
+  projectId: string;         // Links to parent Project
   siteName: string;
   totalAcres: number;
   currentPPA: number;        // $/acre from comps
@@ -8,6 +16,10 @@ export interface SiteInputs {
   parcelId: string;
   substationName: string;
   county: string;
+  // Descriptive fields
+  utilityTerritory: string;
+  iso: string;
+  description: string;
 }
 
 export interface AppraisalResult {
@@ -25,6 +37,24 @@ export interface AppraisalResult {
 export interface SavedSite {
   id: string;
   inputs: SiteInputs;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Site Request types
+export interface SiteRequestSite {
+  address: string;
+  notes: string;
+}
+
+export type SiteRequestStatus = 'new' | 'ongoing' | 'done';
+
+export interface SiteRequest {
+  id: string;
+  customerName: string;
+  sites: SiteRequestSite[];
+  status: SiteRequestStatus;
+  submittedBy: string;
   createdAt: number;
   updatedAt: number;
 }

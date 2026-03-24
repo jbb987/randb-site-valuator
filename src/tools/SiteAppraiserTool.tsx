@@ -1,15 +1,17 @@
 import { AnimatePresence } from 'framer-motion';
 import { useAppraisal } from '../hooks/useAppraisal';
 import { useSites } from '../hooks/useSites';
+import { useProjects } from '../hooks/useProjects';
 import Layout from '../components/Layout';
-import Header from '../components/Header';
-import PresentationView from '../components/PresentationView';
-import SetupPanel from '../components/SetupPanel';
-import SiteSwitcher from '../components/SiteSwitcher';
-import { useState, useEffect } from 'react';
+import ProjectSidebar from '../components/appraiser/ProjectSidebar';
+import SiteDetailPanel from '../components/appraiser/SiteDetailPanel';
+import ProjectOverview from '../components/appraiser/ProjectOverview';
+import { useState, useEffect, useCallback } from 'react';
+import type { SiteInputs } from '../types';
 
-const emptyInputs = {
+const emptyInputs: SiteInputs = {
   id: '',
+  projectId: '',
   siteName: '',
   totalAcres: 0,
   currentPPA: 0,
@@ -17,31 +19,87 @@ const emptyInputs = {
   parcelId: '',
   substationName: '',
   county: '',
+  utilityTerritory: '',
+  iso: '',
+  description: '',
 };
+
+type View = 'project-overview' | 'site-detail';
 
 export default function SiteAppraiserTool() {
   const {
     sites,
     activeSite,
     activeId,
-    loading,
+    loading: sitesLoading,
     updateInputs,
     updateMW,
     createSite,
     deleteSite,
     switchSite,
+    moveSite,
   } = useSites();
 
-  const [setupOpen, setSetupOpen] = useState(false);
+  const {
+    projects,
+    activeProjectId,
+    loading: projectsLoading,
+    createProject,
+    deleteProject,
+    renameProject,
+    selectProject,
+  } = useProjects();
+
+  const [view, setView] = useState<View>('project-overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const loading = sitesLoading || projectsLoading;
   const inputs = activeSite?.inputs ?? emptyInputs;
   const result = useAppraisal(inputs);
 
+  const activeProject = projects.find((p) => p.id === activeProjectId);
+  const projectSites = sites.filter((s) => s.inputs.projectId === activeProjectId);
+
+  const handleSelectProject = useCallback((id: string) => {
+    selectProject(id);
+    setView('project-overview');
+  }, [selectProject]);
+
+  const handleSelectSite = useCallback((id: string) => {
+    const site = sites.find((s) => s.id === id);
+    if (site) {
+      selectProject(site.inputs.projectId);
+      switchSite(id);
+      setView('site-detail');
+    }
+  }, [sites, selectProject, switchSite]);
+
+  const handleDeleteProject = useCallback((id: string) => {
+    // Move orphaned sites to another project before deleting
+    const otherProject = projects.find((p) => p.id !== id);
+    if (otherProject) {
+      const orphanedSites = sites.filter((s) => s.inputs.projectId === id);
+      for (const site of orphanedSites) {
+        moveSite(site.id, otherProject.id);
+      }
+    }
+    deleteProject(id);
+  }, [projects, sites, moveSite, deleteProject]);
+
+  const handleCreateSite = useCallback((projectId: string) => {
+    const id = createSite('New Site', projectId);
+    selectProject(projectId);
+    setView('site-detail');
+    return id;
+  }, [createSite, selectProject]);
+
   // Auto-create first site if database is empty
   useEffect(() => {
-    if (!loading && sites.length === 0) {
-      createSite('New Site');
+    if (!loading && sites.length === 0 && projects.length > 0) {
+      createSite('New Site', projects[0].id);
     }
-  }, [loading, sites.length, createSite]);
+  }, [loading, sites.length, projects.length, createSite, projects]);
 
   if (loading) {
     return (
@@ -49,7 +107,7 @@ export default function SiteAppraiserTool() {
         <div className="flex items-center justify-center h-[60vh]">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#D8D5D0] border-t-[#C1121F]" />
-            <span className="text-sm text-[#7A756E]">Loading sites...</span>
+            <span className="text-sm text-[#7A756E]">Loading...</span>
           </div>
         </div>
       </Layout>
@@ -57,46 +115,83 @@ export default function SiteAppraiserTool() {
   }
 
   return (
-    <Layout>
-      <Header
-        onToggleSetup={() => setSetupOpen(!setupOpen)}
-        isSetupOpen={setupOpen}
-      />
+    <Layout fullWidth>
+      <div className="flex" style={{ minHeight: 'calc(100vh - 120px)' }}>
+        {/* Desktop sidebar */}
+        <ProjectSidebar
+          projects={projects}
+          sites={sites}
+          activeProjectId={activeProjectId}
+          activeSiteId={view === 'site-detail' ? activeId : ''}
+          onSelectProject={handleSelectProject}
+          onSelectSite={handleSelectSite}
+          onCreateProject={createProject}
+          onCreateSite={handleCreateSite}
+          onDeleteProject={handleDeleteProject}
+          onDeleteSite={deleteSite}
+          onRenameProject={renameProject}
+          onMoveSite={moveSite}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
 
-      <SiteSwitcher
-        sites={sites}
-        activeId={activeId}
-        onSwitch={switchSite}
-        onCreate={createSite}
-        onDelete={deleteSite}
-      />
-
-      <PresentationView
-        inputs={inputs}
-        result={result}
-        onMWChange={updateMW}
-        onSiteNameChange={(name) => updateInputs({ ...inputs, siteName: name })}
-      />
-
-      {/* Setup Panel overlay */}
-      <AnimatePresence>
-        {setupOpen && (
-          <>
-            <div
-              className="fixed inset-0 bg-black/20 z-40"
-              onClick={() => setSetupOpen(false)}
-              aria-label="Close setup panel"
-              role="button"
-              tabIndex={-1}
+        {/* Mobile sidebar overlay */}
+        <AnimatePresence>
+          {mobileSidebarOpen && (
+            <ProjectSidebar
+              projects={projects}
+              sites={sites}
+              activeProjectId={activeProjectId}
+              activeSiteId={view === 'site-detail' ? activeId : ''}
+              onSelectProject={handleSelectProject}
+              onSelectSite={handleSelectSite}
+              onCreateProject={createProject}
+              onCreateSite={handleCreateSite}
+              onDeleteProject={handleDeleteProject}
+              onDeleteSite={deleteSite}
+              onRenameProject={renameProject}
+              onMoveSite={moveSite}
+              collapsed={false}
+              onToggleCollapse={() => setMobileSidebarOpen(false)}
+              isMobile
             />
-            <SetupPanel
+          )}
+        </AnimatePresence>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {/* Mobile toggle button */}
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="md:hidden flex items-center gap-2 mb-4 text-sm text-[#7A756E] hover:text-[#201F1E] transition"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+            </svg>
+            Projects
+          </button>
+
+          {view === 'project-overview' && activeProject ? (
+            <ProjectOverview
+              project={activeProject}
+              sites={projectSites}
+              onSelectSite={handleSelectSite}
+              onCreateSite={() => handleCreateSite(activeProjectId)}
+            />
+          ) : view === 'site-detail' && activeSite ? (
+            <SiteDetailPanel
               inputs={inputs}
-              onChange={updateInputs}
-              onClose={() => setSetupOpen(false)}
+              result={result}
+              onMWChange={updateMW}
+              onInputsChange={updateInputs}
             />
-          </>
-        )}
-      </AnimatePresence>
+          ) : (
+            <div className="flex items-center justify-center h-full text-sm text-[#7A756E]">
+              Select a project or site from the sidebar
+            </div>
+          )}
+        </main>
+      </div>
     </Layout>
   );
 }

@@ -94,23 +94,16 @@ export default function PresentationView({ inputs, result, onMWChange, onSiteNam
       >
         {/* Header row */}
         <div className="flex items-center px-6 pt-5 pb-2">
-          <div className="flex items-center gap-2.5">
-            <img
-              src={`${import.meta.env.BASE_URL}logo.svg`}
-              alt="R&B Power Inc."
-              className="h-12 w-12 rounded-md object-contain"
+          <div className="flex items-baseline gap-3">
+            <InlineEditName
+              value={inputs.siteName}
+              onChange={onSiteNameChange}
             />
-            <div className="flex items-baseline gap-3">
-              <InlineEditName
-                value={inputs.siteName}
-                onChange={onSiteNameChange}
-              />
-              {inputs.totalAcres > 0 && (
-                <span className="text-xs text-slate-400">
-                  {inputs.totalAcres.toLocaleString()} acres
-                </span>
-              )}
-            </div>
+            {inputs.totalAcres > 0 && (
+              <span className="text-xs text-slate-400">
+                {inputs.totalAcres.toLocaleString()} acres
+              </span>
+            )}
           </div>
         </div>
 

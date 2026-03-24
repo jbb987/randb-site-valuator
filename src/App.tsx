@@ -4,6 +4,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import SiteAppraiserTool from './tools/SiteAppraiserTool';
+import SiteRequestPipeline from './tools/SiteRequestPipeline';
+import SiteRequestForm from './pages/SiteRequestForm';
 
 export default function App() {
   return (
@@ -19,6 +21,16 @@ export default function App() {
           <Route path="/site-appraiser" element={
             <ProtectedRoute>
               <SiteAppraiserTool />
+            </ProtectedRoute>
+          } />
+          <Route path="/site-request" element={
+            <ProtectedRoute>
+              <SiteRequestPipeline />
+            </ProtectedRoute>
+          } />
+          <Route path="/site-request/form" element={
+            <ProtectedRoute>
+              <SiteRequestForm />
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" />} />

@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 const routeLabels: Record<string, string> = {
   '/': 'Tools',
   '/site-appraiser': 'Site Appraiser',
+  '/site-request': 'Site Request',
+  '/site-request/form': 'Submit Request',
 };
 
 export default function Breadcrumb() {
