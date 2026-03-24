@@ -7,8 +7,31 @@ const tools = [
     name: 'Site Appraiser',
     description: 'Appraise site value based on power capacity and land comps',
     path: '/site-appraiser',
+    icon: 'bolt',
+  },
+  {
+    id: 'site-request',
+    name: 'Site Request',
+    description: 'Collect site requests from agents and manage them in a pipeline',
+    path: '/site-request',
+    icon: 'clipboard',
   },
 ];
+
+function ToolIcon({ type }: { type: string }) {
+  if (type === 'clipboard') {
+    return (
+      <svg className="h-5 w-5 text-[#C1121F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="h-5 w-5 text-[#C1121F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -25,9 +48,7 @@ export default function Dashboard() {
               className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-6 text-left hover:shadow-md hover:border-[#C1121F]/30 transition group"
             >
               <div className="h-10 w-10 rounded-lg bg-[#C1121F]/10 flex items-center justify-center mb-4">
-                <svg className="h-5 w-5 text-[#C1121F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+                <ToolIcon type={tool.icon} />
               </div>
               <h3 className="font-heading font-semibold text-[#201F1E] mb-1 group-hover:text-[#C1121F] transition">
                 {tool.name}
