@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SiteInputs } from '../types';
-import { calculateBuildCost } from '../hooks/useValuation';
+import { calculateBuildCost } from '../hooks/useAppraisal';
 import { formatCurrencyShort } from '../utils/format';
 
 interface Props {

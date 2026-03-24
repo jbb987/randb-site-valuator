@@ -1,5 +1,5 @@
 import { AnimatePresence } from 'framer-motion';
-import { useValuation } from '../hooks/useValuation';
+import { useAppraisal } from '../hooks/useAppraisal';
 import { useSites } from '../hooks/useSites';
 import Layout from '../components/Layout';
 import Header from '../components/Header';
@@ -34,7 +34,7 @@ export default function SiteAppraiserTool() {
 
   const [setupOpen, setSetupOpen] = useState(false);
   const inputs = activeSite?.inputs ?? emptyInputs;
-  const result = useValuation(inputs);
+  const result = useAppraisal(inputs);
 
   // Auto-create first site if database is empty
   useEffect(() => {
