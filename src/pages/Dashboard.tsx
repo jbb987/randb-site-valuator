@@ -3,10 +3,10 @@ import Layout from '../components/Layout';
 
 const tools = [
   {
-    id: 'valuator',
-    name: 'Site Valuator',
-    description: 'Evaluate site value based on power capacity and land comps',
-    path: '/valuator',
+    id: 'site-appraiser',
+    name: 'Site Appraiser',
+    description: 'Appraise site value based on power capacity and land comps',
+    path: '/site-appraiser',
   },
 ];
 

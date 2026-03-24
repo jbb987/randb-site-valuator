@@ -19,7 +19,7 @@ const emptyInputs = {
   county: '',
 };
 
-export default function ValuatorTool() {
+export default function SiteAppraiserTool() {
   const {
     sites,
     activeSite,
