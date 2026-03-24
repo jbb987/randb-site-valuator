@@ -4,7 +4,6 @@ import {
   setDoc,
   updateDoc,
   getDocs,
-  getDoc,
   writeBatch,
   onSnapshot,
   query,
@@ -17,7 +16,6 @@ import type { Project } from '../types';
 
 const COLLECTION = 'projects';
 const SITES_COLLECTION = 'sites';
-export const UNASSIGNED_PROJECT_ID = 'unassigned';
 
 function projectsRef() {
   return collection(db, COLLECTION);
@@ -83,51 +81,4 @@ export function subscribeProjects(
       onError?.(err);
     },
   );
-}
-
-/**
- * One-time migration: finds sites without projectId and assigns them
- * to an "Unassigned" project. Idempotent — safe to call multiple times.
- */
-export async function migrateOrphanedSites(): Promise<void> {
-  try {
-    const sitesSnapshot = await getDocs(collection(db, SITES_COLLECTION));
-    const orphaned = sitesSnapshot.docs.filter((d) => {
-      const data = d.data();
-      return !data.inputs?.projectId;
-    });
-
-    if (orphaned.length === 0) return;
-
-    // Ensure Unassigned project exists
-    const unassignedRef = doc(db, COLLECTION, UNASSIGNED_PROJECT_ID);
-    const unassignedDoc = await getDoc(unassignedRef);
-    if (!unassignedDoc.exists()) {
-      await setDoc(unassignedRef, {
-        id: UNASSIGNED_PROJECT_ID,
-        name: 'Unassigned',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-    }
-
-    // Batch-update orphaned sites
-    const batch = writeBatch(db);
-    for (const siteDoc of orphaned) {
-      const data = siteDoc.data();
-      batch.update(doc(db, SITES_COLLECTION, siteDoc.id), {
-        inputs: {
-          ...data.inputs,
-          projectId: UNASSIGNED_PROJECT_ID,
-          utilityTerritory: data.inputs?.utilityTerritory ?? '',
-          iso: data.inputs?.iso ?? '',
-          description: data.inputs?.description ?? '',
-        },
-      });
-    }
-    await batch.commit();
-    console.log(`[Migration] Migrated ${orphaned.length} orphaned sites to Unassigned project`);
-  } catch (err) {
-    console.error('[Migration] Failed to migrate orphaned sites:', err);
-  }
 }
