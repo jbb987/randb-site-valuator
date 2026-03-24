@@ -1,9 +1,12 @@
 # CLAUDE.md — R&B Power Platform
 
+> **Keep this file up to date.** Whenever you add, rename, or remove routes, tools, components, hooks, or lib files, update this document to reflect the change.
+
 ## Project Overview
 
-Internal tool suite for R&B Power. Currently has one tool (Site Valuator) with plans to add more.
-Evaluates renewable energy site value based on power capacity, acreage, and land comparables.
+Internal tool suite for R&B Power. Currently has two tools:
+- **Site Appraiser** — Evaluates renewable energy site value based on power capacity, acreage, and land comparables. Sites are organized under Projects.
+- **Site Request** — Kanban pipeline for tracking site requests through stages (new → ongoing → done).
 
 ## Tech Stack
 
@@ -19,28 +22,63 @@ Evaluates renewable energy site value based on power capacity, acreage, and land
 
 ```
 src/
-  App.tsx              # Root routes
-  main.tsx             # Entry point
+  App.tsx                    # Root routes
+  main.tsx                   # Entry point
   components/
-    Layout.tsx          # Shared page wrapper (Navbar + Breadcrumb + content)
-    Breadcrumb.tsx      # Route-aware breadcrumb navigation
-    navbar/             # Navbar, NavLinks, UserMenu, MobileMenu, navConfig
-    ProtectedRoute.tsx  # Auth gate
-    ErrorBoundary.tsx   # Error boundary
-    ...                 # Tool-specific UI components (SetupPanel, PowerSlider, etc.)
+    Layout.tsx                # Shared page wrapper (Navbar + Breadcrumb + content)
+    Breadcrumb.tsx            # Route-aware breadcrumb navigation
+    ProtectedRoute.tsx        # Auth gate
+    ErrorBoundary.tsx         # Error boundary
+    navbar/                   # Navbar, NavLinks, UserMenu, MobileMenu, navConfig
+    appraiser/                # Site Appraiser components
+      ProjectOverview.tsx     # Project list / overview
+      ProjectSidebar.tsx      # Sidebar for project navigation
+      SiteDetailPanel.tsx     # Individual site detail view
+    site-request/             # Site Request components
+      PipelineColumn.tsx      # Kanban column
+      RequestCard.tsx         # Request card in pipeline
+    EnergyBridge.tsx          # Energy bridge visualization
+    Header.tsx                # Section header
+    OutcomeBar.tsx            # Outcome bar chart
+    PowerScale.tsx            # Power scale visualization
+    PowerSlider.tsx           # MW slider input
+    PresentationView.tsx      # Presentation/summary view
+    SetupPanel.tsx            # Site setup form panel
+    SiteSwitcher.tsx          # Switch between sites
+    ValueCard.tsx             # Value display card
   pages/
-    Dashboard.tsx       # Tool grid (root page "/")
-    LoginPage.tsx       # Firebase auth login
+    Dashboard.tsx             # Tool grid (root page "/")
+    LoginPage.tsx             # Firebase auth login
+    SiteRequestForm.tsx       # Site request submission form
   tools/
-    ValuatorTool.tsx    # Site Valuator tool ("/valuator")
-  hooks/                # useAuth, useSites, useValuation, useAnimatedNumber
+    SiteAppraiserTool.tsx     # Site Appraiser tool ("/site-appraiser")
+    SiteRequestPipeline.tsx   # Site Request pipeline ("/site-request")
+  hooks/
+    useAuth.ts                # Firebase auth state
+    useAppraisal.ts           # Appraisal calculation logic
+    useProjects.ts            # Project CRUD operations
+    useSites.ts               # Site CRUD operations
+    useSiteRequests.ts        # Site request CRUD operations
+    useAnimatedNumber.ts      # Number animation utility
   lib/
-    firebase.ts         # Firebase config
+    firebase.ts               # Firebase config
+    projects.ts               # Project Firestore operations
+    siteRequests.ts           # Site request Firestore operations
   types/
-    index.ts            # SiteInputs, ValuationResult, SavedSite
+    index.ts                  # Project, SiteInputs, AppraisalResult, SavedSite, SiteRequest, etc.
   utils/
-    format.ts           # Formatting helpers
+    format.ts                 # Formatting helpers
 ```
+
+## Routes
+
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/login` | `LoginPage` | Firebase auth login |
+| `/` | `Dashboard` | Tool grid (root) |
+| `/site-appraiser` | `SiteAppraiserTool` | Site appraisal tool |
+| `/site-request` | `SiteRequestPipeline` | Request pipeline (kanban) |
+| `/site-request/form` | `SiteRequestForm` | Submit new site request |
 
 ## Design System
 
@@ -75,7 +113,12 @@ When adding a new route, you MUST update these files:
 All protected pages must be wrapped in `<Layout>` which provides:
 - Sticky navbar
 - Breadcrumb navigation
-- Centered content container (`max-w-5xl`)
+- Centered content container (`max-w-5xl`), or full-width via `fullWidth` prop
+
+### Data Hierarchy
+
+- **Projects** contain multiple **Sites** (Site Appraiser)
+- **Site Requests** are standalone with embedded site arrays (Site Request tool)
 
 ### Auth
 
@@ -86,7 +129,6 @@ All protected pages must be wrapped in `<Layout>` which provides:
 ### Navigation Config
 
 - `src/components/navbar/navConfig.ts` holds the `navLinks` array for navbar items
-- Currently only has `Tools` linking to `/`
 
 ## Commands
 
