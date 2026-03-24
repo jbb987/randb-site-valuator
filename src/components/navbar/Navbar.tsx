@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import NavLinks from './NavLinks';
+// import NavLinks from './NavLinks';
 import UserMenu from './UserMenu';
 import MobileMenu from './MobileMenu';
 
@@ -16,7 +16,7 @@ export default function Navbar() {
               className="h-11"
             />
           </Link>
-          <NavLinks />
+          {/* <NavLinks /> */}
         </div>
 
         {/* Right side */}
