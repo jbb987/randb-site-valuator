@@ -64,6 +64,41 @@ export async function exportElementToPdf(
       }
     });
 
+    // Restyle inputs as plain text for a clean report look
+    clone.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+      const span = document.createElement('span');
+      span.textContent = input.value || '—';
+      span.style.cssText = `
+        display: block;
+        font-size: 14px;
+        color: #201F1E;
+        font-family: 'IBM Plex Sans', sans-serif;
+        padding: 6px 0;
+        border-bottom: 1px solid #E8E5E0;
+      `;
+      input.parentNode!.replaceChild(span, input);
+    });
+
+    // Force 2-column grid on grid containers (md: breakpoints don't apply to clones)
+    clone.querySelectorAll<HTMLElement>('[class*="md:grid-cols-2"]').forEach((el) => {
+      el.style.display = 'grid';
+      el.style.gridTemplateColumns = 'repeat(2, 1fr)';
+      el.style.gap = '20px';
+    });
+    clone.querySelectorAll<HTMLElement>('[class*="md:grid-cols-3"]').forEach((el) => {
+      el.style.display = 'grid';
+      el.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      el.style.gap = '20px';
+    });
+
+    // Force desktop layout for the value cards (hide mobile, show desktop)
+    clone.querySelectorAll<HTMLElement>('[class*="hidden md:grid"]').forEach((el) => {
+      el.style.display = 'grid';
+    });
+    clone.querySelectorAll<HTMLElement>('[class*="flex md:hidden"]').forEach((el) => {
+      el.style.display = 'none';
+    });
+
     // Wait a tick for styles to compute on the clone
     await new Promise((r) => setTimeout(r, 50));
 
