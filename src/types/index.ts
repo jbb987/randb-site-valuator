@@ -14,10 +14,13 @@ export interface SiteInputs {
   totalAcres: number;
   currentPPA: number;        // $/acre from comps
   mw: number;                // 10-1000
+  // Location
+  coordinates: string;          // lat/long
   // Optional metadata
   parcelId: string;
   substationName: string;
   county: string;
+  priorUsage: string;           // prior usage / property type
   // Descriptive fields
   utilityTerritory: string;
   iso: string;
