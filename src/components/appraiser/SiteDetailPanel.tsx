@@ -1,5 +1,6 @@
 import type { SiteInputs, AppraisalResult } from '../../types';
 import { formatCurrencyShort } from '../../utils/format';
+import { useInfraLookup } from '../../hooks/useInfraLookup';
 import PresentationView from '../PresentationView';
 import SiteMapCard from './SiteMapCard';
 
@@ -24,8 +25,25 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsChange }: Props) {
+  const { loading: infraLoading, error: infraError, lookup: infraLookup } = useInfraLookup();
+
   function set<K extends keyof SiteInputs>(key: K, value: SiteInputs[K]) {
     onInputsChange({ ...inputs, [key]: value });
+  }
+
+  async function handleInfraLookup() {
+    const result = await infraLookup({
+      coordinates: inputs.coordinates,
+      address: inputs.address,
+    });
+    if (result) {
+      onInputsChange({
+        ...inputs,
+        iso: result.iso || inputs.iso,
+        utilityTerritory: result.utilityTerritory || inputs.utilityTerritory,
+        tsp: result.tsp || inputs.tsp,
+      });
+    }
   }
 
   function num(key: keyof SiteInputs, raw: string) {
@@ -164,9 +182,40 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
 
       {/* Power Infrastructure */}
       <div className="bg-white rounded-2xl border border-[#D8D5D0] p-6 md:p-8">
-        <h3 className="font-heading text-sm font-semibold text-[#201F1E] mb-5">
-          Power Infrastructure
-        </h3>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-heading text-sm font-semibold text-[#201F1E]">
+            Power Infrastructure
+          </h3>
+          <button
+            type="button"
+            onClick={handleInfraLookup}
+            disabled={infraLoading || (!inputs.address && !inputs.coordinates)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#C1121F] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#A10E1A] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {infraLoading ? (
+              <>
+                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Looking up…
+              </>
+            ) : (
+              <>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+                </svg>
+                Auto-fill from HIFLD
+              </>
+            )}
+          </button>
+        </div>
+
+        {infraError && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+            {infraError}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field label="RTO / ISO">
