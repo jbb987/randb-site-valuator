@@ -25,7 +25,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 export default function SetupPanel({ inputs, onChange, onClose }: Props) {
   const [showOptional, setShowOptional] = useState(
-    !!(inputs.parcelId || inputs.substationName || inputs.county)
+    !!(inputs.parcelId || inputs.county || inputs.address)
   );
 
   function set<K extends keyof SiteInputs>(key: K, value: SiteInputs[K]) {
@@ -92,13 +92,23 @@ export default function SetupPanel({ inputs, onChange, onClose }: Props) {
             />
           </Field>
 
-          <Field label="Current $/Acre" hint="From Land ID comps">
+          <Field label="$/Acre Low" hint="From land comps">
             <input
               type="number"
               className={inputClass}
-              value={inputs.currentPPA || ''}
-              onChange={(e) => num('currentPPA', e.target.value)}
-              placeholder="6400"
+              value={inputs.ppaLow || ''}
+              onChange={(e) => num('ppaLow', e.target.value)}
+              placeholder="5000"
+            />
+          </Field>
+
+          <Field label="$/Acre High" hint="From land comps">
+            <input
+              type="number"
+              className={inputClass}
+              value={inputs.ppaHigh || ''}
+              onChange={(e) => num('ppaHigh', e.target.value)}
+              placeholder="8000"
             />
           </Field>
         </div>
@@ -166,13 +176,13 @@ export default function SetupPanel({ inputs, onChange, onClose }: Props) {
                       placeholder="00014006623014"
                     />
                   </Field>
-                  <Field label="Substation Name">
+                  <Field label="TSP">
                     <input
                       type="text"
                       className={inputClass}
-                      value={inputs.substationName}
-                      onChange={(e) => set('substationName', e.target.value)}
-                      placeholder="Willard"
+                      value={inputs.tsp}
+                      onChange={(e) => set('tsp', e.target.value)}
+                      placeholder="e.g. Western Area Power"
                     />
                   </Field>
                   <Field label="County / State">
@@ -193,7 +203,7 @@ export default function SetupPanel({ inputs, onChange, onClose }: Props) {
         {/* Present button */}
         <button
           onClick={onClose}
-          className="w-full rounded-xl bg-[#C1121F] text-white py-3.5 text-sm font-bold transition hover:bg-[#9B0E18] active:scale-[0.98] shadow-lg shadow-red-200/40"
+          className="w-full rounded-xl bg-white text-[#C1121F] border border-[#C1121F] hover:bg-[#C1121F] hover:text-white py-3.5 text-sm font-bold transition active:scale-[0.98]"
         >
           Present
         </button>

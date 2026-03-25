@@ -6,18 +6,19 @@ const VALUE_PER_MW = 1_000_000;
 
 export function useAppraisal(inputs: SiteInputs): AppraisalResult {
   return useMemo(() => {
-    const currentValue = inputs.totalAcres * inputs.currentPPA;
+    const currentValueLow = inputs.totalAcres * inputs.ppaLow;
+    const currentValueHigh = inputs.totalAcres * inputs.ppaHigh;
+    const currentValueMid = (currentValueLow + currentValueHigh) / 2;
     const energizedValue = inputs.mw * VALUE_PER_MW;
-    const energizedPPA = inputs.totalAcres > 0 ? energizedValue / inputs.totalAcres : 0;
-    const valueCreated = energizedValue - currentValue;
-    const returnMultiple = currentValue > 0 ? energizedValue / currentValue : 0;
+    const valueCreated = energizedValue - currentValueMid;
+    const returnMultiple = currentValueMid > 0 ? energizedValue / currentValueMid : 0;
 
     return {
-      currentValue,
+      currentValueLow,
+      currentValueHigh,
       energizedValue,
-      energizedPPA,
       valueCreated,
       returnMultiple,
     };
-  }, [inputs.totalAcres, inputs.currentPPA, inputs.mw]);
+  }, [inputs.totalAcres, inputs.ppaLow, inputs.ppaHigh, inputs.mw]);
 }
