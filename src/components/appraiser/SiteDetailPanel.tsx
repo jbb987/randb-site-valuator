@@ -1,6 +1,7 @@
 import type { SiteInputs, AppraisalResult } from '../../types';
 import { formatCurrencyShort } from '../../utils/format';
 import PresentationView from '../PresentationView';
+import SiteMapCard from './SiteMapCard';
 
 interface Props {
   inputs: SiteInputs;
@@ -44,7 +45,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
       />
 
       {/* Land / Property Details */}
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-[#D8D5D0] p-6 md:p-8">
+      <div className="bg-white rounded-2xl border border-[#D8D5D0] p-6 md:p-8">
         <h3 className="font-heading text-sm font-semibold text-[#201F1E] mb-5">
           Land / Property
         </h3>
@@ -162,7 +163,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
       </div>
 
       {/* Power Infrastructure */}
-      <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-[#D8D5D0] p-6 md:p-8">
+      <div className="bg-white rounded-2xl border border-[#D8D5D0] p-6 md:p-8">
         <h3 className="font-heading text-sm font-semibold text-[#201F1E] mb-5">
           Power Infrastructure
         </h3>
@@ -199,6 +200,9 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
           </Field>
         </div>
       </div>
+
+      {/* Site Location Map */}
+      <SiteMapCard coordinates={inputs.coordinates} />
     </div>
   );
 }
