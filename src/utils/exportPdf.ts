@@ -7,11 +7,46 @@ const A4_HEIGHT = 841.89; // points
 const CAPTURE_WIDTH = 900; // px — fixed width for consistent PDF layout
 
 /**
+ * Load an image and return it as an HTMLImageElement, or null on failure.
+ */
+function loadImage(url: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    // Timeout after 5s
+    setTimeout(() => resolve(null), 5000);
+    img.src = url;
+  });
+}
+
+/**
+ * Extract lat,lng from a Google Maps embed iframe src.
+ */
+function parseCoordsFromIframeSrc(src: string): { lat: number; lng: number } | null {
+  const match = src.match(/[?&]q=([-\d.]+),([-\d.]+)/);
+  if (!match) return null;
+  const lat = parseFloat(match[1]);
+  const lng = parseFloat(match[2]);
+  if (isNaN(lat) || isNaN(lng)) return null;
+  return { lat, lng };
+}
+
+/**
+ * Build a static map URL from OpenStreetMap's static map service.
+ */
+function staticMapUrl(lat: number, lng: number): string {
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=14&size=800x350&maptype=mapnik&markers=${lat},${lng},red-pushpin`;
+}
+
+/**
  * Capture a DOM element and save it as a multi-page PDF.
  *
  * Clones the element into an off-screen container at a fixed width
  * so the PDF layout is consistent regardless of the current viewport.
- * Hides `.no-print` elements and replaces iframes with placeholders.
+ * Hides `.no-print` elements, replaces iframes with static map images,
+ * and restyled inputs as plain text.
  */
 export async function exportElementToPdf(
   element: HTMLElement,
@@ -37,25 +72,45 @@ export async function exportElementToPdf(
       el.style.display = 'none';
     });
 
-    // Replace iframes with compact placeholders
+    // Replace iframes with static map images (or a fallback placeholder)
+    const iframePromises: Promise<void>[] = [];
     clone.querySelectorAll<HTMLIFrameElement>('iframe').forEach((iframe) => {
-      const placeholder = document.createElement('div');
-      placeholder.style.cssText = `
-        width: 100%;
-        height: 60px;
-        background: #F5F4F2;
-        border: 1px solid #D8D5D0;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #7A756E;
-        font-size: 12px;
-        font-family: 'IBM Plex Sans', sans-serif;
-      `;
-      placeholder.textContent = 'See site on Google Maps';
-      iframe.parentNode!.replaceChild(placeholder, iframe);
+      const coords = parseCoordsFromIframeSrc(iframe.src);
+
+      const promise = (async () => {
+        let replacement: HTMLElement;
+
+        if (coords) {
+          const url = staticMapUrl(coords.lat, coords.lng);
+          const img = await loadImage(url);
+
+          if (img) {
+            // Use the loaded static map image
+            const imgEl = document.createElement('img');
+            imgEl.src = url;
+            imgEl.style.cssText = `
+              width: 100%;
+              height: 350px;
+              object-fit: cover;
+              border-radius: 12px;
+              display: block;
+            `;
+            replacement = imgEl;
+          } else {
+            replacement = createMapPlaceholder(coords);
+          }
+        } else {
+          replacement = createMapPlaceholder(null);
+        }
+
+        iframe.parentNode!.replaceChild(replacement, iframe);
+      })();
+
+      iframePromises.push(promise);
     });
+
+    // Wait for all static map images to load
+    await Promise.all(iframePromises);
 
     // Hide "Open in Google Maps" links
     clone.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => {
@@ -99,8 +154,16 @@ export async function exportElementToPdf(
       el.style.display = 'none';
     });
 
-    // Wait a tick for styles to compute on the clone
-    await new Promise((r) => setTimeout(r, 50));
+    // Add page-break hints: each top-level card section should avoid breaking
+    Array.from(clone.children).forEach((child) => {
+      if (child instanceof HTMLElement) {
+        child.style.breakInside = 'avoid';
+        child.style.pageBreakInside = 'avoid';
+      }
+    });
+
+    // Wait for styles + images to settle
+    await new Promise((r) => setTimeout(r, 200));
 
     const canvas = await html2canvas(clone, {
       scale: 2,
@@ -114,35 +177,119 @@ export async function exportElementToPdf(
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
     const pageHeight = A4_HEIGHT - PDF_PADDING * 2;
 
+    // Collect Y positions of top-level sections for smart page breaks
+    const sectionTops = collectSectionTops(clone, canvas.height, imgHeight);
+
     const pdf = new jsPDF('p', 'pt', 'a4');
     let yOffset = 0;
 
     while (yOffset < imgHeight) {
       if (yOffset > 0) pdf.addPage();
 
-      const sliceHeight = Math.min(pageHeight, imgHeight - yOffset);
+      // Find the best slice height that avoids cutting through a section
+      let sliceHeight = Math.min(pageHeight, imgHeight - yOffset);
+      const sliceEnd = yOffset + sliceHeight;
+
+      if (sliceEnd < imgHeight) {
+        // Look for a section boundary to break at
+        const bestBreak = findBestBreak(sectionTops, yOffset, sliceEnd, pageHeight * 0.25);
+        if (bestBreak !== null) {
+          sliceHeight = bestBreak - yOffset;
+        }
+      }
+
       const sourceY = (yOffset / imgHeight) * canvas.height;
       const sourceH = (sliceHeight / imgHeight) * canvas.height;
 
       const pageCanvas = document.createElement('canvas');
       pageCanvas.width = canvas.width;
-      pageCanvas.height = sourceH;
+      pageCanvas.height = Math.max(1, Math.round(sourceH));
 
       const ctx = pageCanvas.getContext('2d')!;
       ctx.drawImage(
         canvas,
-        0, sourceY, canvas.width, sourceH,
-        0, 0, canvas.width, sourceH,
+        0, Math.round(sourceY), canvas.width, Math.round(sourceH),
+        0, 0, canvas.width, Math.round(sourceH),
       );
 
       const pageData = pageCanvas.toDataURL('image/png');
       pdf.addImage(pageData, 'PNG', PDF_PADDING, PDF_PADDING, imgWidth, sliceHeight);
 
-      yOffset += pageHeight;
+      yOffset += sliceHeight;
     }
 
     pdf.save(`${filename}.pdf`);
   } finally {
     document.body.removeChild(wrapper);
   }
+}
+
+/**
+ * Create a simple fallback placeholder for the map.
+ */
+function createMapPlaceholder(coords: { lat: number; lng: number } | null): HTMLDivElement {
+  const placeholder = document.createElement('div');
+  placeholder.style.cssText = `
+    width: 100%;
+    height: 60px;
+    background: #F5F4F2;
+    border: 1px solid #D8D5D0;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7A756E;
+    font-size: 12px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  `;
+  placeholder.textContent = coords
+    ? `Site location: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
+    : 'See site on Google Maps';
+  return placeholder;
+}
+
+/**
+ * Collect the Y positions (in PDF points) of top-level card sections
+ * inside the captured clone, so we can avoid slicing through them.
+ */
+function collectSectionTops(
+  clone: HTMLElement,
+  canvasHeight: number,
+  imgHeight: number,
+): number[] {
+  const tops: number[] = [];
+  const cloneRect = clone.getBoundingClientRect();
+  const cloneH = cloneRect.height;
+  if (cloneH <= 0) return tops;
+
+  Array.from(clone.children).forEach((child) => {
+    if (child instanceof HTMLElement) {
+      const rect = child.getBoundingClientRect();
+      const relY = rect.top - cloneRect.top;
+      const pdfY = (relY / cloneH) * imgHeight;
+      tops.push(pdfY);
+    }
+  });
+
+  return tops.sort((a, b) => a - b);
+}
+
+/**
+ * Find the best section boundary to break at, within the last portion of the page.
+ * Returns the Y position to break at, or null if no good break found.
+ */
+function findBestBreak(
+  sectionTops: number[],
+  pageStart: number,
+  pageEnd: number,
+  minKeep: number,
+): number | null {
+  // Look for section tops that fall in the bottom 75% of the page
+  // and pick the one closest to the end (to maximize content per page)
+  const candidates = sectionTops.filter(
+    (y) => y > pageStart + minKeep && y < pageEnd,
+  );
+  if (candidates.length === 0) return null;
+  // Pick the last candidate (most content on this page)
+  return candidates[candidates.length - 1];
 }
