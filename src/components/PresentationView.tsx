@@ -121,10 +121,7 @@ export default function PresentationView({ inputs, result, onMWChange, onSiteNam
               variant="current"
             />
 
-            <EnergyBridge
-              mw={inputs.mw}
-              buildCost={result.buildCost}
-            />
+            <EnergyBridge mw={inputs.mw} />
 
             <ValueCard
               label="Energized"
@@ -145,10 +142,7 @@ export default function PresentationView({ inputs, result, onMWChange, onSiteNam
               />
             </div>
 
-            <EnergyBridge
-              mw={inputs.mw}
-              buildCost={result.buildCost}
-            />
+            <EnergyBridge mw={inputs.mw} />
 
             <div className="w-full max-w-[300px]">
               <ValueCard

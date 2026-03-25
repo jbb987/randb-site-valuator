@@ -26,11 +26,7 @@ export interface SiteInputs {
 
 export interface AppraisalResult {
   currentValue: number;           // acres × currentPPA
-  buildCost: number;              // from cost curve
-  buildCostPerMW: number;         // buildCost / mw
-  replacementCost: number;        // buildCost × 1.5
-  replacementCostPerMW: number;   // replacementCost / mw
-  energizedValue: number;         // currentValue + replacementCost
+  energizedValue: number;         // mw × $1M
   energizedPPA: number;           // energizedValue / acres
   valueCreated: number;           // energizedValue - currentValue
   returnMultiple: number;         // energizedValue / currentValue

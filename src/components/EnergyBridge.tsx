@@ -1,9 +1,7 @@
 import { motion } from 'framer-motion';
-import { formatCurrencyShort } from '../utils/format';
 
 interface Props {
   mw: number;
-  buildCost: number;
 }
 
 /**
@@ -104,7 +102,7 @@ function BeamPulse({ vertical }: { vertical?: boolean }) {
   );
 }
 
-export default function EnergyBridge({ mw, buildCost }: Props) {
+export default function EnergyBridge({ mw }: Props) {
   // Faster animation at higher MW
   const baseDuration = 2.2 - ((mw - 10) / (1000 - 10)) * 1.2;
 
@@ -156,10 +154,6 @@ export default function EnergyBridge({ mw, buildCost }: Props) {
           </motion.svg>
         </div>
 
-        {/* Build cost */}
-        <span className="text-[11px] text-[#A09A92]">
-          {formatCurrencyShort(buildCost)} build
-        </span>
       </div>
 
       {/* Mobile: vertical bridge */}
@@ -196,9 +190,6 @@ export default function EnergyBridge({ mw, buildCost }: Props) {
             <path d="M0 0L12 0L6 10Z" fill="#C8972C" />
           </motion.svg>
         </div>
-        <span className="text-[11px] text-[#A09A92]">
-          {formatCurrencyShort(buildCost)} build
-        </span>
       </div>
     </>
   );
