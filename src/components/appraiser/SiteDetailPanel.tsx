@@ -300,7 +300,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
               <div className={readOnlyClass}>{inputs.nearestPoiName}</div>
             </Field>
             <Field label="Distance to POI">
-              <div className={readOnlyClass}>{inputs.nearestPoiDistMi.toFixed(1)} mi</div>
+              <div className={readOnlyClass}>{inputs.nearestPoiDistMi > 0 ? `${inputs.nearestPoiDistMi.toFixed(1)} mi` : '—'}</div>
             </Field>
           </div>
         )}
@@ -345,7 +345,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
                               {sub.status || '—'}
                             </span>
                           </td>
-                          <td className={`${tdClass} text-right tabular-nums`}>{sub.distanceMi.toFixed(1)} mi</td>
+                          <td className={`${tdClass} text-right tabular-nums`}>{sub.distanceMi > 0 ? `${sub.distanceMi.toFixed(1)} mi` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -427,7 +427,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
                               {plant.status || '—'}
                             </span>
                           </td>
-                          <td className={`${tdClass} text-right tabular-nums`}>{plant.distanceMi.toFixed(1)} mi</td>
+                          <td className={`${tdClass} text-right tabular-nums`}>{plant.distanceMi > 0 ? `${plant.distanceMi.toFixed(1)} mi` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>

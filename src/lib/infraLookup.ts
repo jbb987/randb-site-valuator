@@ -182,16 +182,25 @@ export async function geocodeAddress(address: string): Promise<{ lat: number; ln
 
 // ── Queries ─────────────────────────────────────────────────────────────────
 
-async function queryLines(lat: number, lng: number): Promise<NearbyLine[]> {
+/** Raw line feature with geometry paths for substation coordinate extraction. */
+interface LineFeature {
+  line: NearbyLine;
+  /** First point of the polyline path (approximate SUB_1 location) [lng, lat]. */
+  startPt: [number, number] | null;
+  /** Last point of the polyline path (approximate SUB_2 location) [lng, lat]. */
+  endPt: [number, number] | null;
+}
+
+async function queryLinesWithGeometry(lat: number, lng: number): Promise<LineFeature[]> {
   const url =
     `${LAYERS.transmissionLines}/query?` +
     `where=1%3D1` +
     `&geometry=${encodeURIComponent(envelope(lat, lng))}` +
     `&geometryType=esriGeometryEnvelope` +
     `&spatialRel=esriSpatialRelIntersects` +
-    `&inSR=4326` +
+    `&inSR=4326&outSR=4326` +
     `&outFields=OWNER%2CVOLTAGE%2CVOLT_CLASS%2CSUB_1%2CSUB_2%2CSTATUS` +
-    `&returnGeometry=false` +
+    `&returnGeometry=true` +
     `&resultRecordCount=50` +
     `&f=json`;
 
@@ -201,18 +210,27 @@ async function queryLines(lat: number, lng: number): Promise<NearbyLine[]> {
     const data = await res.json();
     if (data.error) return [];
     return (data.features ?? [])
-      .map((f: { attributes: Record<string, unknown> }) => {
+      .map((f: { attributes: Record<string, unknown>; geometry?: { paths?: number[][][] } }) => {
         const a = f.attributes;
+        const paths = f.geometry?.paths;
+        const firstPath = paths?.[0];
+        const lastPath = paths?.[paths.length - 1];
         return {
-          owner: String(a.OWNER ?? ''),
-          voltage: Number(a.VOLTAGE) || 0,
-          voltClass: String(a.VOLT_CLASS ?? ''),
-          sub1: String(a.SUB_1 ?? ''),
-          sub2: String(a.SUB_2 ?? ''),
-          status: String(a.STATUS ?? ''),
-        } satisfies NearbyLine;
+          line: {
+            owner: String(a.OWNER ?? ''),
+            voltage: Number(a.VOLTAGE) || 0,
+            voltClass: String(a.VOLT_CLASS ?? ''),
+            sub1: String(a.SUB_1 ?? ''),
+            sub2: String(a.SUB_2 ?? ''),
+            status: String(a.STATUS ?? ''),
+          } satisfies NearbyLine,
+          startPt: firstPath?.[0] ? [firstPath[0][0], firstPath[0][1]] as [number, number] : null,
+          endPt: lastPath
+            ? [lastPath[lastPath.length - 1][0], lastPath[lastPath.length - 1][1]] as [number, number]
+            : null,
+        } satisfies LineFeature;
       })
-      .sort((a: NearbyLine, b: NearbyLine) => b.voltage - a.voltage);
+      .sort((a: LineFeature, b: LineFeature) => b.line.voltage - a.line.voltage);
   } catch {
     return [];
   }
@@ -256,33 +274,86 @@ async function queryPowerPlants(lat: number, lng: number): Promise<NearbyPowerPl
   }
 }
 
-function extractSubstations(lines: NearbyLine[]): NearbySubstation[] {
-  const seen = new Set<string>();
-  const subs: NearbySubstation[] = [];
+/**
+ * Extract substations from transmission line geometry endpoints.
+ * Each line has SUB_1 at the start of the polyline and SUB_2 at the end.
+ * We average all endpoint coordinates for each named substation to get its location.
+ */
+function extractSubstations(
+  features: LineFeature[],
+  siteLat: number,
+  siteLng: number,
+): NearbySubstation[] {
+  // Collect all coordinate samples for each substation name
+  const subData = new Map<string, {
+    coords: { lat: number; lng: number }[];
+    voltages: number[];
+    owners: string[];
+    statuses: string[];
+    lineCount: number;
+  }>();
 
-  for (const line of lines) {
-    for (const name of [line.sub1, line.sub2]) {
-      if (!name || name === 'NOT AVAILABLE' || seen.has(name)) continue;
-      seen.add(name);
-      const connectedLines = lines.filter((l) => l.sub1 === name || l.sub2 === name);
-      const maxVolt = Math.max(...connectedLines.map((l) => l.voltage).filter(Boolean), 0);
-      // Prefer named owner over "NOT AVAILABLE"
-      const ownerLine = connectedLines.find((l) => l.owner && l.owner !== 'NOT AVAILABLE');
-      subs.push({
-        name,
-        owner: ownerLine?.owner ?? connectedLines[0]?.owner ?? '',
-        maxVolt,
-        minVolt: 0,
-        status: connectedLines[0]?.status || 'IN SERVICE',
-        lines: connectedLines.length,
-        distanceMi: 0,
-        lat: 0,
-        lng: 0,
-      });
+  for (const feat of features) {
+    const entries: [string, [number, number] | null][] = [
+      [feat.line.sub1, feat.startPt],
+      [feat.line.sub2, feat.endPt],
+    ];
+
+    for (const [name, pt] of entries) {
+      if (!name || name === 'NOT AVAILABLE') continue;
+
+      let data = subData.get(name);
+      if (!data) {
+        data = { coords: [], voltages: [], owners: [], statuses: [], lineCount: 0 };
+        subData.set(name, data);
+      }
+      data.lineCount++;
+      if (feat.line.voltage > 0) data.voltages.push(feat.line.voltage);
+      if (feat.line.owner && feat.line.owner !== 'NOT AVAILABLE') data.owners.push(feat.line.owner);
+      if (feat.line.status) data.statuses.push(feat.line.status);
+      // pt is [lng, lat] in ArcGIS format
+      if (pt && pt[0] !== 0 && pt[1] !== 0) {
+        data.coords.push({ lat: pt[1], lng: pt[0] });
+      }
     }
   }
 
-  return subs.sort((a, b) => b.maxVolt - a.maxVolt || b.lines - a.lines);
+  const subs: NearbySubstation[] = [];
+
+  for (const [name, data] of subData) {
+    const maxVolt = data.voltages.length > 0 ? Math.max(...data.voltages) : 0;
+    const owner = data.owners[0] ?? '';
+    const status = data.statuses.includes('IN SERVICE') ? 'IN SERVICE' : (data.statuses[0] ?? '');
+
+    // Average all coordinate samples for this substation
+    let sLat = 0;
+    let sLng = 0;
+    if (data.coords.length > 0) {
+      sLat = data.coords.reduce((s, c) => s + c.lat, 0) / data.coords.length;
+      sLng = data.coords.reduce((s, c) => s + c.lng, 0) / data.coords.length;
+    }
+
+    const distanceMi = sLat && sLng ? haversineMi(siteLat, siteLng, sLat, sLng) : 0;
+
+    subs.push({
+      name,
+      owner,
+      maxVolt,
+      minVolt: 0,
+      status,
+      lines: data.lineCount,
+      distanceMi,
+      lat: sLat,
+      lng: sLng,
+    });
+  }
+
+  // Sort: real distances first, then 0-distance at end
+  return subs.sort((a, b) => {
+    if (a.distanceMi === 0 && b.distanceMi > 0) return 1;
+    if (b.distanceMi === 0 && a.distanceMi > 0) return -1;
+    return a.distanceMi - b.distanceMi || b.maxVolt - a.maxVolt;
+  });
 }
 
 /** Derive utility territory from most common line/substation owners. */
@@ -336,14 +407,15 @@ export async function lookupInfrastructure(opts: LookupOptions): Promise<InfraRe
     ({ lat, lng } = await geocodeAddress(opts.address));
   }
 
-  const [lines, powerPlants, solarWind] = await Promise.all([
-    queryLines(lat, lng),
+  const [lineFeatures, powerPlants, solarWind] = await Promise.all([
+    queryLinesWithGeometry(lat, lng),
     queryPowerPlants(lat, lng),
     querySolarWind(lat, lng),
   ]);
 
-  const substations = extractSubstations(lines);
-  const nearest = substations[0];
+  const lines = lineFeatures.map((f) => f.line);
+  const substations = extractSubstations(lineFeatures, lat, lng);
+  const nearest = substations.find((s) => s.distanceMi > 0) ?? substations[0];
   const iso = detectIso(lat, lng);
   const utilities = deriveUtility(lines);
 
