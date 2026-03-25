@@ -1,6 +1,5 @@
 /**
  * Power Infrastructure Lookup via HIFLD ArcGIS FeatureServer + FEMA + NREL.
- *
  * All endpoints are public / no API key required.
  */
 
@@ -51,7 +50,9 @@ const NREL_SOLAR_URL =
   'https://developer.nrel.gov/api/solar/solar_resource/v1.json';
 const NREL_API_KEY = 'DEMO_KEY';
 
-const SEARCH_RADIUS_METERS = 16_093; // ~10 miles
+// ~10 miles in degrees
+const LAT_OFFSET = 0.145; // 10mi / 69mi per degree
+const LNG_OFFSET_AT_30 = 0.167; // adjusted for ~30° latitude
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -67,62 +68,33 @@ function haversineMi(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function lngOffset(lat: number): number {
+  return LNG_OFFSET_AT_30 / Math.cos((lat * Math.PI) / 180) * Math.cos((30 * Math.PI) / 180);
+}
+
 export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
-  const url = `${GEOCODE_URL}?${new URLSearchParams({
+  const params = new URLSearchParams({
     singleLine: address,
     outFields: 'Match_addr',
     maxLocations: '1',
     f: 'json',
-  })}`;
-  const res = await fetch(url);
+  });
+  const res = await fetch(`${GEOCODE_URL}?${params}`);
   if (!res.ok) throw new Error(`Geocode request failed (${res.status})`);
   const data = await res.json();
   if (!data.candidates?.length) {
     throw new Error('Address could not be geocoded — check the address and try again.');
   }
-  const { x: lng, y: lat } = data.candidates[0].location;
-  return { lat, lng };
-}
-
-/**
- * Generic ArcGIS query helper. Builds the URL manually to avoid URLSearchParams
- * encoding issues with commas in geometry values.
- */
-async function arcgisQuery(
-  label: string,
-  layerUrl: string,
-  params: Record<string, string>,
-): Promise<{ features: { attributes: Record<string, unknown> }[] } | null> {
-  // Build query string manually to avoid double-encoding
-  const qs = Object.entries(params)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&');
-  const url = `${layerUrl}/query?${qs}`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn(`[Infra] ${label} HTTP ${res.status}`);
-      return null;
-    }
-    const data = await res.json();
-    if (data.error) {
-      console.warn(`[Infra] ${label} API error:`, data.error);
-      return null;
-    }
-    console.log(`[Infra] ${label}: ${(data.features ?? []).length} feature(s)`);
-    return data;
-  } catch (err) {
-    console.warn(`[Infra] ${label} fetch error:`, err);
-    return null;
-  }
+  return { lat: data.candidates[0].location.y, lng: data.candidates[0].location.x };
 }
 
 // ── Query functions ─────────────────────────────────────────────────────────
 
 /** Point-in-polygon → array of NAME values */
-async function queryTerritory(label: string, layerUrl: string, lat: number, lng: number): Promise<string[]> {
-  const data = await arcgisQuery(label, layerUrl, {
+async function queryTerritory(
+  label: string, layerUrl: string, lat: number, lng: number,
+): Promise<string[]> {
+  const params = new URLSearchParams({
     where: '1=1',
     geometry: `${lng},${lat}`,
     geometryType: 'esriGeometryPoint',
@@ -132,111 +104,150 @@ async function queryTerritory(label: string, layerUrl: string, lat: number, lng:
     returnGeometry: 'false',
     f: 'json',
   });
-  if (!data) return [];
-  return (data.features ?? []).map((f) => String(f.attributes.NAME ?? '')).filter(Boolean);
+  try {
+    const res = await fetch(`${layerUrl}/query?${params}`);
+    if (!res.ok) { console.warn(`[Infra] ${label} HTTP ${res.status}`); return []; }
+    const data = await res.json();
+    if (data.error) { console.warn(`[Infra] ${label} error:`, data.error); return []; }
+    const feats = data.features ?? [];
+    console.log(`[Infra] ${label}: ${feats.length} feature(s)`);
+    return feats.map((f: { attributes: { NAME: string } }) => f.attributes.NAME).filter(Boolean);
+  } catch (err) {
+    console.warn(`[Infra] ${label} fetch error:`, err);
+    return [];
+  }
 }
 
-/** Nearby substations within 10mi radius */
+/**
+ * Nearby substations — uses WHERE clause with lat/lng bounds (10mi box).
+ * This avoids the `distance` param which some HIFLD services reject.
+ */
 async function querySubstations(lat: number, lng: number): Promise<NearbySubstation[]> {
-  const data = await arcgisQuery('Substations', LAYERS.substations, {
-    where: '1=1',
-    geometry: `${lng},${lat}`,
-    geometryType: 'esriGeometryPoint',
-    spatialRel: 'esriSpatialRelIntersects',
-    distance: String(SEARCH_RADIUS_METERS),
-    units: 'esriSRUnit_Meter',
-    inSR: '4326',
+  const lo = lngOffset(lat);
+  const params = new URLSearchParams({
+    where: `LATITUDE>${lat - LAT_OFFSET} AND LATITUDE<${lat + LAT_OFFSET} AND LONGITUDE>${lng - lo} AND LONGITUDE<${lng + lo}`,
     outFields: 'NAME,OWNER,MAX_VOLT,MIN_VOLT,STATUS,LINES,LATITUDE,LONGITUDE',
     returnGeometry: 'false',
     f: 'json',
   });
-  if (!data) return [];
-  return (data.features ?? [])
-    .map((f) => {
-      const a = f.attributes;
-      const sLat = Number(a.LATITUDE) || 0;
-      const sLng = Number(a.LONGITUDE) || 0;
-      return {
-        name: String(a.NAME ?? ''),
-        owner: String(a.OWNER ?? ''),
-        maxVolt: Number(a.MAX_VOLT) || 0,
-        minVolt: Number(a.MIN_VOLT) || 0,
-        status: String(a.STATUS ?? ''),
-        lines: Number(a.LINES) || 0,
-        distanceMi: haversineMi(lat, lng, sLat, sLng),
-        lat: sLat,
-        lng: sLng,
-      } satisfies NearbySubstation;
-    })
-    .sort((a, b) => a.distanceMi - b.distanceMi);
+  try {
+    const url = `${LAYERS.substations}/query?${params}`;
+    console.log('[Infra] Substations URL:', url);
+    const res = await fetch(url);
+    if (!res.ok) { console.warn('[Infra] Substations HTTP', res.status); return []; }
+    const data = await res.json();
+    if (data.error) { console.warn('[Infra] Substations error:', data.error); return []; }
+    const feats = data.features ?? [];
+    console.log(`[Infra] Substations: ${feats.length} feature(s)`);
+    return feats
+      .map((f: { attributes: Record<string, unknown> }) => {
+        const a = f.attributes;
+        const sLat = Number(a.LATITUDE) || 0;
+        const sLng = Number(a.LONGITUDE) || 0;
+        return {
+          name: String(a.NAME ?? ''),
+          owner: String(a.OWNER ?? ''),
+          maxVolt: Number(a.MAX_VOLT) || 0,
+          minVolt: Number(a.MIN_VOLT) || 0,
+          status: String(a.STATUS ?? ''),
+          lines: Number(a.LINES) || 0,
+          distanceMi: haversineMi(lat, lng, sLat, sLng),
+          lat: sLat,
+          lng: sLng,
+        } satisfies NearbySubstation;
+      })
+      .sort((a: NearbySubstation, b: NearbySubstation) => a.distanceMi - b.distanceMi);
+  } catch (err) {
+    console.warn('[Infra] Substations fetch error:', err);
+    return [];
+  }
 }
 
-/** Nearby transmission lines within 10mi radius */
+/** Nearby transmission lines — uses geometry envelope (lines don't have lat/lng fields). */
 async function queryLines(lat: number, lng: number): Promise<NearbyLine[]> {
-  const data = await arcgisQuery('Lines', LAYERS.transmissionLines, {
+  const lo = lngOffset(lat);
+  const envelope = `${lng - lo},${lat - LAT_OFFSET},${lng + lo},${lat + LAT_OFFSET}`;
+  const params = new URLSearchParams({
     where: '1=1',
-    geometry: `${lng},${lat}`,
-    geometryType: 'esriGeometryPoint',
+    geometry: envelope,
+    geometryType: 'esriGeometryEnvelope',
     spatialRel: 'esriSpatialRelIntersects',
-    distance: String(SEARCH_RADIUS_METERS),
-    units: 'esriSRUnit_Meter',
     inSR: '4326',
     outFields: 'OWNER,VOLTAGE,VOLT_CLASS,SUB_1,SUB_2,STATUS',
     returnGeometry: 'false',
-    f: 'json',
     resultRecordCount: '50',
+    f: 'json',
   });
-  if (!data) return [];
-  return (data.features ?? [])
-    .map((f) => {
-      const a = f.attributes;
-      return {
-        owner: String(a.OWNER ?? ''),
-        voltage: Number(a.VOLTAGE) || 0,
-        voltClass: String(a.VOLT_CLASS ?? ''),
-        sub1: String(a.SUB_1 ?? ''),
-        sub2: String(a.SUB_2 ?? ''),
-        status: String(a.STATUS ?? ''),
-      } satisfies NearbyLine;
-    })
-    .sort((a, b) => b.voltage - a.voltage);
+  try {
+    const url = `${LAYERS.transmissionLines}/query?${params}`;
+    console.log('[Infra] Lines URL:', url);
+    const res = await fetch(url);
+    if (!res.ok) { console.warn('[Infra] Lines HTTP', res.status); return []; }
+    const data = await res.json();
+    if (data.error) { console.warn('[Infra] Lines error:', data.error); return []; }
+    const feats = data.features ?? [];
+    console.log(`[Infra] Lines: ${feats.length} feature(s)`);
+    return feats
+      .map((f: { attributes: Record<string, unknown> }) => {
+        const a = f.attributes;
+        return {
+          owner: String(a.OWNER ?? ''),
+          voltage: Number(a.VOLTAGE) || 0,
+          voltClass: String(a.VOLT_CLASS ?? ''),
+          sub1: String(a.SUB_1 ?? ''),
+          sub2: String(a.SUB_2 ?? ''),
+          status: String(a.STATUS ?? ''),
+        } satisfies NearbyLine;
+      })
+      .sort((a: NearbyLine, b: NearbyLine) => b.voltage - a.voltage);
+  } catch (err) {
+    console.warn('[Infra] Lines fetch error:', err);
+    return [];
+  }
 }
 
-/** Nearby power plants within 10mi radius */
+/** Nearby power plants — uses WHERE clause with lat/lng bounds. */
 async function queryPowerPlants(lat: number, lng: number): Promise<NearbyPowerPlant[]> {
-  const data = await arcgisQuery('Power Plants', LAYERS.powerPlants, {
-    where: '1=1',
-    geometry: `${lng},${lat}`,
-    geometryType: 'esriGeometryPoint',
-    spatialRel: 'esriSpatialRelIntersects',
-    distance: String(SEARCH_RADIUS_METERS),
-    units: 'esriSRUnit_Meter',
-    inSR: '4326',
+  const lo = lngOffset(lat);
+  const params = new URLSearchParams({
+    where: `LATITUDE>${lat - LAT_OFFSET} AND LATITUDE<${lat + LAT_OFFSET} AND LONGITUDE>${lng - lo} AND LONGITUDE<${lng + lo}`,
     outFields: 'PLANT_NAME,PRIMESOURC,INSTALL_MW,STATUS,OPERATOR,LATITUDE,LONGITUDE',
     returnGeometry: 'false',
     f: 'json',
   });
-  if (!data) return [];
-  return (data.features ?? [])
-    .map((f) => {
-      const a = f.attributes;
-      const pLat = Number(a.LATITUDE) || 0;
-      const pLng = Number(a.LONGITUDE) || 0;
-      return {
-        name: String(a.PLANT_NAME ?? ''),
-        operator: String(a.OPERATOR ?? ''),
-        primarySource: String(a.PRIMESOURC ?? ''),
-        capacityMW: Number(a.INSTALL_MW) || 0,
-        status: String(a.STATUS ?? ''),
-        distanceMi: haversineMi(lat, lng, pLat, pLng),
-      } satisfies NearbyPowerPlant;
-    })
-    .sort((a, b) => a.distanceMi - b.distanceMi);
+  try {
+    const url = `${LAYERS.powerPlants}/query?${params}`;
+    console.log('[Infra] Plants URL:', url);
+    const res = await fetch(url);
+    if (!res.ok) { console.warn('[Infra] Plants HTTP', res.status); return []; }
+    const data = await res.json();
+    if (data.error) { console.warn('[Infra] Plants error:', data.error); return []; }
+    const feats = data.features ?? [];
+    console.log(`[Infra] Plants: ${feats.length} feature(s)`);
+    return feats
+      .map((f: { attributes: Record<string, unknown> }) => {
+        const a = f.attributes;
+        const pLat = Number(a.LATITUDE) || 0;
+        const pLng = Number(a.LONGITUDE) || 0;
+        return {
+          name: String(a.PLANT_NAME ?? ''),
+          operator: String(a.OPERATOR ?? ''),
+          primarySource: String(a.PRIMESOURC ?? ''),
+          capacityMW: Number(a.INSTALL_MW) || 0,
+          status: String(a.STATUS ?? ''),
+          distanceMi: haversineMi(lat, lng, pLat, pLng),
+        } satisfies NearbyPowerPlant;
+      })
+      .sort((a: NearbyPowerPlant, b: NearbyPowerPlant) => a.distanceMi - b.distanceMi);
+  } catch (err) {
+    console.warn('[Infra] Plants fetch error:', err);
+    return [];
+  }
 }
 
-/** FEMA flood zone (point-in-polygon) */
+/** FEMA flood zone (point-in-polygon). */
 async function queryFloodZone(lat: number, lng: number): Promise<FloodZoneInfo | null> {
-  const data = await arcgisQuery('FEMA', FEMA_NFHL_URL, {
+  const params = new URLSearchParams({
     where: '1=1',
     geometry: `${lng},${lat}`,
     geometryType: 'esriGeometryPoint',
@@ -246,22 +257,35 @@ async function queryFloodZone(lat: number, lng: number): Promise<FloodZoneInfo |
     returnGeometry: 'false',
     f: 'json',
   });
-  if (!data || (data.features ?? []).length === 0) return null;
-  const a = data.features[0].attributes;
-  console.log('[Infra] FEMA fields:', Object.keys(a));
-  return {
-    zone: String(a.FLD_ZONE ?? a.ZONE ?? ''),
-    floodwayType: String(a.FLOODWAY ?? 'None'),
-    panelNumber: String(a.ZONE_SUBTY ?? a.DFIRM_PAN ?? ''),
-  };
+  try {
+    const res = await fetch(`${FEMA_NFHL_URL}/query?${params}`);
+    if (!res.ok) { console.warn('[Infra] FEMA HTTP', res.status); return null; }
+    const data = await res.json();
+    if (data.error) { console.warn('[Infra] FEMA error:', data.error); return null; }
+    const feats = data.features ?? [];
+    console.log(`[Infra] FEMA: ${feats.length} feature(s)`, feats[0]?.attributes);
+    if (feats.length === 0) return null;
+    const a = feats[0].attributes;
+    return {
+      zone: String(a.FLD_ZONE ?? a.ZONE ?? ''),
+      floodwayType: String(a.FLOODWAY ?? 'None'),
+      panelNumber: String(a.ZONE_SUBTY ?? a.DFIRM_PAN ?? ''),
+    };
+  } catch (err) {
+    console.warn('[Infra] FEMA fetch error:', err);
+    return null;
+  }
 }
 
 /** NREL solar/wind resource */
 async function querySolarWind(lat: number, lng: number): Promise<SolarWindResource | null> {
   try {
-    const res = await fetch(
-      `${NREL_SOLAR_URL}?${new URLSearchParams({ api_key: NREL_API_KEY, lat: String(lat), lon: String(lng) })}`,
-    );
+    const params = new URLSearchParams({
+      api_key: NREL_API_KEY,
+      lat: String(lat),
+      lon: String(lng),
+    });
+    const res = await fetch(`${NREL_SOLAR_URL}?${params}`);
     if (!res.ok) return null;
     const data = await res.json();
     const o = data.outputs;
