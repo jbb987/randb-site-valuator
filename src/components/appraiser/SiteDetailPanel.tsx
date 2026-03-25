@@ -68,7 +68,7 @@ function CollapsibleSection({ title, count, children }: { title: string; count: 
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 text-xs font-semibold text-[#7A756E] uppercase tracking-wider hover:text-[#201F1E] transition"
+        className="flex items-center gap-2 font-heading text-xs font-semibold text-[#201F1E] uppercase tracking-wider hover:text-[#ED202B] transition"
       >
         <svg
           className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -143,7 +143,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
 
       {/* Land / Property Details */}
       <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
-        <h3 className="font-heading text-sm font-semibold text-[#201F1E] mb-5">
+        <h3 className="font-heading text-base font-semibold text-[#201F1E] mb-5">
           Land / Property
         </h3>
 
@@ -262,7 +262,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
       {/* Power Infrastructure */}
       <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="font-heading text-sm font-semibold text-[#201F1E]">
+          <h3 className="font-heading text-base font-semibold text-[#201F1E]">
             Power Infrastructure
           </h3>
           <button
@@ -444,7 +444,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
             {/* Flood Zone */}
             {inputs.floodZone && (
               <div className="mt-6">
-                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] mb-3">
+                <h4 className="font-heading text-xs font-semibold uppercase tracking-wider text-[#201F1E] mb-3">
                   FEMA Flood Zone
                 </h4>
                 <div className="space-y-2">
