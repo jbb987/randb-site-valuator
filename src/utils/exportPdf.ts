@@ -276,7 +276,7 @@ export async function exportElementToPdf(
     const pageHeight = A4_HEIGHT - PDF_PADDING * 2;
 
     // Collect Y positions of top-level sections for smart page breaks
-    const sectionTops = collectSectionTops(clone, canvas.height, imgHeight);
+    const sectionTops = collectSectionTops(clone, imgHeight);
 
     const pdf = new jsPDF('p', 'pt', 'a4');
     let yOffset = 0;
@@ -352,7 +352,6 @@ function createMapPlaceholder(coords: { lat: number; lng: number } | null): HTML
  */
 function collectSectionTops(
   clone: HTMLElement,
-  canvasHeight: number,
   imgHeight: number,
 ): number[] {
   const tops: number[] = [];
