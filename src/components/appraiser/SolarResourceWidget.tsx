@@ -152,16 +152,9 @@ export default function SolarResourceWidget({ solarWind, detectedState, loading 
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#7A756E]">
-          Solar Resource
-        </h4>
-        {stateAvg && (
-          <span className="text-[10px] text-[#7A756E]">
-            Reference values: NREL reference avg
-          </span>
-        )}
-      </div>
+      <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] mb-3">
+        Solar Resource
+      </h4>
 
       <div className="space-y-5">
         <ComparisonBar
