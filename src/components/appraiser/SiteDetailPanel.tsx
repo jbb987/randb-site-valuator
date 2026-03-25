@@ -5,6 +5,7 @@ import { useInfraLookup } from '../../hooks/useInfraLookup';
 import PresentationView from '../PresentationView';
 import SiteMapCard from './SiteMapCard';
 import SolarResourceWidget from './SolarResourceWidget';
+import ElectricityPriceWidget from './ElectricityPriceWidget';
 
 interface Props {
   inputs: SiteInputs;
@@ -108,6 +109,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
         nearbyPowerPlants: res.nearbyPowerPlants,
         floodZone: res.floodZone,
         solarWind: res.solarWind ?? inputs.solarWind,
+        electricityPrice: res.electricityPrice ?? inputs.electricityPrice,
         detectedState: res.detectedState ?? inputs.detectedState,
       });
     }
@@ -128,6 +130,9 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {/* Site Location Map */}
+      <SiteMapCard coordinates={inputs.coordinates} />
+
       {/* Calculator (existing PresentationView) */}
       <PresentationView
         inputs={inputs}
@@ -485,12 +490,20 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
                 />
               </div>
             )}
+
+            {/* Electricity Price Comparison Widget */}
+            {(inputs.detectedState || infraLoading) && (
+              <div className="mt-6">
+                <ElectricityPriceWidget
+                  electricityPrice={inputs.electricityPrice ?? null}
+                  detectedState={inputs.detectedState ?? null}
+                  loading={infraLoading}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
-
-      {/* Site Location Map */}
-      <SiteMapCard coordinates={inputs.coordinates} />
     </div>
   );
 }
