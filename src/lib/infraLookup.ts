@@ -49,8 +49,9 @@ const LAYERS = {
 const GEOCODE_URL =
   'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates';
 
+// Use the ArcGIS-hosted FEMA flood hazard layer (supports CORS, unlike hazards.fema.gov)
 const FEMA_NFHL_URL =
-  'https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28';
+  'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Flood_Hazard_Reduced_Set/FeatureServer/0';
 
 const NREL_SOLAR_URL =
   'https://developer.nrel.gov/api/solar/solar_resource/v1.json';
@@ -270,7 +271,7 @@ async function queryFloodZone(
     geometryType: 'esriGeometryPoint',
     spatialRel: 'esriSpatialRelIntersects',
     inSR: '4326',
-    outFields: 'FLD_ZONE,FLOODWAY,DFIRM_PAN',
+    outFields: 'FLD_ZONE,ZONE_SUBTY,FLOODWAY',
     returnGeometry: 'false',
     f: 'json',
   });
@@ -290,7 +291,7 @@ async function queryFloodZone(
     return {
       zone: String(a.FLD_ZONE ?? ''),
       floodwayType: String(a.FLOODWAY ?? 'None'),
-      panelNumber: String(a.DFIRM_PAN ?? ''),
+      panelNumber: String(a.ZONE_SUBTY ?? ''),
     };
   } catch {
     return null; // FEMA service can be slow — don't block on failure
