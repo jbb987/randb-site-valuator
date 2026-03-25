@@ -146,10 +146,13 @@ async function querySubstations(
     f: 'json',
   });
 
-  const res = await fetch(`${LAYERS.substations}/query?${params}`);
-  if (!res.ok) return [];
+  const url = `${LAYERS.substations}/query?${params}`;
+  console.log('[Infra] Substations URL:', url);
+  const res = await fetch(url);
+  if (!res.ok) { console.warn('[Infra] Substations query failed:', res.status); return []; }
 
   const data = await res.json();
+  console.log('[Infra] Substations response:', data);
   const features: { attributes: Record<string, unknown> }[] = data.features ?? [];
 
   return features
@@ -190,10 +193,13 @@ async function queryTransmissionLines(
     resultRecordCount: '25',
   });
 
-  const res = await fetch(`${LAYERS.transmissionLines}/query?${params}`);
-  if (!res.ok) return [];
+  const url = `${LAYERS.transmissionLines}/query?${params}`;
+  console.log('[Infra] Lines URL:', url);
+  const res = await fetch(url);
+  if (!res.ok) { console.warn('[Infra] Lines query failed:', res.status); return []; }
 
   const data = await res.json();
+  console.log('[Infra] Lines response:', data);
   const features: { attributes: Record<string, unknown> }[] = data.features ?? [];
 
   return features
@@ -228,10 +234,13 @@ async function queryPowerPlants(
     f: 'json',
   });
 
-  const res = await fetch(`${LAYERS.powerPlants}/query?${params}`);
-  if (!res.ok) return [];
+  const url = `${LAYERS.powerPlants}/query?${params}`;
+  console.log('[Infra] Power Plants URL:', url);
+  const res = await fetch(url);
+  if (!res.ok) { console.warn('[Infra] Power Plants query failed:', res.status); return []; }
 
   const data = await res.json();
+  console.log('[Infra] Power Plants response:', data);
   const features: { attributes: Record<string, unknown> }[] = data.features ?? [];
 
   return features
@@ -267,10 +276,13 @@ async function queryFloodZone(
   });
 
   try {
-    const res = await fetch(`${FEMA_NFHL_URL}/query?${params}`);
-    if (!res.ok) return null;
+    const url = `${FEMA_NFHL_URL}/query?${params}`;
+    console.log('[Infra] FEMA URL:', url);
+    const res = await fetch(url);
+    if (!res.ok) { console.warn('[Infra] FEMA query failed:', res.status); return null; }
 
     const data = await res.json();
+    console.log('[Infra] FEMA response:', data);
     const features: { attributes: Record<string, unknown> }[] = data.features ?? [];
     if (features.length === 0) return null;
 
