@@ -33,12 +33,10 @@ export default function SiteAppraiserTool() {
   const {
     sites,
     activeSite,
-    activeId,
     loading: sitesLoading,
     updateInputs,
     updateMW,
     createSite,
-    deleteSite,
     switchSite,
     moveSite,
   } = useSites();
