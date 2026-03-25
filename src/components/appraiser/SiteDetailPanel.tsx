@@ -96,6 +96,8 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
     try {
       const name = inputs.siteName?.trim() || 'Site Appraisal';
       await exportElementToPdf(captureRef.current, name);
+    } catch (err) {
+      console.error('PDF export failed:', err);
     } finally {
       setExporting(false);
     }
