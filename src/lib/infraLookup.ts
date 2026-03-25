@@ -37,6 +37,7 @@ const GEOPLATFORM = 'https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/s
 const LAYERS = {
   transmissionLines: `${GEOPLATFORM}/US_Electric_Power_Transmission_Lines/FeatureServer/0`,
   powerPlants: `${GEOPLATFORM}/Power_Plants_in_the_US/FeatureServer/0`,
+  substations: `${GEOPLATFORM}/US_Electric_Substations/FeatureServer/0`,
 } as const;
 
 const GEOCODE_URL =
@@ -254,7 +255,48 @@ async function queryPowerPlants(lat: number, lng: number): Promise<NearbyPowerPl
   }
 }
 
-function extractSubstations(lines: NearbyLine[]): NearbySubstation[] {
+async function querySubstations(lat: number, lng: number): Promise<NearbySubstation[]> {
+  const url =
+    `${LAYERS.substations}/query?` +
+    `where=1%3D1` +
+    `&geometry=${encodeURIComponent(envelope(lat, lng))}` +
+    `&geometryType=esriGeometryEnvelope` +
+    `&spatialRel=esriSpatialRelIntersects` +
+    `&inSR=4326` +
+    `&outFields=NAME%2COWNER%2CSTATUS%2CMAX_VOLT%2CMIN_VOLT%2CLINES%2CLATITUDE%2CLONGITUDE` +
+    `&returnGeometry=false` +
+    `&resultRecordCount=50` +
+    `&f=json`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.error) return [];
+    return (data.features ?? [])
+      .map((f: { attributes: Record<string, unknown> }) => {
+        const a = f.attributes;
+        const sLat = Number(a.LATITUDE ?? a.LAT ?? a.Y) || 0;
+        const sLng = Number(a.LONGITUDE ?? a.LONG ?? a.LON ?? a.X) || 0;
+        return {
+          name: String(a.NAME ?? ''),
+          owner: String(a.OWNER ?? ''),
+          maxVolt: Number(a.MAX_VOLT ?? a.MAXVOLT) || 0,
+          minVolt: Number(a.MIN_VOLT ?? a.MINVOLT) || 0,
+          status: String(a.STATUS ?? 'IN SERVICE'),
+          lines: Number(a.LINES) || 0,
+          distanceMi: sLat && sLng ? haversineMi(lat, lng, sLat, sLng) : 0,
+          lat: sLat,
+          lng: sLng,
+        } satisfies NearbySubstation;
+      })
+      .sort((a: NearbySubstation, b: NearbySubstation) => a.distanceMi - b.distanceMi);
+  } catch {
+    return [];
+  }
+}
+
+function extractSubstationsFromLines(lines: NearbyLine[]): NearbySubstation[] {
   const seen = new Set<string>();
   const subs: NearbySubstation[] = [];
 
@@ -280,7 +322,46 @@ function extractSubstations(lines: NearbyLine[]): NearbySubstation[] {
     }
   }
 
-  return subs.sort((a, b) => b.maxVolt - a.maxVolt || b.lines - a.lines);
+  return subs;
+}
+
+/** Merge API-queried substations (with coordinates) and line-derived substations (with line counts). */
+function mergeSubstations(
+  apiSubs: NearbySubstation[],
+  lineSubs: NearbySubstation[],
+): NearbySubstation[] {
+  const merged = new Map<string, NearbySubstation>();
+  const normalize = (n: string) => n.toUpperCase().trim().replace(/\s+(SUBSTATION|SUB|SS)$/i, '');
+
+  // Start with API substations (they have coordinates)
+  for (const sub of apiSubs) {
+    merged.set(normalize(sub.name), sub);
+  }
+
+  // Enrich/add from line-derived substations
+  for (const lineSub of lineSubs) {
+    const key = normalize(lineSub.name);
+    const existing = merged.get(key);
+    if (existing) {
+      // Merge: keep API coordinates, take better metadata from lines
+      merged.set(key, {
+        ...existing,
+        lines: Math.max(existing.lines, lineSub.lines),
+        maxVolt: Math.max(existing.maxVolt, lineSub.maxVolt),
+        owner: existing.owner && existing.owner !== 'NOT AVAILABLE' ? existing.owner : lineSub.owner,
+      });
+    } else {
+      // Line-derived only — no coordinates available
+      merged.set(key, lineSub);
+    }
+  }
+
+  // Sort: real distances first, then 0-distance at end
+  return [...merged.values()].sort((a, b) => {
+    if (a.distanceMi === 0 && b.distanceMi > 0) return 1;
+    if (b.distanceMi === 0 && a.distanceMi > 0) return -1;
+    return a.distanceMi - b.distanceMi || b.maxVolt - a.maxVolt;
+  });
 }
 
 /** Derive utility territory from most common line/substation owners. */
@@ -334,14 +415,16 @@ export async function lookupInfrastructure(opts: LookupOptions): Promise<InfraRe
     ({ lat, lng } = await geocodeAddress(opts.address));
   }
 
-  const [lines, powerPlants, solarWind] = await Promise.all([
+  const [lines, powerPlants, apiSubstations, solarWind] = await Promise.all([
     queryLines(lat, lng),
     queryPowerPlants(lat, lng),
+    querySubstations(lat, lng),
     querySolarWind(lat, lng),
   ]);
 
-  const substations = extractSubstations(lines);
-  const nearest = substations[0];
+  const lineDerivedSubs = extractSubstationsFromLines(lines);
+  const substations = mergeSubstations(apiSubstations, lineDerivedSubs);
+  const nearest = substations.find((s) => s.distanceMi > 0) ?? substations[0];
   const iso = detectIso(lat, lng);
   const utilities = deriveUtility(lines);
 
