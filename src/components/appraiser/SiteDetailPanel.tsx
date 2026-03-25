@@ -405,11 +405,13 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
                             <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
                               sub.status === 'IN SERVICE'
                                 ? 'bg-green-50 text-green-700'
-                                : sub.status
-                                  ? 'bg-red-50 text-red-700'
-                                  : 'bg-blue-50 text-blue-700'
+                                : sub.status?.toUpperCase() === 'NOT AVAILABLE'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : sub.status
+                                    ? 'bg-red-50 text-red-700'
+                                    : 'bg-gray-100 text-gray-600'
                             }`}>
-                              {sub.status || 'Capacity Available'}
+                              {sub.status?.toUpperCase() === 'NOT AVAILABLE' ? 'Capacity Available' : sub.status || '—'}
                             </span>
                           </td>
                           <td className={`${tdClass} text-right tabular-nums`}>{sub.distanceMi > 0 ? `${sub.distanceMi.toFixed(1)} mi` : '—'}</td>
@@ -453,11 +455,13 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
                             <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
                               line.status === 'IN SERVICE'
                                 ? 'bg-green-50 text-green-700'
-                                : line.status
-                                  ? 'bg-red-50 text-red-700'
-                                  : 'bg-blue-50 text-blue-700'
+                                : line.status?.toUpperCase() === 'NOT AVAILABLE'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : line.status
+                                    ? 'bg-red-50 text-red-700'
+                                    : 'bg-gray-100 text-gray-600'
                             }`}>
-                              {line.status || 'Capacity Available'}
+                              {line.status?.toUpperCase() === 'NOT AVAILABLE' ? 'Capacity Available' : line.status || '—'}
                             </span>
                           </td>
                         </tr>
@@ -501,11 +505,13 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
                             <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
                               plant.status === 'OP'
                                 ? 'bg-green-50 text-green-700'
-                                : plant.status
-                                  ? 'bg-red-50 text-red-700'
-                                  : 'bg-blue-50 text-blue-700'
+                                : plant.status?.toUpperCase() === 'NOT AVAILABLE'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : plant.status
+                                    ? 'bg-red-50 text-red-700'
+                                    : 'bg-gray-100 text-gray-600'
                             }`}>
-                              {plant.status || 'Capacity Available'}
+                              {plant.status?.toUpperCase() === 'NOT AVAILABLE' ? 'Capacity Available' : plant.status || '—'}
                             </span>
                           </td>
                           <td className={`${tdClass} text-right tabular-nums`}>{plant.distanceMi > 0 ? `${plant.distanceMi.toFixed(1)} mi` : '—'}</td>
