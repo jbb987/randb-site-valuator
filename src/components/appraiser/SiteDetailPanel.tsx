@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { SiteInputs, AppraisalResult } from '../../types';
 import { formatCurrencyShort } from '../../utils/format';
 import { useInfraLookup } from '../../hooks/useInfraLookup';
@@ -14,6 +15,12 @@ interface Props {
 const inputClass =
   'w-full rounded-lg border border-[#D8D5D0] bg-white/80 px-3 py-2.5 text-sm text-[#201F1E] outline-none transition focus:border-[#C1121F]/40 focus:ring-2 focus:ring-[#C1121F]/10 placeholder:text-[#7A756E]';
 
+const readOnlyClass =
+  'rounded-lg border border-[#D8D5D0] bg-[#F5F4F2] px-3 py-2.5 text-sm text-[#201F1E]';
+
+const thClass = 'text-left text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] pb-2';
+const tdClass = 'py-1.5 text-sm text-[#201F1E]';
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -21,6 +28,29 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="text-[10px] text-[#7A756E]">{hint}</span>}
     </label>
+  );
+}
+
+function CollapsibleSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mt-6">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-xs font-semibold text-[#7A756E] uppercase tracking-wider hover:text-[#201F1E] transition"
+      >
+        <svg
+          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+        </svg>
+        {title} {count > 0 && <span className="text-[10px] font-normal text-[#7A756E]">({count})</span>}
+      </button>
+      {open && <div className="mt-3">{children}</div>}
+    </div>
   );
 }
 
@@ -32,16 +62,23 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
   }
 
   async function handleInfraLookup() {
-    const result = await infraLookup({
+    const res = await infraLookup({
       coordinates: inputs.coordinates,
       address: inputs.address,
     });
-    if (result) {
+    if (res) {
       onInputsChange({
         ...inputs,
-        iso: result.iso || inputs.iso,
-        utilityTerritory: result.utilityTerritory || inputs.utilityTerritory,
-        tsp: result.tsp || inputs.tsp,
+        iso: res.iso || inputs.iso,
+        utilityTerritory: res.utilityTerritory || inputs.utilityTerritory,
+        tsp: res.tsp || inputs.tsp,
+        nearestPoiName: res.nearestPoiName,
+        nearestPoiDistMi: res.nearestPoiDistMi,
+        nearbySubstations: res.nearbySubstations,
+        nearbyLines: res.nearbyLines,
+        nearbyPowerPlants: res.nearbyPowerPlants,
+        floodZone: res.floodZone,
+        solarWind: res.solarWind,
       });
     }
   }
@@ -51,6 +88,13 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
     if (!isNaN(n)) set(key, n);
     if (raw === '') set(key, 0);
   }
+
+  const hasAnalysisData =
+    inputs.nearbySubstations?.length > 0 ||
+    inputs.nearbyLines?.length > 0 ||
+    inputs.nearbyPowerPlants?.length > 0 ||
+    inputs.floodZone != null ||
+    inputs.solarWind != null;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -217,7 +261,8 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Territory fields (editable) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <Field label="RTO / ISO">
             <input
               type="text"
@@ -238,7 +283,7 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
             />
           </Field>
 
-          <Field label="Transmission Service Provider (TSP)">
+          <Field label="Transmission Service Provider">
             <input
               type="text"
               className={inputClass}
@@ -248,6 +293,230 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
             />
           </Field>
         </div>
+
+        {/* Nearest POI */}
+        {inputs.nearestPoiName && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+            <Field label="Nearest Point of Interconnection">
+              <div className={readOnlyClass}>{inputs.nearestPoiName}</div>
+            </Field>
+            <Field label="Distance to POI">
+              <div className={readOnlyClass}>{inputs.nearestPoiDistMi.toFixed(1)} mi</div>
+            </Field>
+          </div>
+        )}
+
+        {/* ── Analysis results (shown after Analyze) ── */}
+        {hasAnalysisData && (
+          <>
+            {/* Nearby Substations */}
+            {inputs.nearbySubstations?.length > 0 && (
+              <CollapsibleSection title="Nearby Substations" count={inputs.nearbySubstations.length}>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
+                    <thead>
+                      <tr className="border-b border-[#D8D5D0]">
+                        <th className={thClass}>Name</th>
+                        <th className={thClass}>Owner</th>
+                        <th className={thClass}>Voltage (kV)</th>
+                        <th className={thClass}>Lines</th>
+                        <th className={thClass}>Status</th>
+                        <th className={`${thClass} text-right`}>Distance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inputs.nearbySubstations.map((sub, i) => (
+                        <tr key={i} className="border-b border-[#D8D5D0]/50">
+                          <td className={`${tdClass} font-medium`}>{sub.name || '—'}</td>
+                          <td className={tdClass}>{sub.owner || '—'}</td>
+                          <td className={tdClass}>
+                            {sub.minVolt > 0 && sub.maxVolt > 0
+                              ? `${sub.minVolt}–${sub.maxVolt}`
+                              : sub.maxVolt > 0
+                                ? String(sub.maxVolt)
+                                : '—'}
+                          </td>
+                          <td className={tdClass}>{sub.lines || '—'}</td>
+                          <td className={tdClass}>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              sub.status === 'IN SERVICE'
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {sub.status || '—'}
+                            </span>
+                          </td>
+                          <td className={`${tdClass} text-right tabular-nums`}>{sub.distanceMi.toFixed(1)} mi</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Nearby Transmission Lines */}
+            {inputs.nearbyLines?.length > 0 && (
+              <CollapsibleSection title="Nearby Transmission Lines" count={inputs.nearbyLines.length}>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
+                    <thead>
+                      <tr className="border-b border-[#D8D5D0]">
+                        <th className={thClass}>Owner</th>
+                        <th className={thClass}>Voltage (kV)</th>
+                        <th className={thClass}>Class</th>
+                        <th className={thClass}>From</th>
+                        <th className={thClass}>To</th>
+                        <th className={thClass}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inputs.nearbyLines.map((line, i) => (
+                        <tr key={i} className="border-b border-[#D8D5D0]/50">
+                          <td className={`${tdClass} font-medium`}>{line.owner || '—'}</td>
+                          <td className={`${tdClass} tabular-nums`}>{line.voltage > 0 ? line.voltage : '—'}</td>
+                          <td className={tdClass}>{line.voltClass || '—'}</td>
+                          <td className={tdClass}>{line.sub1 || '—'}</td>
+                          <td className={tdClass}>{line.sub2 || '—'}</td>
+                          <td className={tdClass}>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              line.status === 'IN SERVICE'
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {line.status || '—'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Nearby Power Plants */}
+            {inputs.nearbyPowerPlants?.length > 0 && (
+              <CollapsibleSection title="Nearby Power Plants" count={inputs.nearbyPowerPlants.length}>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[500px]">
+                    <thead>
+                      <tr className="border-b border-[#D8D5D0]">
+                        <th className={thClass}>Name</th>
+                        <th className={thClass}>Operator</th>
+                        <th className={thClass}>Source</th>
+                        <th className={thClass}>Capacity</th>
+                        <th className={thClass}>Status</th>
+                        <th className={`${thClass} text-right`}>Distance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inputs.nearbyPowerPlants.map((plant, i) => (
+                        <tr key={i} className="border-b border-[#D8D5D0]/50">
+                          <td className={`${tdClass} font-medium`}>{plant.name || '—'}</td>
+                          <td className={tdClass}>{plant.operator || '—'}</td>
+                          <td className={tdClass}>{plant.primarySource || '—'}</td>
+                          <td className={`${tdClass} tabular-nums`}>
+                            {plant.capacityMW > 0 ? `${plant.capacityMW} MW` : '—'}
+                          </td>
+                          <td className={tdClass}>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              plant.status === 'OP'
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {plant.status || '—'}
+                            </span>
+                          </td>
+                          <td className={`${tdClass} text-right tabular-nums`}>{plant.distanceMi.toFixed(1)} mi</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CollapsibleSection>
+            )}
+
+            {/* Flood Zone & Solar/Wind Resource — side by side */}
+            {(inputs.floodZone || inputs.solarWind) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+                {/* Flood Zone */}
+                {inputs.floodZone && (
+                  <div>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] mb-3">
+                      FEMA Flood Zone
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-[#7A756E]">Zone</span>
+                        <span className={`text-sm font-medium ${
+                          inputs.floodZone.zone === 'X' || inputs.floodZone.zone === 'C'
+                            ? 'text-green-700'
+                            : inputs.floodZone.zone === 'D'
+                              ? 'text-amber-600'
+                              : 'text-red-600'
+                        }`}>
+                          {inputs.floodZone.zone}
+                          {inputs.floodZone.zone === 'X' && ' (Minimal risk)'}
+                          {inputs.floodZone.zone === 'A' && ' (High risk)'}
+                          {inputs.floodZone.zone === 'AE' && ' (High risk)'}
+                          {inputs.floodZone.zone === 'D' && ' (Undetermined)'}
+                        </span>
+                      </div>
+                      {inputs.floodZone.floodwayType && inputs.floodZone.floodwayType !== 'None' && (
+                        <div className="flex justify-between">
+                          <span className="text-xs text-[#7A756E]">Floodway</span>
+                          <span className="text-sm text-[#201F1E]">{inputs.floodZone.floodwayType}</span>
+                        </div>
+                      )}
+                      {inputs.floodZone.panelNumber && (
+                        <div className="flex justify-between">
+                          <span className="text-xs text-[#7A756E]">DFIRM Panel</span>
+                          <span className="text-sm text-[#201F1E]">{inputs.floodZone.panelNumber}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Solar / Wind Resource */}
+                {inputs.solarWind && (
+                  <div>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] mb-3">
+                      Solar / Wind Resource
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-[#7A756E]">GHI (avg annual)</span>
+                        <span className="text-sm tabular-nums text-[#201F1E]">
+                          {inputs.solarWind.ghi > 0 ? `${inputs.solarWind.ghi.toFixed(2)} kWh/m²/day` : '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-[#7A756E]">DNI (avg annual)</span>
+                        <span className="text-sm tabular-nums text-[#201F1E]">
+                          {inputs.solarWind.dni > 0 ? `${inputs.solarWind.dni.toFixed(2)} kWh/m²/day` : '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-[#7A756E]">Wind Speed (avg)</span>
+                        <span className="text-sm tabular-nums text-[#201F1E]">
+                          {inputs.solarWind.windSpeed > 0 ? `${inputs.solarWind.windSpeed.toFixed(1)} m/s` : '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-[#7A756E]">Lat-tilt Irradiance</span>
+                        <span className="text-sm tabular-nums text-[#201F1E]">
+                          {inputs.solarWind.capacity > 0 ? `${inputs.solarWind.capacity.toFixed(2)} kWh/m²/day` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Site Location Map */}
