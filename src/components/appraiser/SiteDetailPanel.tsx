@@ -130,6 +130,9 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {/* Site Location Map */}
+      <SiteMapCard coordinates={inputs.coordinates} />
+
       {/* Calculator (existing PresentationView) */}
       <PresentationView
         inputs={inputs}
@@ -501,9 +504,6 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
           </>
         )}
       </div>
-
-      {/* Site Location Map */}
-      <SiteMapCard coordinates={inputs.coordinates} />
     </div>
   );
 }
