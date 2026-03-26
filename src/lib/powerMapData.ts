@@ -6,6 +6,9 @@
  * queries suitable for the map viewport.
  */
 
+// @ts-expect-error — d3-delaunay ships without type declarations
+import { Delaunay } from 'd3-delaunay';
+
 const GEOPLATFORM = 'https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services';
 
 const LAYERS = {
@@ -52,11 +55,10 @@ export interface MapSubstation {
   connectedCapacityMW: number;
 }
 
-export interface PowerMapResult {
-  plants: MapPowerPlant[];
-  lines: MapTransmissionLine[];
-  substations: MapSubstation[];
-  totalGenerationMW: number;
+export interface FetchOptions {
+  minCapacityMW?: number;
+  minVoltageKV?: number;
+  maxResults?: number;
 }
 
 // ── Source colors ────────────────────────────────────────────────────────────
@@ -84,25 +86,39 @@ function bboxEnvelope(bounds: MapBounds): string {
   return `${bounds.west},${bounds.south},${bounds.east},${bounds.north}`;
 }
 
-export async function fetchPowerPlants(bounds: MapBounds): Promise<MapPowerPlant[]> {
+export interface FetchResult<T> {
+  data: T;
+  truncated: boolean;
+}
+
+export async function fetchPowerPlants(
+  bounds: MapBounds,
+  options?: FetchOptions,
+): Promise<FetchResult<MapPowerPlant[]>> {
+  const maxResults = options?.maxResults ?? 2000;
+  const whereClause = options?.minCapacityMW
+    ? `Install_MW>=${options.minCapacityMW}`
+    : '1=1';
+
   const url =
     `${LAYERS.powerPlants}/query?` +
-    `where=1%3D1` +
+    `where=${encodeURIComponent(whereClause)}` +
     `&geometry=${encodeURIComponent(bboxEnvelope(bounds))}` +
     `&geometryType=esriGeometryEnvelope` +
     `&spatialRel=esriSpatialRelIntersects` +
     `&inSR=4326` +
     `&outFields=Plant_Name%2CPrimSource%2CInstall_MW%2CTotal_MW%2CUtility_Na%2CLatitude%2CLongitude` +
     `&returnGeometry=false` +
-    `&resultRecordCount=2000` +
+    `&resultRecordCount=${maxResults}` +
     `&f=json`;
 
   try {
     const res = await fetch(url);
-    if (!res.ok) return [];
+    if (!res.ok) return { data: [], truncated: false };
     const data = await res.json();
-    if (data.error) return [];
-    return (data.features ?? []).map(
+    if (data.error) return { data: [], truncated: false };
+    const features = data.features ?? [];
+    const plants = features.map(
       (f: { attributes: Record<string, unknown> }) => {
         const a = f.attributes;
         return {
@@ -116,43 +132,50 @@ export async function fetchPowerPlants(bounds: MapBounds): Promise<MapPowerPlant
         };
       },
     );
+    return { data: plants, truncated: features.length >= maxResults };
   } catch {
-    return [];
+    return { data: [], truncated: false };
   }
 }
 
 export async function fetchTransmissionLines(
   bounds: MapBounds,
-): Promise<{ lines: MapTransmissionLine[]; substations: MapSubstation[] }> {
+  options?: FetchOptions,
+): Promise<FetchResult<{ lines: MapTransmissionLine[]; substations: MapSubstation[] }>> {
+  const maxResults = options?.maxResults ?? 2000;
+  const whereClause = options?.minVoltageKV
+    ? `VOLTAGE>=${options.minVoltageKV}`
+    : '1=1';
+
   const url =
     `${LAYERS.transmissionLines}/query?` +
-    `where=1%3D1` +
+    `where=${encodeURIComponent(whereClause)}` +
     `&geometry=${encodeURIComponent(bboxEnvelope(bounds))}` +
     `&geometryType=esriGeometryEnvelope` +
     `&spatialRel=esriSpatialRelIntersects` +
     `&inSR=4326&outSR=4326` +
     `&outFields=OWNER%2CVOLTAGE%2CVOLT_CLASS%2CSUB_1%2CSUB_2%2CSTATUS` +
     `&returnGeometry=true` +
-    `&resultRecordCount=2000` +
+    `&resultRecordCount=${maxResults}` +
     `&f=json`;
 
   try {
     const res = await fetch(url);
-    if (!res.ok) return { lines: [], substations: [] };
+    if (!res.ok) return { data: { lines: [], substations: [] }, truncated: false };
     const data = await res.json();
-    if (data.error) return { lines: [], substations: [] };
+    if (data.error) return { data: { lines: [], substations: [] }, truncated: false };
 
+    const features = data.features ?? [];
     const lines: MapTransmissionLine[] = [];
     const subMap = new Map<
       string,
       { coords: { lat: number; lng: number }[]; voltages: number[]; owner: string; lineCount: number }
     >();
 
-    for (const f of data.features ?? []) {
+    for (const f of features) {
       const a = f.attributes as Record<string, unknown>;
       const paths: number[][][] = f.geometry?.paths ?? [];
 
-      // Flatten all path segments into a single coordinate array
       const coords: [number, number][] = [];
       for (const path of paths) {
         for (const pt of path) {
@@ -173,7 +196,6 @@ export async function fetchTransmissionLines(
         coordinates: coords,
       });
 
-      // Extract substation locations from line endpoints
       const sub1Name = String(a.SUB_1 ?? '');
       const sub2Name = String(a.SUB_2 ?? '');
       const firstPath = paths[0];
@@ -205,7 +227,6 @@ export async function fetchTransmissionLines(
       }
     }
 
-    // Average substation coordinates
     const substations: MapSubstation[] = [];
     for (const [name, info] of subMap) {
       const avgLat = info.coords.reduce((s, c) => s + c.lat, 0) / info.coords.length;
@@ -217,13 +238,13 @@ export async function fetchTransmissionLines(
         lat: avgLat,
         lng: avgLng,
         lineCount: info.lineCount,
-        connectedCapacityMW: 0, // Filled in during availability calc
+        connectedCapacityMW: 0,
       });
     }
 
-    return { lines, substations };
+    return { data: { lines, substations }, truncated: features.length >= maxResults };
   } catch {
-    return { lines: [], substations: [] };
+    return { data: { lines: [], substations: [] }, truncated: false };
   }
 }
 
@@ -234,21 +255,15 @@ export interface AvailabilityPoint {
   lng: number;
   availableMW: number;
   generatedMW: number;
-  /** 0-1 intensity for heat map (1 = highest availability) */
+  /** 0-1 intensity (1 = highest availability) */
   intensity: number;
+  /** Discrete color bin 0-4 */
+  bin: number;
 }
 
-const RESERVE_MARGIN = 1.20; // 20% over-allocation by RTOs/ISOs
-const TARGET_MW = 200; // Red threshold
+const RESERVE_MARGIN = 1.20;
+const TARGET_MW = 200;
 
-/**
- * For each substation, sum nearby generation capacity, estimate local
- * consumption, and compute net available power.
- *
- * Consumption is estimated using per-capita demand and a rough population
- * density proxy based on generator density in the area (rural areas with
- * generators tend to have low consumption).
- */
 export function calculateAvailability(
   plants: MapPowerPlant[],
   substations: MapSubstation[],
@@ -256,12 +271,10 @@ export function calculateAvailability(
 ): AvailabilityPoint[] {
   if (substations.length === 0) return [];
 
-  const RADIUS_DEG = 0.3; // ~20 miles radius for associating plants with substations
-
+  const RADIUS_DEG = 0.3;
   const points: AvailabilityPoint[] = [];
 
   for (const sub of substations) {
-    // Find plants near this substation
     let nearbyGenMW = 0;
     for (const plant of plants) {
       const dLat = plant.lat - sub.lat;
@@ -273,21 +286,72 @@ export function calculateAvailability(
 
     if (nearbyGenMW === 0) continue;
 
-    // Estimate consumption: substations with more lines serve larger load areas.
-    // Use line count as a rough proxy for local load (more lines = more demand).
-    const estimatedLoadMW = sub.lineCount * 15; // ~15 MW per connected line as rough proxy
-
-    // Net available = (generation * reserve margin) - estimated load
+    const estimatedLoadMW = sub.lineCount * 15;
     const availableMW = Math.max(0, nearbyGenMW * RESERVE_MARGIN - estimatedLoadMW);
+    const intensity = Math.min(1, availableMW / TARGET_MW);
 
     points.push({
       lat: sub.lat,
       lng: sub.lng,
       availableMW,
       generatedMW: nearbyGenMW,
-      intensity: Math.min(1, availableMW / TARGET_MW),
+      intensity,
+      bin: Math.min(4, Math.floor(intensity * 5)),
     });
   }
 
   return points;
+}
+
+// ── Voronoi availability zones ───────────────────────────────────────────────
+
+/** Color bins for availability: 0 = lowest (blue), 4 = highest (red) */
+export const AVAILABILITY_BINS = [
+  { bin: 0, color: '#3B82F6', label: '0–40 MW' },
+  { bin: 1, color: '#818CF8', label: '40–80 MW' },
+  { bin: 2, color: '#A855F7', label: '80–120 MW' },
+  { bin: 3, color: '#E07850', label: '120–160 MW' },
+  { bin: 4, color: '#EF4444', label: '160+ MW' },
+];
+
+export function buildAvailabilityPolygons(
+  points: AvailabilityPoint[],
+  bounds: MapBounds,
+): GeoJSON.FeatureCollection {
+  if (points.length === 0) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  const delaunay = Delaunay.from(points.map((p) => [p.lng, p.lat]));
+
+  const pad = 0.5;
+  const voronoi = delaunay.voronoi([
+    bounds.west - pad,
+    bounds.south - pad,
+    bounds.east + pad,
+    bounds.north + pad,
+  ]);
+
+  const features: GeoJSON.Feature[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const cell = voronoi.cellPolygon(i);
+    if (!cell) continue;
+
+    const pt = points[i];
+    features.push({
+      type: 'Feature',
+      id: i,
+      properties: {
+        availableMW: Math.round(pt.availableMW),
+        intensity: pt.intensity,
+        bin: pt.bin,
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [cell.map((c: number[]) => [c[0], c[1]])],
+      },
+    });
+  }
+
+  return { type: 'FeatureCollection', features };
 }

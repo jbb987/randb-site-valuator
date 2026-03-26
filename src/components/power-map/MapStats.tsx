@@ -5,6 +5,7 @@ interface MapStatsProps {
   totalLines: number;
   totalAvailableMW: number;
   loading: boolean;
+  dataTruncated?: boolean;
 }
 
 function formatMW(mw: number): string {
@@ -19,13 +20,14 @@ export default function MapStats({
   totalLines,
   totalAvailableMW,
   loading,
+  dataTruncated,
 }: MapStatsProps) {
   const stats = [
-    { label: 'Generators', value: totalPlants.toLocaleString(), icon: 'plant' },
-    { label: 'Generation', value: formatMW(totalGenerationMW), icon: 'bolt' },
-    { label: 'Substations', value: totalSubstations.toLocaleString(), icon: 'sub' },
-    { label: 'Trans. Lines', value: totalLines.toLocaleString(), icon: 'line' },
-    { label: 'Available', value: formatMW(totalAvailableMW), icon: 'available' },
+    { label: 'Generators', value: totalPlants.toLocaleString() },
+    { label: 'Generation', value: formatMW(totalGenerationMW) },
+    { label: 'Substations', value: totalSubstations.toLocaleString() },
+    { label: 'Trans. Lines', value: totalLines.toLocaleString() },
+    { label: 'Available', value: formatMW(totalAvailableMW) },
   ];
 
   return (
@@ -44,6 +46,11 @@ export default function MapStats({
           </div>
         ))}
       </div>
+      {dataTruncated && (
+        <p className="text-xs text-[#ED202B] mt-3">
+          Showing partial results — zoom in for complete data
+        </p>
+      )}
     </div>
   );
 }

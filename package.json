@@ -11,6 +11,7 @@
     "deploy": "npm run build"
   },
   "dependencies": {
+    "d3-delaunay": "^6.0.4",
     "firebase": "^12.11.0",
     "framer-motion": "^12.38.0",
     "html2canvas-pro": "^2.0.2",

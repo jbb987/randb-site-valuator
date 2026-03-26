@@ -1,13 +1,13 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import Map, { Source, Layer, Marker, Popup, NavigationControl } from 'react-map-gl/maplibre';
-import type { MapRef } from 'react-map-gl/maplibre';
-import type { MapLayerMouseEvent } from 'react-map-gl/maplibre';
+import Map, { Source, Layer, Popup, NavigationControl } from 'react-map-gl/maplibre';
+import type { MapRef, MapLayerMouseEvent } from 'react-map-gl/maplibre';
 import { usePowerMap } from '../../hooks/usePowerMap';
 import {
-  getSourceColor,
   SOURCE_COLORS,
+  AVAILABILITY_BINS,
+  buildAvailabilityPolygons,
   type MapPowerPlant,
   type MapBounds,
 } from '../../lib/powerMapData';
@@ -15,7 +15,6 @@ import MapLegend from './MapLegend';
 import MapStats from './MapStats';
 import PlantPopup from './PlantPopup';
 
-// Free tile provider — OpenFreeMap (no API key)
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 const INITIAL_VIEW = {
@@ -24,6 +23,20 @@ const INITIAL_VIEW = {
   zoom: 5,
 };
 
+// Build match expression for source colors
+const sourceColorMatch: unknown[] = ['match', ['get', 'primarySource']];
+for (const [source, color] of Object.entries(SOURCE_COLORS)) {
+  sourceColorMatch.push(source, color);
+}
+sourceColorMatch.push('#9CA3AF'); // fallback
+
+// Build match expression for availability bin colors
+const binColorMatch: unknown[] = ['match', ['get', 'bin']];
+for (const { bin, color } of AVAILABILITY_BINS) {
+  binColorMatch.push(bin, color);
+}
+binColorMatch.push('#D1D5DB'); // fallback
+
 export default function PowerMapView() {
   const mapRef = useRef<MapRef>(null);
   const {
@@ -31,10 +44,12 @@ export default function PowerMapView() {
     lines,
     substations,
     availability,
-    totalGenerationMW,
     totalAvailableMW,
     loading,
     loadData,
+    zoomLevel,
+    dataTruncated,
+    bounds: dataBounds,
   } = usePowerMap();
 
   const [selectedPlant, setSelectedPlant] = useState<MapPowerPlant | null>(null);
@@ -43,7 +58,7 @@ export default function PowerMapView() {
   );
   const [showLines, setShowLines] = useState(true);
   const [showSubstations, setShowSubstations] = useState(true);
-  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showAvailability, setShowAvailability] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const getBounds = useCallback((): MapBounds | null => {
@@ -61,12 +76,14 @@ export default function PowerMapView() {
 
   const handleMoveEnd = useCallback(() => {
     const bounds = getBounds();
-    if (bounds) loadData(bounds);
+    const zoom = mapRef.current?.getZoom() ?? 5;
+    if (bounds) loadData(bounds, zoom);
   }, [getBounds, loadData]);
 
   const handleLoad = useCallback(() => {
     const bounds = getBounds();
-    if (bounds) loadData(bounds);
+    const zoom = mapRef.current?.getZoom() ?? 5;
+    if (bounds) loadData(bounds, zoom);
   }, [getBounds, loadData]);
 
   const toggleSource = useCallback((source: string) => {
@@ -78,42 +95,91 @@ export default function PowerMapView() {
     });
   }, []);
 
-  // Filter plants by visible sources
-  const filteredPlants = plants.filter((p) => visibleSources.has(p.primarySource));
+  // Filter plants by visible sources (for stats)
+  const filteredPlants = useMemo(
+    () => plants.filter((p) => visibleSources.has(p.primarySource)),
+    [plants, visibleSources],
+  );
+  const filteredGenerationMW = useMemo(
+    () => Math.round(filteredPlants.reduce((sum, p) => sum + p.capacityMW, 0)),
+    [filteredPlants],
+  );
 
-  // Build GeoJSON for transmission lines
-  const linesGeoJSON: GeoJSON.FeatureCollection = {
+  // Build source filter expression for MapLibre layer
+  const sourceFilter = useMemo(
+    (): maplibregl.FilterSpecification =>
+      ['in', ['get', 'primarySource'], ['literal', [...visibleSources]]],
+    [visibleSources],
+  );
+
+  // ── GeoJSON Sources ──────────────────────────────────────────────────────
+
+  // Power plants as GeoJSON (for circle layer + clustering)
+  const plantsGeoJSON: GeoJSON.FeatureCollection = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: plants.map((p, i) => ({
+      type: 'Feature' as const,
+      id: i,
+      properties: {
+        name: p.name,
+        operator: p.operator,
+        primarySource: p.primarySource,
+        capacityMW: p.capacityMW,
+        totalMW: p.totalMW,
+        lat: p.lat,
+        lng: p.lng,
+      },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [p.lng, p.lat],
+      },
+    })),
+  }), [plants]);
+
+  // Substations as GeoJSON
+  const substationsGeoJSON: GeoJSON.FeatureCollection = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: substations.map((s, i) => ({
+      type: 'Feature' as const,
+      id: i,
+      properties: {
+        name: s.name,
+        owner: s.owner,
+        maxVolt: s.maxVolt,
+        lineCount: s.lineCount,
+      },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [s.lng, s.lat],
+      },
+    })),
+  }), [substations]);
+
+  // Transmission lines as GeoJSON
+  const linesGeoJSON: GeoJSON.FeatureCollection = useMemo(() => ({
     type: 'FeatureCollection',
     features: lines.map((line, i) => ({
-      type: 'Feature',
+      type: 'Feature' as const,
       id: i,
       properties: {
         voltage: line.voltage,
         owner: line.owner,
       },
       geometry: {
-        type: 'LineString',
+        type: 'LineString' as const,
         coordinates: line.coordinates,
       },
     })),
-  };
+  }), [lines]);
 
-  // Build GeoJSON for availability heat map
-  const heatmapGeoJSON: GeoJSON.FeatureCollection = {
-    type: 'FeatureCollection',
-    features: availability.map((pt, i) => ({
-      type: 'Feature',
-      id: i,
-      properties: {
-        intensity: pt.intensity,
-        availableMW: pt.availableMW,
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [pt.lng, pt.lat],
-      },
-    })),
-  };
+  // Voronoi availability zones
+  const availabilityGeoJSON = useMemo(() => {
+    const bounds = dataBounds ?? getBounds();
+    if (!bounds || availability.length === 0) {
+      return { type: 'FeatureCollection' as const, features: [] };
+    }
+    return buildAvailabilityPolygons(availability, bounds);
+  }, [availability, dataBounds, getBounds]);
 
   // Close popup on Escape
   useEffect(() => {
@@ -124,24 +190,64 @@ export default function PowerMapView() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Handle clicking on transmission line
-  const handleLineClick = useCallback((e: MapLayerMouseEvent) => {
+  // Handle clicking on map layers
+  const handleClick = useCallback((e: MapLayerMouseEvent) => {
     if (!e.features?.length) return;
-    const props = e.features[0].properties;
-    if (!props) return;
-    // Show a simple popup via native maplibre
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-    new maplibregl.Popup({ closeButton: true, maxWidth: '240px' })
-      .setLngLat(e.lngLat)
-      .setHTML(
-        `<div style="font-family: IBM Plex Sans, sans-serif; font-size: 13px;">
-          <strong>${props.owner || 'Unknown'}</strong><br/>
-          Voltage: ${props.voltage ? `${props.voltage} kV` : 'N/A'}
-        </div>`,
-      )
-      .addTo(map);
+    const feature = e.features[0];
+    const layer = feature.layer?.id;
+
+    // Plant click
+    if (layer === 'plant-points') {
+      const props = feature.properties;
+      if (props) {
+        setSelectedPlant({
+          name: props.name,
+          operator: props.operator,
+          primarySource: props.primarySource,
+          capacityMW: Number(props.capacityMW),
+          totalMW: Number(props.totalMW),
+          lat: Number(props.lat),
+          lng: Number(props.lng),
+        });
+      }
+      return;
+    }
+
+    // Cluster click — zoom in
+    if (layer === 'plant-clusters') {
+      const map = mapRef.current;
+      if (map && feature.geometry.type === 'Point') {
+        map.flyTo({
+          center: feature.geometry.coordinates as [number, number],
+          zoom: (map.getZoom() ?? 5) + 2,
+        });
+      }
+      return;
+    }
+
+    // Transmission line click
+    if (layer === 'transmission-lines') {
+      const props = feature.properties;
+      if (!props) return;
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+      new maplibregl.Popup({ closeButton: true, maxWidth: '240px' })
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<div style="font-family: IBM Plex Sans, sans-serif; font-size: 13px;">
+            <strong>${props.owner || 'Unknown'}</strong><br/>
+            Voltage: ${props.voltage ? `${props.voltage} kV` : 'N/A'}
+          </div>`,
+        )
+        .addTo(map);
+    }
   }, []);
+
+  const interactiveLayerIds = useMemo(() => {
+    const ids: string[] = ['plant-points', 'plant-clusters'];
+    if (showLines) ids.push('transmission-lines');
+    return ids;
+  }, [showLines]);
 
   return (
     <div className="relative w-full h-full">
@@ -152,13 +258,36 @@ export default function PowerMapView() {
         mapStyle={MAP_STYLE}
         onLoad={handleLoad}
         onMoveEnd={handleMoveEnd}
-        interactiveLayerIds={showLines ? ['transmission-lines'] : []}
-        onClick={handleLineClick}
+        interactiveLayerIds={interactiveLayerIds}
+        onClick={handleClick}
         cursor="default"
       >
         <NavigationControl position="top-right" />
 
-        {/* Transmission lines layer */}
+        {/* Availability zones (Voronoi polygons) — render below everything */}
+        {showAvailability && (
+          <Source id="availability-zones" type="geojson" data={availabilityGeoJSON}>
+            <Layer
+              id="availability-zones-fill"
+              type="fill"
+              paint={{
+                'fill-color': binColorMatch as never,
+                'fill-opacity': 0.35,
+              }}
+            />
+            <Layer
+              id="availability-zones-outline"
+              type="line"
+              paint={{
+                'line-color': '#FFFFFF',
+                'line-width': 0.5,
+                'line-opacity': 0.3,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Transmission lines */}
         {showLines && (
           <Source id="transmission-lines" type="geojson" data={linesGeoJSON}>
             <Layer
@@ -192,79 +321,80 @@ export default function PowerMapView() {
           </Source>
         )}
 
-        {/* Availability heatmap */}
-        {showHeatmap && (
-          <Source id="availability-heatmap" type="geojson" data={heatmapGeoJSON}>
+        {/* Substations (circle layer instead of React Markers) */}
+        {showSubstations && (
+          <Source id="substations" type="geojson" data={substationsGeoJSON}>
             <Layer
-              id="availability-heatmap"
-              type="heatmap"
+              id="substations"
+              type="circle"
               paint={{
-                'heatmap-weight': ['get', 'intensity'],
-                'heatmap-intensity': 1.5,
-                'heatmap-radius': [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  4, 15,
-                  7, 30,
-                  10, 50,
-                ],
-                'heatmap-color': [
-                  'interpolate',
-                  ['linear'],
-                  ['heatmap-density'],
-                  0, 'rgba(0,0,0,0)',
-                  0.1, 'rgba(59,130,246,0.3)',
-                  0.3, 'rgba(59,130,246,0.5)',
-                  0.5, 'rgba(139,92,246,0.5)',
-                  0.7, 'rgba(239,68,68,0.5)',
-                  1, 'rgba(239,68,68,0.7)',
-                ],
-                'heatmap-opacity': 0.6,
+                'circle-radius': 4,
+                'circle-color': '#201F1E',
+                'circle-stroke-color': '#FFFFFF',
+                'circle-stroke-width': 2,
               }}
             />
           </Source>
         )}
 
-        {/* Substation markers */}
-        {showSubstations &&
-          substations.map((sub) => (
-            <Marker
-              key={`sub-${sub.name}-${sub.lat}-${sub.lng}`}
-              longitude={sub.lng}
-              latitude={sub.lat}
-              anchor="center"
-            >
-              <div
-                className="w-3 h-3 bg-[#201F1E] border-2 border-white rounded-sm shadow-sm cursor-pointer"
-                title={`${sub.name} (${sub.maxVolt} kV, ${sub.lineCount} lines)`}
-              />
-            </Marker>
-          ))}
-
-        {/* Power plant markers */}
-        {filteredPlants.map((plant) => (
-          <Marker
-            key={`plant-${plant.name}-${plant.lat}-${plant.lng}`}
-            longitude={plant.lng}
-            latitude={plant.lat}
-            anchor="center"
-            onClick={(e) => {
-              e.originalEvent.stopPropagation();
-              setSelectedPlant(plant);
+        {/* Power plants (clustered GeoJSON layer) */}
+        <Source
+          id="power-plants"
+          type="geojson"
+          data={plantsGeoJSON}
+          cluster={true}
+          clusterMaxZoom={12}
+          clusterRadius={50}
+        >
+          {/* Cluster circles */}
+          <Layer
+            id="plant-clusters"
+            type="circle"
+            filter={['has', 'point_count']}
+            paint={{
+              'circle-color': '#ED202B',
+              'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                14, 10, 18, 50, 22, 100, 26,
+              ],
+              'circle-opacity': 0.85,
+              'circle-stroke-color': '#FFFFFF',
+              'circle-stroke-width': 2,
             }}
-          >
-            <div
-              className="rounded-full border-2 border-white shadow-md cursor-pointer transition-transform hover:scale-125"
-              style={{
-                backgroundColor: getSourceColor(plant.primarySource),
-                width: Math.max(10, Math.min(24, 6 + plant.capacityMW / 50)),
-                height: Math.max(10, Math.min(24, 6 + plant.capacityMW / 50)),
-              }}
-              title={`${plant.name} — ${plant.capacityMW} MW (${plant.primarySource})`}
-            />
-          </Marker>
-        ))}
+          />
+          {/* Cluster count labels */}
+          <Layer
+            id="plant-cluster-count"
+            type="symbol"
+            filter={['has', 'point_count']}
+            layout={{
+              'text-field': '{point_count_abbreviated}',
+              'text-size': 11,
+            }}
+            paint={{ 'text-color': '#FFFFFF' }}
+          />
+          {/* Individual plant circles */}
+          <Layer
+            id="plant-points"
+            type="circle"
+            filter={['all', ['!', ['has', 'point_count']], sourceFilter] as never}
+            paint={{
+              'circle-color': sourceColorMatch as never,
+              'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['get', 'capacityMW'],
+                0, 4,
+                100, 7,
+                500, 10,
+                1000, 14,
+              ],
+              'circle-stroke-color': '#FFFFFF',
+              'circle-stroke-width': 2,
+            }}
+          />
+        </Source>
 
         {/* Selected plant popup */}
         {selectedPlant && (
@@ -300,17 +430,18 @@ export default function PowerMapView() {
 
       {/* Sidebar */}
       <div
-        className={`absolute top-3 left-14 z-10 w-56 space-y-3 transition-all duration-300 ${
+        className={`absolute top-3 left-14 z-10 w-56 space-y-3 transition-all duration-300 max-h-[calc(100%-1.5rem)] overflow-y-auto ${
           sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8 pointer-events-none'
         }`}
       >
         <MapStats
           totalPlants={filteredPlants.length}
-          totalGenerationMW={totalGenerationMW}
+          totalGenerationMW={filteredGenerationMW}
           totalSubstations={substations.length}
           totalLines={lines.length}
           totalAvailableMW={totalAvailableMW}
           loading={loading}
+          dataTruncated={dataTruncated}
         />
         <MapLegend
           visibleSources={visibleSources}
@@ -319,12 +450,22 @@ export default function PowerMapView() {
           onToggleLines={() => setShowLines(!showLines)}
           showSubstations={showSubstations}
           onToggleSubstations={() => setShowSubstations(!showSubstations)}
-          showHeatmap={showHeatmap}
-          onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
+          showAvailability={showAvailability}
+          onToggleAvailability={() => setShowAvailability(!showAvailability)}
         />
       </div>
 
-      {/* Loading indicator overlay */}
+      {/* Zoom in banner */}
+      {zoomLevel < 5 && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-[#D8D5D0] px-6 py-4 text-center">
+            <p className="font-heading font-semibold text-[#201F1E]">Zoom in to view power data</p>
+            <p className="text-sm text-[#7A756E] mt-1">Power infrastructure loads at closer zoom levels</p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading indicator */}
       {loading && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur-sm rounded-full shadow-sm border border-[#D8D5D0] px-4 py-2 flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-[#ED202B]/30 border-t-[#ED202B] rounded-full animate-spin" />

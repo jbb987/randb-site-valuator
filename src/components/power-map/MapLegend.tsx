@@ -1,4 +1,4 @@
-import { SOURCE_COLORS } from '../../lib/powerMapData';
+import { SOURCE_COLORS, AVAILABILITY_BINS } from '../../lib/powerMapData';
 
 interface MapLegendProps {
   visibleSources: Set<string>;
@@ -7,8 +7,8 @@ interface MapLegendProps {
   onToggleLines: () => void;
   showSubstations: boolean;
   onToggleSubstations: () => void;
-  showHeatmap: boolean;
-  onToggleHeatmap: () => void;
+  showAvailability: boolean;
+  onToggleAvailability: () => void;
 }
 
 export default function MapLegend({
@@ -18,8 +18,8 @@ export default function MapLegend({
   onToggleLines,
   showSubstations,
   onToggleSubstations,
-  showHeatmap,
-  onToggleHeatmap,
+  showAvailability,
+  onToggleAvailability,
 }: MapLegendProps) {
   const sources = Object.entries(SOURCE_COLORS).filter(([key]) => key !== 'Other');
 
@@ -56,8 +56,8 @@ export default function MapLegend({
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
-            checked={showHeatmap}
-            onChange={onToggleHeatmap}
+            checked={showAvailability}
+            onChange={onToggleAvailability}
             className="accent-[#ED202B] w-3.5 h-3.5"
           />
           <span className="flex items-center gap-1.5">
@@ -98,20 +98,21 @@ export default function MapLegend({
 
       <hr className="border-[#D8D5D0]" />
 
-      {/* Availability scale */}
+      {/* Availability scale — discrete bins */}
       <div>
         <h4 className="text-xs font-medium text-[#7A756E] mb-2 uppercase tracking-wide">
           Availability Scale
         </h4>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[#7A756E]">0 MW</span>
-          <div
-            className="flex-1 h-3 rounded-full"
-            style={{
-              background: 'linear-gradient(to right, #3B82F6, #8B5CF6, #EF4444)',
-            }}
-          />
-          <span className="text-xs text-[#7A756E]">200+ MW</span>
+        <div className="space-y-1">
+          {AVAILABILITY_BINS.map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-2">
+              <span
+                className="w-4 h-3 rounded-sm inline-block flex-shrink-0"
+                style={{ backgroundColor: color, opacity: 0.7 }}
+              />
+              <span className="text-xs text-[#7A756E]">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
