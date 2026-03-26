@@ -8,9 +8,9 @@ import {
   type MapTransmissionLine,
   type MapSubstation,
   type AvailabilityPoint,
-  type FetchOptions,
 } from '../lib/powerMapData';
 import { US_AVG_PER_CAPITA_KW } from '../lib/eiaConsumption';
+import { getStateBounds } from '../lib/stateBounds';
 
 export interface PowerMapState {
   plants: MapPowerPlant[];
@@ -21,39 +21,17 @@ export interface PowerMapState {
   totalAvailableMW: number;
   loading: boolean;
   error: string | null;
-  zoomLevel: number;
-  dataTruncated: boolean;
+  selectedState: string | null;
   bounds: MapBounds | null;
 }
 
-/** Determine fetch options based on zoom level for progressive loading. */
-function getFetchOptions(zoom: number): {
-  plants: FetchOptions;
-  lines: FetchOptions;
-  skipLines: boolean;
-} {
-  if (zoom < 7) {
-    // Wide view: large plants only, no transmission lines
-    return {
-      plants: { minCapacityMW: 100, maxResults: 500 },
-      lines: {},
-      skipLines: true,
-    };
-  }
-  if (zoom < 9) {
-    // Medium view: medium plants, high-voltage lines only
-    return {
-      plants: { minCapacityMW: 10, maxResults: 1000 },
-      lines: { minVoltageKV: 230, maxResults: 1000 },
-      skipLines: false,
-    };
-  }
-  // Close view: everything
-  return {
-    plants: { maxResults: 2000 },
-    lines: { maxResults: 2000 },
-    skipLines: false,
-  };
+interface CachedStateData {
+  plants: MapPowerPlant[];
+  lines: MapTransmissionLine[];
+  substations: MapSubstation[];
+  availability: AvailabilityPoint[];
+  totalGenerationMW: number;
+  totalAvailableMW: number;
 }
 
 export function usePowerMap() {
@@ -66,97 +44,104 @@ export function usePowerMap() {
     totalAvailableMW: 0,
     loading: false,
     error: null,
-    zoomLevel: 5,
-    dataTruncated: false,
+    selectedState: null,
     bounds: null,
   });
 
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cacheRef = useRef<Map<string, CachedStateData>>(new Map());
   const requestIdRef = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
 
-  const loadData = useCallback((bounds: MapBounds, zoom: number) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+  const loadState = useCallback(async (stateAbbr: string) => {
+    const stateBounds = getStateBounds(stateAbbr);
+    if (!stateBounds) return;
 
-    timerRef.current = setTimeout(async () => {
-      // Abort any in-flight request
-      abortRef.current?.abort();
-      abortRef.current = new AbortController();
+    // Check cache first
+    const cached = cacheRef.current.get(stateAbbr);
+    if (cached) {
+      setState({
+        ...cached,
+        loading: false,
+        error: null,
+        selectedState: stateAbbr,
+        bounds: {
+          west: stateBounds.lngMin,
+          south: stateBounds.latMin,
+          east: stateBounds.lngMax,
+          north: stateBounds.latMax,
+        },
+      });
+      return;
+    }
 
-      const requestId = ++requestIdRef.current;
+    const requestId = ++requestIdRef.current;
+    setState((prev) => ({ ...prev, loading: true, error: null, selectedState: stateAbbr }));
 
-      // Too zoomed out — clear data and show message
-      if (zoom < 5) {
-        setState({
-          plants: [],
-          lines: [],
-          substations: [],
-          availability: [],
-          totalGenerationMW: 0,
-          totalAvailableMW: 0,
-          loading: false,
-          error: null,
-          zoomLevel: zoom,
-          dataTruncated: false,
-          bounds,
-        });
-        return;
-      }
+    try {
+      const bounds: MapBounds = {
+        west: stateBounds.lngMin,
+        south: stateBounds.latMin,
+        east: stateBounds.lngMax,
+        north: stateBounds.latMax,
+      };
 
-      setState((prev) => ({ ...prev, loading: true, error: null, zoomLevel: zoom }));
+      // Fetch all data for the state — large limit since it's a one-time load
+      const [plantsResult, linesResult] = await Promise.all([
+        fetchPowerPlants(bounds, { maxResults: 5000 }),
+        fetchTransmissionLines(bounds, { maxResults: 5000 }),
+      ]);
 
-      try {
-        const opts = getFetchOptions(zoom);
+      if (requestId !== requestIdRef.current) return;
 
-        // Expand plant query bounds by the availability radius (0.3 deg / ~20 mi)
-        // so we capture generators feeding substations near viewport edges
-        const plantBounds: MapBounds = {
-          west: bounds.west - 0.35,
-          south: bounds.south - 0.35,
-          east: bounds.east + 0.35,
-          north: bounds.north + 0.35,
-        };
+      const plants = plantsResult.data;
+      const { lines, substations } = linesResult.data;
 
-        const [plantsResult, linesResult] = await Promise.all([
-          fetchPowerPlants(plantBounds, opts.plants),
-          opts.skipLines
-            ? Promise.resolve({ data: { lines: [] as MapTransmissionLine[], substations: [] as MapSubstation[] }, truncated: false })
-            : fetchTransmissionLines(bounds, opts.lines),
-        ]);
+      const availability = calculateAvailability(plants, substations, US_AVG_PER_CAPITA_KW);
+      const totalGenerationMW = Math.round(plants.reduce((sum, p) => sum + p.capacityMW, 0));
+      const totalAvailableMW = Math.round(availability.reduce((sum, a) => sum + a.availableMW, 0));
 
-        if (requestId !== requestIdRef.current) return;
+      const data: CachedStateData = {
+        plants,
+        lines,
+        substations,
+        availability,
+        totalGenerationMW,
+        totalAvailableMW,
+      };
 
-        const plants = plantsResult.data;
-        const { lines, substations } = linesResult.data;
-        const truncated = plantsResult.truncated || linesResult.truncated;
+      // Cache the result
+      cacheRef.current.set(stateAbbr, data);
 
-        const availability = calculateAvailability(plants, substations, US_AVG_PER_CAPITA_KW);
-        const totalGenerationMW = plants.reduce((sum, p) => sum + p.capacityMW, 0);
-        const totalAvailableMW = availability.reduce((sum, a) => sum + a.availableMW, 0);
-
-        setState({
-          plants,
-          lines,
-          substations,
-          availability,
-          totalGenerationMW: Math.round(totalGenerationMW),
-          totalAvailableMW: Math.round(totalAvailableMW),
-          loading: false,
-          error: null,
-          zoomLevel: zoom,
-          dataTruncated: truncated,
-          bounds,
-        });
-      } catch (err) {
-        if (requestId !== requestIdRef.current) return;
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error: err instanceof Error ? err.message : 'Failed to load map data',
-        }));
-      }
-    }, 600);
+      setState({
+        ...data,
+        loading: false,
+        error: null,
+        selectedState: stateAbbr,
+        bounds,
+      });
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : 'Failed to load state data',
+      }));
+    }
   }, []);
 
-  return { ...state, loadData };
+  const clearState = useCallback(() => {
+    setState({
+      plants: [],
+      lines: [],
+      substations: [],
+      availability: [],
+      totalGenerationMW: 0,
+      totalAvailableMW: 0,
+      loading: false,
+      error: null,
+      selectedState: null,
+      bounds: null,
+    });
+  }, []);
+
+  return { ...state, loadState, clearState };
 }
