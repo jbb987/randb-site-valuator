@@ -18,7 +18,7 @@ const tools: Tool[] = [
     name: 'Site Appraiser',
     description: 'Appraise site value based on power capacity and land comps',
     path: '/site-appraiser',
-    icon: 'bolt',
+    icon: 'dollar',
     roles: ['admin', 'employee'],
   },
   {
@@ -56,6 +56,13 @@ const tools: Tool[] = [
 ];
 
 function ToolIcon({ type }: { type: string }) {
+  if (type === 'dollar') {
+    return (
+      <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 1v22m-5-4h7a4 4 0 004-4 4 4 0 00-4-4H9a4 4 0 01-4-4 4 4 0 014-4h7" />
+      </svg>
+    );
+  }
   if (type === 'clipboard') {
     return (
       <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -118,7 +125,7 @@ export default function Dashboard() {
             </button>
           ))}
 
-          {/* Placeholder — Land Analyzer (coming soon) */}
+          {/* Placeholder — Power Due Diligence Report (coming soon) */}
           {role === 'admin' && (
             <div className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-6 text-left opacity-75">
               <div className="flex items-start justify-between mb-4">
@@ -131,8 +138,8 @@ export default function Dashboard() {
                   Coming Soon
                 </span>
               </div>
-              <h3 className="font-heading font-semibold text-[#201F1E] mb-1">Land Analyzer</h3>
-              <p className="text-sm text-[#7A756E]">Analyze land parcels and zoning data</p>
+              <h3 className="font-heading font-semibold text-[#201F1E] mb-1">Power Due Diligence Report</h3>
+              <p className="text-sm text-[#7A756E]">Generate due diligence reports for power infrastructure</p>
             </div>
           )}
         </div>
