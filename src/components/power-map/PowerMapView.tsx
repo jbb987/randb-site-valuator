@@ -474,8 +474,8 @@ export default function PowerMapView() {
       {/* ── Sidebar (only when state is selected) ── */}
       {selectedState && (
         <>
-          {/* Back button + sidebar toggle */}
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+          {/* Back button (top-left) */}
+          <div className="absolute top-3 left-3 z-10">
             <button
               onClick={backToUS}
               className="bg-white rounded-lg shadow-sm border border-[#D8D5D0] px-3 py-2 hover:bg-stone-50 transition flex items-center gap-1.5 text-sm font-medium text-[#201F1E] hover:text-[#ED202B]"
@@ -485,10 +485,14 @@ export default function PowerMapView() {
               </svg>
               {stateLabel}
             </button>
+          </div>
+
+          {/* Sidebar toggle (top-right, below nav controls) */}
+          <div className="absolute top-[7.5rem] right-3 z-10">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="bg-white rounded-lg shadow-sm border border-[#D8D5D0] p-2 hover:bg-stone-50 transition"
-              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+              title={sidebarOpen ? 'Hide legend' : 'Show legend'}
             >
               <svg
                 className={`w-5 h-5 text-[#201F1E] transition-transform ${sidebarOpen ? 'rotate-0' : 'rotate-180'}`}
