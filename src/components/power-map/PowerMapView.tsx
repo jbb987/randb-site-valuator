@@ -17,6 +17,33 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 const US_VIEW = { longitude: -98.5, latitude: 39.8, zoom: 4 };
 
+/** Generate a lightning bolt icon for power generators. */
+function createBoltImage(size = 24): ImageData {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  const cx = size / 2;
+  // Lightning bolt shape
+  ctx.beginPath();
+  ctx.moveTo(cx + 1, 1);
+  ctx.lineTo(cx - 5, size * 0.48);
+  ctx.lineTo(cx - 1, size * 0.48);
+  ctx.lineTo(cx - 3, size - 1);
+  ctx.lineTo(cx + 5, size * 0.42);
+  ctx.lineTo(cx + 1, size * 0.42);
+  ctx.closePath();
+
+  ctx.fillStyle = '#201F1E';
+  ctx.fill();
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
 // Build match expression for substation availability colors
 const binColorMatch: unknown[] = ['match', ['get', 'bin']];
 for (const { bin, color } of AVAILABILITY_BINS) {
@@ -47,6 +74,10 @@ export default function PowerMapView() {
   const [mapReady, setMapReady] = useState(false);
 
   const handleLoad = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map && !map.hasImage('bolt')) {
+      map.addImage('bolt', createBoltImage(), { sdf: false });
+    }
     setMapReady(true);
   }, []);
 
@@ -247,17 +278,17 @@ export default function PowerMapView() {
                   id="transmission-lines"
                   type="line"
                   paint={{
-                    'line-color': '#A8A29E',
+                    'line-color': '#201F1E',
                     'line-width': [
                       'interpolate',
                       ['linear'],
                       ['get', 'voltage'],
-                      0, 0.5,
-                      100, 1,
-                      345, 1.5,
-                      765, 2.5,
+                      0, 1,
+                      100, 1.5,
+                      345, 2.5,
+                      765, 4,
                     ],
-                    'line-opacity': 0.5,
+                    'line-opacity': 0.7,
                   }}
                 />
               </Source>
@@ -281,17 +312,25 @@ export default function PowerMapView() {
               </Source>
             )}
 
-            {/* Power plants — uniform discreet dots */}
+            {/* Power plants — bolt icons sized by capacity */}
             {showGenerators && (
               <Source id="power-plants" type="geojson" data={plantsGeoJSON}>
                 <Layer
                   id="plant-points"
-                  type="circle"
-                  paint={{
-                    'circle-radius': 3,
-                    'circle-color': '#78716C',
-                    'circle-stroke-color': '#FFFFFF',
-                    'circle-stroke-width': 0.5,
+                  type="symbol"
+                  layout={{
+                    'icon-image': 'bolt',
+                    'icon-size': [
+                      'interpolate',
+                      ['linear'],
+                      ['get', 'capacityMW'],
+                      0, 0.5,
+                      100, 0.8,
+                      500, 1.2,
+                      1000, 1.6,
+                    ],
+                    'icon-allow-overlap': true,
+                    'icon-ignore-placement': true,
                   }}
                 />
               </Source>

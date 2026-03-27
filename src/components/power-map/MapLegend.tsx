@@ -35,7 +35,9 @@ export default function MapLegend({
             className="accent-[#ED202B] w-3.5 h-3.5"
           />
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#78716C] inline-block" />
+            <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16">
+              <path d="M9 1L5 8h2l-1 7 5-8H9l1-6z" fill="#201F1E" />
+            </svg>
             Generators
           </span>
         </label>
@@ -47,7 +49,7 @@ export default function MapLegend({
             className="accent-[#ED202B] w-3.5 h-3.5"
           />
           <span className="flex items-center gap-1.5">
-            <span className="w-5 h-[2px] bg-[#A8A29E] inline-block rounded-full" />
+            <span className="w-5 h-[2px] bg-[#201F1E] inline-block rounded-full" />
             Transmission Lines
           </span>
         </label>
