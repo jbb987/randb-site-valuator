@@ -38,6 +38,14 @@ const tools: Tool[] = [
     roles: ['admin', 'employee'],
   },
   {
+    id: 'broadband-lookup',
+    name: 'Broadband Lookup',
+    description: 'Broadband due diligence report from site coordinates',
+    path: '/broadband-lookup',
+    icon: 'wifi',
+    roles: ['admin', 'employee'],
+  },
+  {
     id: 'user-management',
     name: 'User Management',
     description: 'Manage platform users and their roles',
@@ -59,6 +67,13 @@ function ToolIcon({ type }: { type: string }) {
     return (
       <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+      </svg>
+    );
+  }
+  if (type === 'wifi') {
+    return (
+      <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
       </svg>
     );
   }

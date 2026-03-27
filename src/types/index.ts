@@ -109,6 +109,70 @@ export interface SavedSite {
   updatedAt: number;
 }
 
+// ── Broadband lookup types ────────────────────────────────────────────────
+
+export type TechnologyType =
+  | 'Fiber'
+  | 'Cable'
+  | 'DSL'
+  | 'Fixed Wireless'
+  | 'Satellite'
+  | 'Other';
+
+/** FCC technology code → display name mapping */
+export const TECH_CODE_MAP: Record<number, TechnologyType> = {
+  10: 'DSL',
+  40: 'Cable',
+  50: 'Fiber',
+  60: 'Fixed Wireless',
+  70: 'Satellite',
+  71: 'Satellite',   // LEO Satellite
+  72: 'Satellite',   // GEO Satellite
+  0:  'Other',
+};
+
+export type ConnectivityTier = 'Served' | 'Underserved' | 'Unserved';
+
+export interface BroadbandProvider {
+  providerName: string;
+  technology: TechnologyType;
+  techCode: number;
+  maxDown: number;        // Mbps
+  maxUp: number;          // Mbps
+  lowLatency: boolean;
+}
+
+export interface BroadbandResult {
+  // Location info (from geo.fcc.gov)
+  fips: string;           // 15-char census block FIPS
+  countyFips: string;     // 5-char county FIPS
+  countyName: string;
+  stateCode: string;      // 2-letter
+  stateName: string;
+
+  // Provider data (from ArcGIS FCC BDC)
+  providers: BroadbandProvider[];
+  totalProviders: number;
+  fiberAvailable: boolean;
+  cableAvailable: boolean;
+  fixedWirelessAvailable: boolean;
+  maxDownload: number;    // best available Mbps
+  maxUpload: number;      // best available Mbps
+
+  // Classification
+  tier: ConnectivityTier;
+
+  // Utility territory (reused from power infra)
+  iso: string;
+  utilityTerritory: string[];
+
+  // FCC map deep link
+  fccMapUrl: string;
+
+  // Timestamp
+  analyzedAt: number;
+}
+
 // Site Request types
 export interface SiteRequestSite {
   address: string;

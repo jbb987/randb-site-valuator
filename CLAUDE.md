@@ -4,8 +4,9 @@
 
 ## Project Overview
 
-Internal tool suite for R&B Power. Currently has three tools:
+Internal tool suite for R&B Power. Currently has four tools:
 - **Site Appraiser** — Evaluates renewable energy site value based on power capacity, acreage, and land comparables. Sites are organized under Projects.
+- **Broadband Lookup** — Broadband due diligence report from site coordinates. Queries FCC Census Block API and ArcGIS FCC BDC for provider availability, technology types, speeds, and generates an OSP engineer assessment.
 - **Site Request** — Kanban pipeline for tracking site requests through stages (new → ongoing → done).
 - **User Management** — Admin-only tool to view, manage roles, and remove platform users.
 
@@ -36,6 +37,8 @@ src/
       ProjectSidebar.tsx      # Sidebar for project navigation
       SiteDetailPanel.tsx     # Individual site detail view
       ElectricityPriceWidget.tsx  # Electricity price comparison (state vs US avg)
+    broadband/                # Broadband Lookup components
+      BroadbandReport.tsx       # Due diligence report display
     site-request/             # Site Request components
       PipelineColumn.tsx      # Kanban column
       RequestCard.tsx         # Request card in pipeline
@@ -55,6 +58,7 @@ src/
     UserManagement.tsx        # User management (admin-only)
   tools/
     SiteAppraiserTool.tsx     # Site Appraiser tool ("/site-appraiser")
+    BroadbandLookupTool.tsx   # Broadband Lookup tool ("/broadband-lookup")
     SiteRequestPipeline.tsx   # Site Request pipeline ("/site-request")
   hooks/
     useAuth.ts                # Firebase auth state + user role from Firestore
@@ -63,11 +67,13 @@ src/
     useSites.ts               # Site CRUD operations
     useSiteRequests.ts        # Site request CRUD operations
     useUsers.ts               # User management CRUD (admin)
+    useBroadbandLookup.ts     # Broadband data lookup
     useAnimatedNumber.ts      # Number animation utility
   lib/
     firebase.ts               # Firebase config
     projects.ts               # Project Firestore operations
     siteRequests.ts           # Site request Firestore operations
+    broadbandLookup.ts        # Broadband data lookup (FCC Census + ArcGIS BDC)
     electricityAverages.ts    # State-level electricity price averages (EIA data)
   types/
     index.ts                  # UserRole, Project, SiteInputs, AppraisalResult, SavedSite, SiteRequest, etc.
@@ -82,6 +88,7 @@ src/
 | `/login` | `LoginPage` | — | Firebase auth login |
 | `/` | `Dashboard` | all | Tool grid (filtered by role) |
 | `/site-appraiser` | `SiteAppraiserTool` | admin, employee | Site appraisal tool (employees see assigned projects only) |
+| `/broadband-lookup` | `BroadbandLookupTool` | admin, employee | Broadband due diligence report |
 | `/site-pipeline` | `SiteRequestPipeline` | admin | Request pipeline (kanban) |
 | `/site-request/form` | `SiteRequestForm` | admin, employee | Submit new site request |
 | `/user-management` | `UserManagement` | admin | Manage users and roles |

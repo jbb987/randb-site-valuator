@@ -7,6 +7,7 @@ import SiteAppraiserTool from './tools/SiteAppraiserTool';
 import SiteRequestPipeline from './tools/SiteRequestPipeline';
 import SiteRequestForm from './pages/SiteRequestForm';
 import UserManagement from './pages/UserManagement';
+import BroadbandLookupTool from './tools/BroadbandLookupTool';
 
 export default function App() {
   return (
@@ -32,6 +33,11 @@ export default function App() {
           <Route path="/site-request/form" element={
             <ProtectedRoute allowedRoles={['admin', 'employee']}>
               <SiteRequestForm />
+            </ProtectedRoute>
+          } />
+          <Route path="/broadband-lookup" element={
+            <ProtectedRoute allowedRoles={['admin', 'employee']}>
+              <BroadbandLookupTool />
             </ProtectedRoute>
           } />
           <Route path="/user-management" element={
