@@ -7,7 +7,6 @@ import { usePowerMap } from '../../hooks/usePowerMap';
 import {
   SOURCE_COLORS,
   AVAILABILITY_BINS,
-  buildAvailabilityPolygons,
   type MapPowerPlant,
 } from '../../lib/powerMapData';
 import { US_STATES } from '../../lib/stateBounds';
@@ -56,12 +55,12 @@ for (const source of Object.keys(SOURCE_COLORS)) {
 }
 sourceIconMatch.push('triangle-other');
 
-// Build match expression for availability bin colors
+// Build match expression for substation availability colors
 const binColorMatch: unknown[] = ['match', ['get', 'bin']];
 for (const { bin, color } of AVAILABILITY_BINS) {
   binColorMatch.push(bin, color);
 }
-binColorMatch.push('#D1D5DB');
+binColorMatch.push('#201F1E');
 
 export default function PowerMapView() {
   const mapRef = useRef<MapRef>(null);
@@ -69,13 +68,11 @@ export default function PowerMapView() {
     plants,
     lines,
     substations,
-    availability,
     totalAvailableMW,
     loading,
     loadState,
     clearState,
     selectedState,
-    bounds: dataBounds,
   } = usePowerMap();
 
   const [selectedPlant, setSelectedPlant] = useState<MapPowerPlant | null>(null);
@@ -187,6 +184,8 @@ export default function PowerMapView() {
         owner: s.owner,
         maxVolt: s.maxVolt,
         lineCount: s.lineCount,
+        availableMW: s.availableMW,
+        bin: s.availabilityBin,
       },
       geometry: {
         type: 'Point' as const,
@@ -210,13 +209,6 @@ export default function PowerMapView() {
       },
     })),
   }), [lines]);
-
-  const availabilityGeoJSON = useMemo(() => {
-    if (!dataBounds || availability.length === 0) {
-      return { type: 'FeatureCollection' as const, features: [] };
-    }
-    return buildAvailabilityPolygons(availability, dataBounds);
-  }, [availability, dataBounds]);
 
   // Close popup on Escape
   useEffect(() => {
@@ -293,29 +285,6 @@ export default function PowerMapView() {
         {/* ── State data layers (only when a state is selected) ── */}
         {selectedState && imagesLoaded && (
           <>
-            {/* Availability zones (Voronoi polygons) */}
-            {showAvailability && (
-              <Source id="availability-zones" type="geojson" data={availabilityGeoJSON}>
-                <Layer
-                  id="availability-zones-fill"
-                  type="fill"
-                  paint={{
-                    'fill-color': binColorMatch as never,
-                    'fill-opacity': 0.35,
-                  }}
-                />
-                <Layer
-                  id="availability-zones-outline"
-                  type="line"
-                  paint={{
-                    'line-color': '#FFFFFF',
-                    'line-width': 0.5,
-                    'line-opacity': 0.3,
-                  }}
-                />
-              </Source>
-            )}
-
             {/* Transmission lines */}
             {showLines && (
               <Source id="transmission-lines" type="geojson" data={linesGeoJSON}>
@@ -350,17 +319,19 @@ export default function PowerMapView() {
               </Source>
             )}
 
-            {/* Substations */}
+            {/* Substations — colored by availability */}
             {showSubstations && (
               <Source id="substations" type="geojson" data={substationsGeoJSON}>
                 <Layer
                   id="substations"
                   type="circle"
                   paint={{
-                    'circle-radius': 3,
-                    'circle-color': '#201F1E',
+                    'circle-radius': showAvailability ? 6 : 3,
+                    'circle-color': showAvailability
+                      ? (binColorMatch as never)
+                      : '#201F1E',
                     'circle-stroke-color': '#FFFFFF',
-                    'circle-stroke-width': 1,
+                    'circle-stroke-width': showAvailability ? 1.5 : 1,
                   }}
                 />
               </Source>

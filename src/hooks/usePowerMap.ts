@@ -7,7 +7,6 @@ import {
   type MapPowerPlant,
   type MapTransmissionLine,
   type MapSubstation,
-  type AvailabilityPoint,
 } from '../lib/powerMapData';
 import { getStateConsumption } from '../lib/eiaConsumption';
 import { getStateBounds } from '../lib/stateBounds';
@@ -16,7 +15,6 @@ export interface PowerMapState {
   plants: MapPowerPlant[];
   lines: MapTransmissionLine[];
   substations: MapSubstation[];
-  availability: AvailabilityPoint[];
   totalGenerationMW: number;
   totalAvailableMW: number;
   loading: boolean;
@@ -29,7 +27,6 @@ interface CachedStateData {
   plants: MapPowerPlant[];
   lines: MapTransmissionLine[];
   substations: MapSubstation[];
-  availability: AvailabilityPoint[];
   totalGenerationMW: number;
   totalAvailableMW: number;
 }
@@ -39,7 +36,6 @@ export function usePowerMap() {
     plants: [],
     lines: [],
     substations: [],
-    availability: [],
     totalGenerationMW: 0,
     totalAvailableMW: 0,
     loading: false,
@@ -91,15 +87,16 @@ export function usePowerMap() {
       const stateConsumption = getStateConsumption(stateAbbr);
       const stateDemandMW = stateConsumption?.avgDemandMW ?? 0;
 
-      const availability = calculateAvailability(plants, substations, stateDemandMW);
+      calculateAvailability(plants, substations, stateDemandMW);
       const totalGenerationMW = Math.round(plants.reduce((sum, p) => sum + p.capacityMW, 0));
-      const totalAvailableMW = Math.round(availability.reduce((sum, a) => sum + a.availableMW, 0));
+      const totalAvailableMW = Math.round(
+        substations.reduce((sum, s) => sum + Math.max(0, s.availableMW), 0),
+      );
 
       const data: CachedStateData = {
         plants,
         lines,
         substations,
-        availability,
         totalGenerationMW,
         totalAvailableMW,
       };
@@ -128,7 +125,6 @@ export function usePowerMap() {
       plants: [],
       lines: [],
       substations: [],
-      availability: [],
       totalGenerationMW: 0,
       totalAvailableMW: 0,
       loading: false,

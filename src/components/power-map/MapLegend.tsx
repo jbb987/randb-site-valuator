@@ -92,15 +92,15 @@ export default function MapLegend({
             className="accent-[#ED202B] w-3.5 h-3.5"
           />
           <h4 className="text-xs font-medium text-[#7A756E] uppercase tracking-wide">
-            Power Availability
+            Capacity Availability
           </h4>
         </label>
-        <div className={`space-y-1 ${showAvailability ? '' : 'opacity-40'}`}>
+        <div className={`space-y-1.5 ${showAvailability ? '' : 'opacity-40'}`}>
           {AVAILABILITY_BINS.map(({ color, label }) => (
             <div key={label} className="flex items-center gap-2">
               <span
-                className="w-4 h-3 rounded-sm inline-block flex-shrink-0"
-                style={{ backgroundColor: color, opacity: 0.7 }}
+                className="w-3 h-3 rounded-full inline-block flex-shrink-0 border border-white shadow-sm"
+                style={{ backgroundColor: color }}
               />
               <span className="text-xs text-[#7A756E]">{label}</span>
             </div>
