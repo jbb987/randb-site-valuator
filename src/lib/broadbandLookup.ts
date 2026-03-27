@@ -98,9 +98,6 @@ async function discoverServiceUrl(): Promise<string | null> {
       if (!res.ok) continue;
       const data = await res.json();
       if (data.layers && data.layers.length > 0) {
-        console.log('[BDC] Discovered service:', name);
-        console.log('[BDC] Layers:', data.layers?.map((l: { id: number; name: string }) => `${l.id}: ${l.name}`));
-        console.log('[BDC] Tables:', data.tables?.map((t: { id: number; name: string }) => `${t.id}: ${t.name}`));
         _cachedServiceUrl = url;
         return url;
       }
@@ -108,7 +105,6 @@ async function discoverServiceUrl(): Promise<string | null> {
       continue;
     }
   }
-  console.warn('[BDC] No working service URL found');
   return null;
 }
 
@@ -138,29 +134,18 @@ async function queryBroadbandProviders(
   try {
     // Find the census block that contains this point
     const block = await findBlock(serviceUrl, lat, lng, fips);
-    if (!block) {
-      console.warn('[BDC] No census block found');
-      return [];
-    }
-
-    console.log('[BDC] Block found, OID:', block.objectId);
-    console.log('[BDC] Block attributes:', JSON.stringify(block.attributes, null, 2));
+    if (!block) return [];
 
     // Try to get individual provider records from detail tables
     const geoid = String(block.attributes.GEOID ?? '');
-    if (block.objectId != null && geoid) {
-      const providers = await queryRelatedProviders(serviceUrl, block.objectId, geoid);
-      if (providers.length > 0) {
-        console.log('[BDC] Got providers from detail table:', providers.length);
-        return providers;
-      }
+    if (geoid) {
+      const providers = await queryProvidersByGeoid(serviceUrl, geoid);
+      if (providers.length > 0) return providers;
     }
 
     // Fallback: synthesize provider info from block-level summary attributes
-    console.log('[BDC] Using block summary fallback');
     return extractProvidersFromSummary(block.attributes);
-  } catch (err) {
-    console.error('[BDC] Query error:', err);
+  } catch {
     return [];
   }
 }
@@ -220,105 +205,43 @@ async function findBlock(
 }
 
 /**
- * Query provider detail tables directly by GEOID.
+ * Query BDC provider detail table directly by GEOID.
  *
  * The BDC FeatureServer has 6 layers (0-5) and 6 tables (6-11).
- * Tables mirror layers: table 10 = Block provider detail (layer 4 = Block).
- * No relationships are defined, so we query tables directly.
+ * Table 7 = "BDC Records for Blocks" — contains per-provider records
+ * with fields: GEOID, ProviderName, FRN, Technology, TotalBSLs, etc.
  */
-async function queryRelatedProviders(
+const BLOCK_PROVIDER_TABLE = 7;
+
+async function queryProvidersByGeoid(
   serviceUrl: string,
-  _objectId: number,
-  geoid?: string,
+  geoid: string,
 ): Promise<BroadbandProvider[]> {
-  if (!geoid) return [];
+  try {
+    const url =
+      `${serviceUrl}/${BLOCK_PROVIDER_TABLE}/query?` +
+      `where=${encodeURIComponent(`GEOID='${geoid}'`)}` +
+      `&outFields=*` +
+      `&returnGeometry=false` +
+      `&resultRecordCount=50` +
+      `&f=json`;
 
-  // Table 7 = "BDC Records for Blocks" (per the discovered service)
-  // Try block table first, then others
-  const tableIds = [7, 6, 8, 9, 10, 11];
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return [];
 
-  for (const tableId of tableIds) {
-    try {
-      // Step 1: Discover field names for this table
-      const schemaRes = await fetch(`${serviceUrl}/${tableId}?f=json`, { signal: AbortSignal.timeout(5000) });
-      if (!schemaRes.ok) continue;
+    const data = await res.json();
+    if (data.error || !data.features?.length) return [];
 
-      const schema = await schemaRes.json();
-      if (schema.error) continue;
-
-      const fieldNames: string[] = (schema.fields ?? []).map((f: { name: string }) => f.name);
-      console.log(`[BDC] Table ${tableId} (${schema.name}): fields:`, fieldNames);
-
-      // Step 2: Find the GEOID-like field
-      const geoidField = fieldNames.find(
-        (f) => /^(GEOID|BlockGEOID|block_geoid|geoid|GeographyID|BlockCode|block_fips)$/i.test(f)
-      );
-
-      if (!geoidField) {
-        // If no GEOID field, try to get one record to inspect
-        const sampleUrl =
-          `${serviceUrl}/${tableId}/query?` +
-          `where=1%3D1` +
-          `&outFields=*` +
-          `&returnGeometry=false` +
-          `&resultRecordCount=1` +
-          `&f=json`;
-
-        const sampleRes = await fetch(sampleUrl, { signal: AbortSignal.timeout(10000) });
-        if (sampleRes.ok) {
-          const sampleData = await sampleRes.json();
-          if (sampleData.features?.length > 0) {
-            console.log(`[BDC] Table ${tableId} sample record:`, JSON.stringify(sampleData.features[0].attributes, null, 2));
-          }
-        }
-        console.log(`[BDC] Table ${tableId}: no GEOID field found in`, fieldNames);
-        continue;
-      }
-
-      // Step 3: Query by GEOID
-      console.log(`[BDC] Table ${tableId}: querying ${geoidField}='${geoid}'`);
-      const url =
-        `${serviceUrl}/${tableId}/query?` +
-        `where=${encodeURIComponent(`${geoidField}='${geoid}'`)}` +
-        `&outFields=*` +
-        `&returnGeometry=false` +
-        `&resultRecordCount=50` +
-        `&f=json`;
-
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) continue;
-
-      const data = await res.json();
-
-      if (data.error) {
-        console.log(`[BDC] Table ${tableId}: query error:`, data.error.message);
-        continue;
-      }
-
-      console.log(`[BDC] Table ${tableId}: ${data.features?.length ?? 0} records`);
-
-      if (!data.features?.length) continue;
-
-      // Log first record
-      console.log(`[BDC] Table ${tableId} first record:`, JSON.stringify(data.features[0].attributes, null, 2));
-
-      const providers: BroadbandProvider[] = [];
-      for (const f of data.features) {
-        const p = parseProviderRecord(f.attributes);
-        if (p) providers.push(p);
-      }
-
-      if (providers.length > 0) {
-        console.log(`[BDC] Got ${providers.length} providers from table ${tableId}`);
-        return deduplicateProviders(providers);
-      }
-    } catch (err) {
-      console.log(`[BDC] Table ${tableId}: fetch error`, err);
-      continue;
+    const providers: BroadbandProvider[] = [];
+    for (const f of data.features) {
+      const p = parseProviderRecord(f.attributes);
+      if (p) providers.push(p);
     }
-  }
 
-  return [];
+    return deduplicateProviders(providers);
+  } catch {
+    return [];
+  }
 }
 
 /**
