@@ -34,14 +34,14 @@ const FCC_CENSUS_URL = 'https://geo.fcc.gov/api/census/block/find';
  * for individual provider records.
  */
 const ARCGIS_FCC_BDC =
-  'https://services.arcgis.com/jIL9msH9OI208GCb/arcgis/rest/services';
+  'https://services8.arcgis.com/peDZJliSvYims39Q/arcgis/rest/services';
 
 // Try multiple vintage names — Esri updates biannually
+// Org peDZJliSvYims39Q on services8 is the Esri Living Atlas content org
 const BDC_SERVICE_NAMES = [
-  'FCC_Broadband_Data_Collection_June_2024',
-  'FCC_Broadband_Data_Collection_December_2024',
-  'FCC_Broadband_Data_Collection_June_2025',
-  'FCC_Broadband_Data_Collection_June_2022',
+  'FCC_Broadband_Data_Collection_June_2025_View',
+  'FCC_Broadband_Data_Collection_December_2024_View',
+  'FCC_Broadband_Data_Collection_June_2024_View',
 ];
 
 const BLOCK_LAYER = 4;    // Census Block sublayer
@@ -157,22 +157,28 @@ async function queryBroadbandProviders(
       return await queryProvidersByFips(serviceUrl, fips);
     }
 
-    // Query related records (relationship 0 typically links to provider table)
-    const relUrl =
-      `${serviceUrl}/${BLOCK_LAYER}/queryRelatedRecords?` +
-      `objectIds=${blockOid}` +
-      `&relationshipId=0` +
-      `&outFields=*` +
-      `&returnGeometry=false` +
-      `&f=json`;
+    // Query related records — try relationship IDs 0-2
+    // (related tables at IDs 6-11 mirror feature layers 0-5)
+    let relData: Record<string, unknown> = {};
+    for (const relId of [0, 1, 2]) {
+      const relUrl =
+        `${serviceUrl}/${BLOCK_LAYER}/queryRelatedRecords?` +
+        `objectIds=${blockOid}` +
+        `&relationshipId=${relId}` +
+        `&outFields=*` +
+        `&returnGeometry=false` +
+        `&f=json`;
 
-    const relRes = await fetch(relUrl, { signal: AbortSignal.timeout(10000) });
-    if (!relRes.ok) return [];
+      const relRes = await fetch(relUrl, { signal: AbortSignal.timeout(10000) });
+      if (!relRes.ok) continue;
+      const data = await relRes.json();
+      if (!data.error && (data.relatedRecordGroups?.length ?? 0) > 0) {
+        relData = data;
+        break;
+      }
+    }
 
-    const relData = await relRes.json();
-    if (relData.error) return [];
-
-    const relatedGroups = relData.relatedRecordGroups ?? [];
+    const relatedGroups = (relData as { relatedRecordGroups?: unknown[] }).relatedRecordGroups ?? [];
     const providers: BroadbandProvider[] = [];
 
     for (const group of relatedGroups) {
@@ -198,7 +204,7 @@ async function queryProvidersByFips(
     // Try querying the block layer by FIPS code
     const blockUrl =
       `${serviceUrl}/${BLOCK_LAYER}/query?` +
-      `where=block_fips%3D%27${fips}%27+OR+geoid20%3D%27${fips}%27+OR+GEOID%3D%27${fips}%27` +
+      `where=GEOID%3D%27${fips}%27+OR+geoid20%3D%27${fips}%27+OR+block_fips%3D%27${fips}%27` +
       `&outFields=*` +
       `&returnGeometry=false` +
       `&resultRecordCount=1` +
@@ -215,21 +221,28 @@ async function queryProvidersByFips(
 
     if (blockOid == null) return [];
 
-    const relUrl =
-      `${serviceUrl}/${BLOCK_LAYER}/queryRelatedRecords?` +
-      `objectIds=${blockOid}` +
-      `&relationshipId=0` +
-      `&outFields=*` +
-      `&returnGeometry=false` +
-      `&f=json`;
+    let relData: Record<string, unknown> = {};
+    for (const relId of [0, 1, 2]) {
+      const relUrl =
+        `${serviceUrl}/${BLOCK_LAYER}/queryRelatedRecords?` +
+        `objectIds=${blockOid}` +
+        `&relationshipId=${relId}` +
+        `&outFields=*` +
+        `&returnGeometry=false` +
+        `&f=json`;
 
-    const relRes = await fetch(relUrl, { signal: AbortSignal.timeout(10000) });
-    if (!relRes.ok) return [];
+      const relRes = await fetch(relUrl, { signal: AbortSignal.timeout(10000) });
+      if (!relRes.ok) continue;
+      const d = await relRes.json();
+      if (!d.error && (d.relatedRecordGroups?.length ?? 0) > 0) {
+        relData = d;
+        break;
+      }
+    }
 
-    const relData = await relRes.json();
     const providers: BroadbandProvider[] = [];
 
-    for (const group of relData.relatedRecordGroups ?? []) {
+    for (const group of (relData as { relatedRecordGroups?: unknown[] }).relatedRecordGroups ?? []) {
       for (const record of group.relatedRecords ?? []) {
         const provider = parseProviderRecord(record.attributes);
         if (provider) providers.push(provider);
