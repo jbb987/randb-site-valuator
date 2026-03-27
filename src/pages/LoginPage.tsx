@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, sendResetEmail } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 
 export default function LoginPage() {
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   if (loading) {
     return (
@@ -82,12 +83,39 @@ export default function LoginPage() {
             <p className="text-sm text-[#ED202B] bg-red-50 rounded-lg px-3 py-2">{error}</p>
           )}
 
+          {resetSent && (
+            <p className="text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
+              Password reset email sent. Check your inbox.
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={submitting}
             className="w-full rounded-lg bg-[#ED202B] text-white border border-[#ED202B] hover:bg-[#9B0E18] hover:border-[#9B0E18] py-2.5 text-sm font-semibold transition disabled:opacity-60"
           >
             {submitting ? 'Signing in...' : 'Sign In'}
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (!email.trim()) {
+                setError('Enter your email first, then click Forgot Password.');
+                return;
+              }
+              setError('');
+              setResetSent(false);
+              try {
+                await sendResetEmail(email.trim());
+                setResetSent(true);
+              } catch {
+                setError('Could not send reset email. Check the address and try again.');
+              }
+            }}
+            className="w-full text-center text-sm text-[#7A756E] hover:text-[#ED202B] transition"
+          >
+            Forgot Password?
           </button>
         </form>
       </div>

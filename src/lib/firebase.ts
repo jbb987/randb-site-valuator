@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
   getFirestore,
   collection,
@@ -83,6 +83,28 @@ export function subscribeSites(
       onError?.(err);
     },
   );
+}
+
+/**
+ * Create a new Firebase Auth user without signing out the current admin.
+ * Uses a secondary app instance so the primary auth state is untouched.
+ */
+export async function createAuthUser(email: string, password: string): Promise<string> {
+  const secondaryApp = initializeApp(firebaseConfig, 'secondary-' + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    return cred.user.uid;
+  } finally {
+    await secondaryAuth.signOut();
+  }
+}
+
+/**
+ * Send a password reset email to the given address.
+ */
+export async function sendResetEmail(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email);
 }
 
 export { db };

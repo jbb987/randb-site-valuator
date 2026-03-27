@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { db, createAuthUser, sendResetEmail } from '../lib/firebase';
 import type { UserRole } from '../types';
 
 export interface UserRecord {
@@ -35,5 +35,15 @@ export function useUsers() {
     await deleteDoc(doc(db, 'users', uid));
   };
 
-  return { users, loading, updateRole, removeUser };
+  const inviteUser = async (email: string, password: string, role: UserRole) => {
+    const uid = await createAuthUser(email, password);
+    await setDoc(doc(db, 'users', uid), { email, role });
+    return uid;
+  };
+
+  const resetPassword = async (email: string) => {
+    await sendResetEmail(email);
+  };
+
+  return { users, loading, updateRole, removeUser, inviteUser, resetPassword };
 }

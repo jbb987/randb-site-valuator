@@ -5,9 +5,24 @@ import { useAuth } from '../hooks/useAuth';
 import type { UserRole } from '../types';
 
 export default function UserManagement() {
-  const { users, loading, updateRole, removeUser } = useUsers();
+  const { users, loading, updateRole, removeUser, inviteUser, resetPassword } = useUsers();
   const { user: currentUser } = useAuth();
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  // Invite form state
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePassword, setInvitePassword] = useState('');
+  const [inviteRole, setInviteRole] = useState<UserRole>('agent');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
+  // Toast
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleRoleChange = async (uid: string, newRole: UserRole) => {
     await updateRole(uid, newRole);
@@ -18,13 +33,106 @@ export default function UserManagement() {
     setConfirmRemove(null);
   };
 
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !invitePassword.trim()) return;
+
+    setInviting(true);
+    setInviteError('');
+    try {
+      await inviteUser(inviteEmail.trim(), invitePassword, inviteRole);
+      showToast(`${inviteEmail.trim()} added successfully`);
+      setInviteEmail('');
+      setInvitePassword('');
+      setInviteRole('agent');
+      setShowInvite(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create user';
+      setInviteError(message);
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    try {
+      await resetPassword(email);
+      showToast(`Password reset email sent to ${email}`);
+    } catch {
+      showToast('Failed to send reset email');
+    }
+  };
+
   return (
     <Layout>
       <main className="py-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="font-heading text-2xl font-semibold text-[#201F1E]">User Management</h2>
-          <span className="text-sm text-[#7A756E]">{users.length} user{users.length !== 1 ? 's' : ''}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-[#7A756E]">{users.length} user{users.length !== 1 ? 's' : ''}</span>
+            <button
+              onClick={() => setShowInvite(!showInvite)}
+              className="rounded-lg bg-[#ED202B] text-white border border-[#ED202B] hover:bg-[#9B0E18] hover:border-[#9B0E18] px-4 py-2 text-sm font-medium transition"
+            >
+              {showInvite ? 'Cancel' : 'Add User'}
+            </button>
+          </div>
         </div>
+
+        {/* Invite form */}
+        {showInvite && (
+          <div className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-5 mb-6">
+            <h3 className="font-heading text-base font-semibold text-[#201F1E] mb-4">Add New User</h3>
+            <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <label className="block text-xs text-[#7A756E] mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full rounded-lg border border-[#D8D5D0] px-3 py-2 text-sm text-[#201F1E] placeholder:text-[#7A756E] focus:outline-none focus:ring-2 focus:ring-[#ED202B]/20 focus:border-[#ED202B]"
+                />
+              </div>
+              <div className="sm:w-44">
+                <label className="block text-xs text-[#7A756E] mb-1">Temporary Password</label>
+                <input
+                  type="text"
+                  required
+                  minLength={6}
+                  value={invitePassword}
+                  onChange={(e) => setInvitePassword(e.target.value)}
+                  placeholder="Min 6 characters"
+                  className="w-full rounded-lg border border-[#D8D5D0] px-3 py-2 text-sm text-[#201F1E] placeholder:text-[#7A756E] focus:outline-none focus:ring-2 focus:ring-[#ED202B]/20 focus:border-[#ED202B]"
+                />
+              </div>
+              <div className="sm:w-32">
+                <label className="block text-xs text-[#7A756E] mb-1">Role</label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                  className="w-full rounded-lg border border-[#D8D5D0] px-3 py-2 text-sm text-[#201F1E] bg-white focus:outline-none focus:ring-2 focus:ring-[#ED202B]/20 focus:border-[#ED202B]"
+                >
+                  <option value="agent">Agent</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={inviting}
+                  className="rounded-lg bg-[#ED202B] text-white border border-[#ED202B] hover:bg-[#9B0E18] hover:border-[#9B0E18] px-5 py-2 text-sm font-medium transition disabled:opacity-50"
+                >
+                  {inviting ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+            </form>
+            {inviteError && (
+              <p className="mt-3 text-sm text-[#ED202B] bg-red-50 rounded-lg px-3 py-2">{inviteError}</p>
+            )}
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] overflow-hidden">
           {loading ? (
@@ -69,7 +177,7 @@ export default function UserManagement() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleRemove(u.id)}
-                              className="text-xs font-medium text-white bg-[#ED202B] rounded-lg px-3 py-1.5 hover:bg-[#ED202B] transition"
+                              className="text-xs font-medium text-white bg-[#ED202B] rounded-lg px-3 py-1.5 hover:bg-[#9B0E18] transition"
                             >
                               Confirm
                             </button>
@@ -81,12 +189,21 @@ export default function UserManagement() {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setConfirmRemove(u.id)}
-                            className="text-xs font-medium text-[#ED202B] hover:text-[#ED202B] transition"
-                          >
-                            Remove
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => handleResetPassword(u.email)}
+                              className="text-xs font-medium text-[#7A756E] hover:text-[#201F1E] transition"
+                              title={`Send password reset to ${u.email}`}
+                            >
+                              Reset Password
+                            </button>
+                            <button
+                              onClick={() => setConfirmRemove(u.id)}
+                              className="text-xs font-medium text-[#ED202B] hover:text-[#9B0E18] transition"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -96,6 +213,13 @@ export default function UserManagement() {
             </table>
           )}
         </div>
+
+        {/* Toast */}
+        {toast && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#201F1E] text-white text-sm px-5 py-3 rounded-xl shadow-lg z-50">
+            {toast}
+          </div>
+        )}
       </main>
     </Layout>
   );
