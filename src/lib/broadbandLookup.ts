@@ -233,34 +233,65 @@ async function queryRelatedProviders(
 ): Promise<BroadbandProvider[]> {
   if (!geoid) return [];
 
-  // Table IDs that could contain block-level provider data
-  // Table 10 = Block detail (mirrors layer 4), but try others too
-  const tableIds = [10, 11, 9, 8, 7, 6];
+  // Table 7 = "BDC Records for Blocks" (per the discovered service)
+  // Try block table first, then others
+  const tableIds = [7, 6, 8, 9, 10, 11];
 
   for (const tableId of tableIds) {
     try {
-      // Try querying with various GEOID field names
-      const where = encodeURIComponent(
-        `GEOID='${geoid}' OR BlockGEOID='${geoid}' OR block_geoid='${geoid}'`
+      // Step 1: Discover field names for this table
+      const schemaRes = await fetch(`${serviceUrl}/${tableId}?f=json`, { signal: AbortSignal.timeout(5000) });
+      if (!schemaRes.ok) continue;
+
+      const schema = await schemaRes.json();
+      if (schema.error) continue;
+
+      const fieldNames: string[] = (schema.fields ?? []).map((f: { name: string }) => f.name);
+      console.log(`[BDC] Table ${tableId} (${schema.name}): fields:`, fieldNames);
+
+      // Step 2: Find the GEOID-like field
+      const geoidField = fieldNames.find(
+        (f) => /^(GEOID|BlockGEOID|block_geoid|geoid|GeographyID|BlockCode|block_fips)$/i.test(f)
       );
+
+      if (!geoidField) {
+        // If no GEOID field, try to get one record to inspect
+        const sampleUrl =
+          `${serviceUrl}/${tableId}/query?` +
+          `where=1%3D1` +
+          `&outFields=*` +
+          `&returnGeometry=false` +
+          `&resultRecordCount=1` +
+          `&f=json`;
+
+        const sampleRes = await fetch(sampleUrl, { signal: AbortSignal.timeout(10000) });
+        if (sampleRes.ok) {
+          const sampleData = await sampleRes.json();
+          if (sampleData.features?.length > 0) {
+            console.log(`[BDC] Table ${tableId} sample record:`, JSON.stringify(sampleData.features[0].attributes, null, 2));
+          }
+        }
+        console.log(`[BDC] Table ${tableId}: no GEOID field found in`, fieldNames);
+        continue;
+      }
+
+      // Step 3: Query by GEOID
+      console.log(`[BDC] Table ${tableId}: querying ${geoidField}='${geoid}'`);
       const url =
         `${serviceUrl}/${tableId}/query?` +
-        `where=${where}` +
+        `where=${encodeURIComponent(`${geoidField}='${geoid}'`)}` +
         `&outFields=*` +
         `&returnGeometry=false` +
         `&resultRecordCount=50` +
         `&f=json`;
 
       const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) {
-        console.log(`[BDC] Table ${tableId}: HTTP ${res.status}`);
-        continue;
-      }
+      if (!res.ok) continue;
 
       const data = await res.json();
 
       if (data.error) {
-        console.log(`[BDC] Table ${tableId}: error:`, data.error.message);
+        console.log(`[BDC] Table ${tableId}: query error:`, data.error.message);
         continue;
       }
 
@@ -268,10 +299,8 @@ async function queryRelatedProviders(
 
       if (!data.features?.length) continue;
 
-      // Log first record to see field names
-      const first = data.features[0].attributes;
-      console.log(`[BDC] Table ${tableId} fields:`, Object.keys(first));
-      console.log(`[BDC] Table ${tableId} sample:`, JSON.stringify(first, null, 2));
+      // Log first record
+      console.log(`[BDC] Table ${tableId} first record:`, JSON.stringify(data.features[0].attributes, null, 2));
 
       const providers: BroadbandProvider[] = [];
       for (const f of data.features) {
