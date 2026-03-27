@@ -81,7 +81,7 @@ src/
 |------|-----------|-------|-------------|
 | `/login` | `LoginPage` | — | Firebase auth login |
 | `/` | `Dashboard` | all | Tool grid (filtered by role) |
-| `/site-appraiser` | `SiteAppraiserTool` | admin | Site appraisal tool |
+| `/site-appraiser` | `SiteAppraiserTool` | admin, agent | Site appraisal tool (agents see assigned projects only) |
 | `/site-pipeline` | `SiteRequestPipeline` | admin | Request pipeline (kanban) |
 | `/site-request/form` | `SiteRequestForm` | admin, agent | Submit new site request |
 | `/user-management` | `UserManagement` | admin | Manage users and roles |
@@ -150,7 +150,19 @@ All protected pages must be wrapped in `<Layout>` which provides:
 
 - **Projects** contain multiple **Sites** (Site Appraiser)
 - **Site Requests** are linked to Projects via `projectId`
+- **Projects** have a `memberIds: string[]` field — an array of Firebase UIDs for site visibility
 - Deleting a Project cascade-deletes its Sites and Site Requests
+
+### Site Visibility (memberIds)
+
+- Each **Project** has a `memberIds` array of user UIDs
+- **Admins** bypass the filter — they see all projects and sites
+- **Agents** only see projects where their UID is in `memberIds`
+- When an agent submits a Site Request, their UID is auto-added to the new project's `memberIds`
+- When an admin creates a project in Site Appraiser, they can assign members via the sidebar UI
+- Multiple agents can be assigned to the same project (both see it)
+- Member management UI (add/remove) is in the `ProjectSidebar` (admin-only)
+- Filtering happens in `useProjects` hook — agents get a filtered list; sites are filtered accordingly in `SiteAppraiserTool`
 
 ### Auth & Roles
 
@@ -160,8 +172,8 @@ All protected pages must be wrapped in `<Layout>` which provides:
 - Protected routes use `<ProtectedRoute>` wrapper with optional `allowedRoles` prop
 - Route-level access: `allowedRoles={['admin']}` restricts to admins; omit for all roles
 - Dashboard and navbar filter visible tools/links based on `role`
-- **Admin**: access to all tools (Site Appraiser, Site Pipeline, Site Request form)
-- **Agent**: access only to the Site Request form
+- **Admin**: access to all tools (Site Appraiser, Site Pipeline, Site Request form, User Management)
+- **Agent**: access to Site Request form and Site Appraiser (filtered to assigned projects only)
 - Login page is at `/login`
 
 ### Navigation Config

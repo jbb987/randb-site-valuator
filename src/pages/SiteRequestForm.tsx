@@ -49,7 +49,7 @@ export default function SiteRequestForm() {
       const projectId = generateId();
       const now = Date.now();
       await Promise.all([
-        saveProject({ id: projectId, name: customerName.trim(), createdAt: now, updatedAt: now }),
+        saveProject({ id: projectId, name: customerName.trim(), memberIds: user.uid ? [user.uid] : [], createdAt: now, updatedAt: now }),
         addRequest(customerName.trim(), trimmedSites, user.email, projectId),
       ]);
       await Promise.all(

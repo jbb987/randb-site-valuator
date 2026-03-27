@@ -65,6 +65,15 @@ export async function deleteProjectCascade(projectId: string): Promise<void> {
   }
 }
 
+export async function updateProjectMembers(projectId: string, memberIds: string[]): Promise<void> {
+  try {
+    await updateDoc(doc(db, COLLECTION, projectId), { memberIds, updatedAt: Date.now() });
+  } catch (err) {
+    console.error('[Firebase] Failed to update project members:', err);
+    throw err;
+  }
+}
+
 export function subscribeProjects(
   callback: (projects: Project[]) => void,
   onError?: (err: Error) => void,

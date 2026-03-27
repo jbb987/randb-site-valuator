@@ -1,5 +1,6 @@
 import { AnimatePresence } from 'framer-motion';
 import { useAppraisal } from '../hooks/useAppraisal';
+import { useAuth } from '../hooks/useAuth';
 import { useSites } from '../hooks/useSites';
 import { useProjects } from '../hooks/useProjects';
 import Layout from '../components/Layout';
@@ -42,6 +43,8 @@ const emptyInputs: SiteInputs = {
 type View = 'project-overview' | 'site-detail';
 
 export default function SiteAppraiserTool() {
+  const { user, role } = useAuth();
+
   const {
     sites,
     activeSite,
@@ -62,18 +65,25 @@ export default function SiteAppraiserTool() {
     deleteProject,
     renameProject,
     selectProject,
-  } = useProjects();
+    updateMembers,
+  } = useProjects(user?.uid, role);
 
   const [view, setView] = useState<View>('project-overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  const isAdmin = role === 'admin';
+
   const loading = sitesLoading || projectsLoading;
   const inputs = activeSite?.inputs ?? emptyInputs;
   const result = useAppraisal(inputs);
 
+  // For agents, only show sites belonging to their visible projects
+  const visibleProjectIds = new Set(projects.map((p) => p.id));
+  const visibleSites = isAdmin ? sites : sites.filter((s) => visibleProjectIds.has(s.inputs.projectId));
+
   const activeProject = projects.find((p) => p.id === activeProjectId);
-  const projectSites = sites.filter((s) => s.inputs.projectId === activeProjectId);
+  const projectSites = visibleSites.filter((s) => s.inputs.projectId === activeProjectId);
 
   const handleSelectProject = useCallback((id: string) => {
     selectProject(id);
@@ -134,15 +144,17 @@ export default function SiteAppraiserTool() {
         {/* Desktop sidebar */}
         <ProjectSidebar
           projects={projects}
-          sites={sites}
+          sites={visibleSites}
           activeProjectId={activeProjectId}
           onSelectProject={handleSelectProject}
           onCreateProject={createProject}
           onCreateSite={handleCreateSite}
           onDeleteProject={handleDeleteProject}
           onRenameProject={renameProject}
+          onUpdateMembers={updateMembers}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          isAdmin={isAdmin}
         />
 
         {/* Mobile sidebar overlay */}
@@ -150,16 +162,18 @@ export default function SiteAppraiserTool() {
           {mobileSidebarOpen && (
             <ProjectSidebar
               projects={projects}
-              sites={sites}
+              sites={visibleSites}
               activeProjectId={activeProjectId}
               onSelectProject={handleSelectProject}
               onCreateProject={createProject}
               onCreateSite={handleCreateSite}
               onDeleteProject={handleDeleteProject}
               onRenameProject={renameProject}
+              onUpdateMembers={updateMembers}
               collapsed={false}
               onToggleCollapse={() => setMobileSidebarOpen(false)}
               isMobile
+              isAdmin={isAdmin}
             />
           )}
         </AnimatePresence>
@@ -184,7 +198,7 @@ export default function SiteAppraiserTool() {
               onSelectSite={handleSelectSite}
               onCreateSite={() => handleCreateSite(activeProjectId)}
               onDeleteSite={deleteSite}
-              canDeleteSite={sites.length > 1}
+              canDeleteSite={visibleSites.length > 1}
             />
           ) : view === 'site-detail' && activeSite ? (
             <SiteDetailPanel
