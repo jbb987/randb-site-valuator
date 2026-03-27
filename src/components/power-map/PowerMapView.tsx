@@ -17,28 +17,30 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 const US_VIEW = { longitude: -98.5, latitude: 39.8, zoom: 4 };
 
-/** Generate a lightning bolt icon for power generators. */
-function createBoltImage(size = 24): ImageData {
+/** Generate a crisp lightning bolt icon (rendered at 2× for retina). */
+function createBoltImage(size = 48): ImageData {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
 
   const cx = size / 2;
-  // Lightning bolt shape
+  const s = size / 24; // scale factor from base 24
+
   ctx.beginPath();
-  ctx.moveTo(cx + 1, 1);
-  ctx.lineTo(cx - 5, size * 0.48);
-  ctx.lineTo(cx - 1, size * 0.48);
-  ctx.lineTo(cx - 3, size - 1);
-  ctx.lineTo(cx + 5, size * 0.42);
-  ctx.lineTo(cx + 1, size * 0.42);
+  ctx.moveTo(cx + 2 * s, 2 * s);
+  ctx.lineTo(cx - 6 * s, size * 0.48);
+  ctx.lineTo(cx - 1 * s, size * 0.48);
+  ctx.lineTo(cx - 4 * s, size - 2 * s);
+  ctx.lineTo(cx + 6 * s, size * 0.42);
+  ctx.lineTo(cx + 1 * s, size * 0.42);
   ctx.closePath();
 
-  ctx.fillStyle = '#201F1E';
+  ctx.fillStyle = '#F59E0B';
   ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#201F1E';
+  ctx.lineWidth = 1.5 * s;
+  ctx.lineJoin = 'round';
   ctx.stroke();
 
   return ctx.getImageData(0, 0, size, size);
@@ -76,7 +78,7 @@ export default function PowerMapView() {
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (map && !map.hasImage('bolt')) {
-      map.addImage('bolt', createBoltImage(), { sdf: false });
+      map.addImage('bolt', createBoltImage(), { pixelRatio: 2 });
     }
     setMapReady(true);
   }, []);
@@ -106,6 +108,11 @@ export default function PowerMapView() {
       map.flyTo({ center: [US_VIEW.longitude, US_VIEW.latitude], zoom: US_VIEW.zoom, duration: 1000 });
     }
   }, [clearState]);
+
+  // Substation counts by availability bin
+  const subsRed = useMemo(() => substations.filter((s) => s.availabilityBin === 0).length, [substations]);
+  const subsBlue = useMemo(() => substations.filter((s) => s.availabilityBin === 1).length, [substations]);
+  const subsGreen = useMemo(() => substations.filter((s) => s.availabilityBin === 2).length, [substations]);
 
   // ── GeoJSON Sources ──────────────────────────────────────────────────────
 
@@ -430,6 +437,9 @@ export default function PowerMapView() {
               totalSubstations={substations.length}
               totalLines={lines.length}
               totalAvailableMW={totalAvailableMW}
+              subsRed={subsRed}
+              subsBlue={subsBlue}
+              subsGreen={subsGreen}
               loading={loading}
             />
             <MapLegend

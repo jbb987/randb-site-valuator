@@ -4,6 +4,9 @@ interface MapStatsProps {
   totalSubstations: number;
   totalLines: number;
   totalAvailableMW: number;
+  subsRed: number;
+  subsBlue: number;
+  subsGreen: number;
   loading: boolean;
 }
 
@@ -18,6 +21,9 @@ export default function MapStats({
   totalSubstations,
   totalLines,
   totalAvailableMW,
+  subsRed,
+  subsBlue,
+  subsGreen,
   loading,
 }: MapStatsProps) {
   const stats = [
@@ -44,6 +50,39 @@ export default function MapStats({
           </div>
         ))}
       </div>
+
+      {/* Per-color substation breakdown */}
+      {totalSubstations > 0 && (
+        <>
+          <hr className="border-[#D8D5D0] my-3" />
+          <h4 className="text-xs font-medium text-[#7A756E] mb-2 uppercase tracking-wide">
+            Substations by Capacity
+          </h4>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-sm">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E] inline-block" />
+                200+ MW
+              </span>
+              <span className="text-sm font-semibold text-[#22C55E] tabular-nums">{subsGreen}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-sm">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block" />
+                1–199 MW
+              </span>
+              <span className="text-sm font-semibold text-[#3B82F6] tabular-nums">{subsBlue}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-sm">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] inline-block" />
+                No capacity
+              </span>
+              <span className="text-sm font-semibold text-[#EF4444] tabular-nums">{subsRed}</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
