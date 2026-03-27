@@ -9,7 +9,16 @@ interface MapLegendProps {
   onToggleSubstations: () => void;
   showAvailability: boolean;
   onToggleAvailability: () => void;
+  subsRed: number;
+  subsBlue: number;
+  subsGreen: number;
 }
+
+const BIN_COUNTS_KEY: Record<number, 'subsGreen' | 'subsBlue' | 'subsRed'> = {
+  0: 'subsRed',
+  1: 'subsBlue',
+  2: 'subsGreen',
+};
 
 export default function MapLegend({
   showGenerators,
@@ -20,7 +29,12 @@ export default function MapLegend({
   onToggleSubstations,
   showAvailability,
   onToggleAvailability,
+  subsRed,
+  subsBlue,
+  subsGreen,
 }: MapLegendProps) {
+  const counts = { subsRed, subsBlue, subsGreen };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-4 space-y-4">
       <h3 className="font-heading font-semibold text-sm text-[#201F1E]">Layers</h3>
@@ -36,7 +50,7 @@ export default function MapLegend({
           />
           <span className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16">
-              <path d="M9 1L5 8h2l-1 7 5-8H9l1-6z" fill="#F59E0B" />
+              <path d="M9 1L5 8h2l-1 7 5-8H9l1-6z" fill="#201F1E" />
             </svg>
             Generators
           </span>
@@ -69,7 +83,7 @@ export default function MapLegend({
 
       <hr className="border-[#D8D5D0]" />
 
-      {/* Capacity Availability — toggle + scale */}
+      {/* Capacity Availability — toggle + color legend + counts */}
       <div>
         <label className="flex items-center gap-2 cursor-pointer mb-2">
           <input
@@ -83,13 +97,21 @@ export default function MapLegend({
           </h4>
         </label>
         <div className={`space-y-1.5 ${showAvailability ? '' : 'opacity-40'}`}>
-          {AVAILABILITY_BINS.map(({ color, label }) => (
-            <div key={label} className="flex items-center gap-2">
+          {AVAILABILITY_BINS.map(({ bin, color, label }) => (
+            <div key={label} className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="w-3 h-3 rounded-full inline-block flex-shrink-0 border border-white shadow-sm"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="text-xs text-[#7A756E]">{label}</span>
+              </span>
               <span
-                className="w-3 h-3 rounded-full inline-block flex-shrink-0 border border-white shadow-sm"
-                style={{ backgroundColor: color }}
-              />
-              <span className="text-xs text-[#7A756E]">{label}</span>
+                className="text-xs font-semibold tabular-nums"
+                style={{ color }}
+              >
+                {counts[BIN_COUNTS_KEY[bin]]}
+              </span>
             </div>
           ))}
         </div>

@@ -36,7 +36,7 @@ function createBoltImage(size = 48): ImageData {
   ctx.lineTo(cx + 1 * s, size * 0.42);
   ctx.closePath();
 
-  ctx.fillStyle = '#F59E0B';
+  ctx.fillStyle = '#201F1E';
   ctx.fill();
 
   return ctx.getImageData(0, 0, size, size);
@@ -450,9 +450,6 @@ export default function PowerMapView() {
               totalSubstations={substations.length}
               totalLines={lines.length}
               totalAvailableMW={totalAvailableMW}
-              subsRed={subsRed}
-              subsBlue={subsBlue}
-              subsGreen={subsGreen}
               loading={loading}
             />
             <MapLegend
@@ -464,6 +461,9 @@ export default function PowerMapView() {
               onToggleSubstations={() => setShowSubstations(!showSubstations)}
               showAvailability={showAvailability}
               onToggleAvailability={() => setShowAvailability(!showAvailability)}
+              subsRed={subsRed}
+              subsBlue={subsBlue}
+              subsGreen={subsGreen}
             />
           </div>
         </>
