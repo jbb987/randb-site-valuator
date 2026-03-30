@@ -185,30 +185,35 @@ export default function PowerMapView() {
     })),
   }), [substations]);
 
-  // 10-mile radius zones around green substations (200+ MW available)
+  // 10-mile radius zones around bin-2 substations (200+ MW available).
+  // Derived from substationsGeoJSON to guarantee the zone and dot always
+  // agree on which bin a substation belongs to (single source of truth).
   const greenZonesGeoJSON: GeoJSON.FeatureCollection = useMemo(() => {
     const RADIUS_MI = 10;
     const MI_TO_DEG_LAT = 1 / 69.0; // ~69 miles per degree latitude
     const SEGMENTS = 48;
 
-    const greenSubs = substations.filter((s) => s.availabilityBin === 2);
-    const features: GeoJSON.Feature[] = greenSubs.map((s, i) => {
+    const bin2Features = substationsGeoJSON.features.filter(
+      (f) => f.properties?.bin === 2,
+    );
+    const features: GeoJSON.Feature[] = bin2Features.map((f, i) => {
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
       const dLat = RADIUS_MI * MI_TO_DEG_LAT;
-      const dLng = dLat / Math.cos((s.lat * Math.PI) / 180);
+      const dLng = dLat / Math.cos((lat * Math.PI) / 180);
       const coords: [number, number][] = [];
       for (let j = 0; j <= SEGMENTS; j++) {
         const angle = (j / SEGMENTS) * 2 * Math.PI;
         coords.push([
-          s.lng + dLng * Math.cos(angle),
-          s.lat + dLat * Math.sin(angle),
+          lng + dLng * Math.cos(angle),
+          lat + dLat * Math.sin(angle),
         ]);
       }
       return {
         type: 'Feature' as const,
         id: i,
         properties: {
-          name: s.name,
-          availableMW: s.availableMW,
+          name: f.properties?.name ?? '',
+          availableMW: f.properties?.availableMW ?? 0,
         },
         geometry: {
           type: 'Polygon' as const,
@@ -217,7 +222,7 @@ export default function PowerMapView() {
       };
     });
     return { type: 'FeatureCollection', features };
-  }, [substations]);
+  }, [substationsGeoJSON]);
 
   const linesGeoJSON: GeoJSON.FeatureCollection = useMemo(() => ({
     type: 'FeatureCollection',
