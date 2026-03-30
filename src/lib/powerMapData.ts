@@ -121,31 +121,31 @@ export async function fetchPowerPlants(bounds: MapBounds): Promise<MapPowerPlant
       `&resultOffset=${offset}` +
       `&f=json`;
 
-    try {
-      const res = await fetch(url);
-      if (!res.ok) break;
-      const data = await res.json();
-      if (data.error) break;
-      const features = data.features ?? [];
-
-      for (const f of features) {
-        const a = f.attributes as Record<string, unknown>;
-        allPlants.push({
-          name: String(a.Plant_Name ?? ''),
-          operator: String(a.Utility_Na ?? ''),
-          primarySource: normalizeSource(String(a.PrimSource ?? '')),
-          capacityMW: Number(a.Install_MW) || 0,
-          totalMW: Number(a.Total_MW) || Number(a.Install_MW) || 0,
-          lat: Number(a.Latitude) || 0,
-          lng: Number(a.Longitude) || 0,
-        });
-      }
-
-      if (features.length < PAGE_SIZE) break; // last page
-      offset += PAGE_SIZE;
-    } catch {
-      break;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Power plants fetch failed (HTTP ${res.status})`);
     }
+    const data = await res.json();
+    if (data.error) {
+      throw new Error(data.error.message ?? 'ArcGIS query error (power plants)');
+    }
+    const features = data.features ?? [];
+
+    for (const f of features) {
+      const a = f.attributes as Record<string, unknown>;
+      allPlants.push({
+        name: String(a.Plant_Name ?? ''),
+        operator: String(a.Utility_Na ?? ''),
+        primarySource: normalizeSource(String(a.PrimSource ?? '')),
+        capacityMW: Number(a.Install_MW) || 0,
+        totalMW: Number(a.Total_MW) || Number(a.Install_MW) || 0,
+        lat: Number(a.Latitude) || 0,
+        lng: Number(a.Longitude) || 0,
+      });
+    }
+
+    if (features.length < PAGE_SIZE) break; // last page
+    offset += PAGE_SIZE;
   }
 
   return allPlants;
@@ -172,19 +172,19 @@ export async function fetchTransmissionLines(
       `&resultOffset=${offset}` +
       `&f=json`;
 
-    try {
-      const res = await fetch(url);
-      if (!res.ok) break;
-      const data = await res.json();
-      if (data.error) break;
-      const features = data.features ?? [];
-      allFeatures.push(...features);
-
-      if (features.length < PAGE_SIZE) break; // last page
-      offset += PAGE_SIZE;
-    } catch {
-      break;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Transmission lines fetch failed (HTTP ${res.status})`);
     }
+    const data = await res.json();
+    if (data.error) {
+      throw new Error(data.error.message ?? 'ArcGIS query error (transmission lines)');
+    }
+    const features = data.features ?? [];
+    allFeatures.push(...features);
+
+    if (features.length < PAGE_SIZE) break; // last page
+    offset += PAGE_SIZE;
   }
 
   // Process all features into lines + substations

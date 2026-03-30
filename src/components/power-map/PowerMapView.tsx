@@ -63,6 +63,7 @@ export default function PowerMapView() {
     totalAvailableMW,
     stateBoundary,
     loading,
+    error,
     loadState,
     clearState,
     selectedState,
@@ -542,6 +543,14 @@ export default function PowerMapView() {
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/90 backdrop-blur-sm rounded-full shadow-sm border border-[#D8D5D0] px-4 py-2 flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-[#ED202B]/30 border-t-[#ED202B] rounded-full animate-spin" />
           <span className="text-sm text-[#7A756E]">Loading {stateLabel ?? 'state'} power data...</span>
+        </div>
+      )}
+
+      {/* Error banner */}
+      {error && !loading && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-[#ED202B]/30 px-5 py-3 max-w-md text-center">
+          <p className="text-sm font-medium text-[#ED202B] mb-1">Failed to load power data</p>
+          <p className="text-xs text-[#7A756E]">{error}</p>
         </div>
       )}
     </div>

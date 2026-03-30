@@ -94,9 +94,7 @@ export function usePowerMap() {
 
       calculateAvailability(plants, substations, stateDemandMW);
       const totalGenerationMW = Math.round(plants.reduce((sum, p) => sum + p.capacityMW, 0));
-      const totalAvailableMW = Math.round(
-        substations.reduce((sum, s) => sum + Math.max(0, s.availableMW), 0),
-      );
+      const totalAvailableMW = Math.round(totalGenerationMW - stateDemandMW);
 
       const data: CachedStateData = {
         plants,
