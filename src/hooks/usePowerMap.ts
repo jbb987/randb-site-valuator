@@ -109,14 +109,14 @@ export function usePowerMap() {
       const stateConsumption = getStateConsumption(stateAbbr);
       const stateDemandMW = stateConsumption?.avgDemandMW ?? 0;
 
-      calculateAvailability(plants, substations, stateDemandMW);
+      const updatedSubstations = calculateAvailability(plants, substations, stateDemandMW);
       const totalCapacityMW = Math.round(plants.reduce((sum, p) => sum + p.capacityMW, 0));
       const totalDemandMW = stateDemandMW;
 
       const data: CachedStateData = {
         plants,
         lines,
-        substations,
+        substations: updatedSubstations,
         stateBoundary,
         totalCapacityMW,
         totalDemandMW,

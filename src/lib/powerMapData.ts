@@ -309,14 +309,14 @@ export async function fetchTransmissionLines(
  * Assign each plant to its single nearest substation (no double-counting),
  * distribute state demand proportionally by line count, and compute net
  * available power.  Uses capacity-factor-adjusted output (not nameplate).
- * Mutates the substations array in-place.
+ * Returns a new array of substations with availability fields populated.
  */
 export function calculateAvailability(
   plants: MapPowerPlant[],
   substations: MapSubstation[],
   stateDemandMW: number,
-): void {
-  if (substations.length === 0) return;
+): MapSubstation[] {
+  if (substations.length === 0) return [];
 
   // 1. Assign each plant's effective output to its nearest substation
   const capByIdx = new Map<number, number>();
@@ -342,19 +342,21 @@ export function calculateAvailability(
   // 2. Distribute state demand proportionally by line count
   const totalLineCount = substations.reduce((sum, s) => sum + s.lineCount, 0);
 
-  // 3. Compute per-substation availability
-  for (let i = 0; i < substations.length; i++) {
-    const sub = substations[i];
+  // 3. Compute per-substation availability (return new objects)
+  return substations.map((sub, i) => {
     const generationMW = capByIdx.get(i) ?? 0;
     const consumedMW = totalLineCount > 0
       ? stateDemandMW * (sub.lineCount / totalLineCount)
       : 0;
     const net = generationMW - consumedMW;
 
-    sub.connectedCapacityMW = Math.round(generationMW);
-    sub.availableMW = Math.round(net);
-    sub.availabilityBin = net <= 0 ? 0 : net < 200 ? 1 : 2;
-  }
+    return {
+      ...sub,
+      connectedCapacityMW: Math.round(generationMW),
+      availableMW: Math.round(net),
+      availabilityBin: net <= 0 ? 0 : net < 200 ? 1 : 2,
+    };
+  });
 }
 
 // ── Availability color bins ──────────────────────────────────────────────────
