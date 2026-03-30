@@ -28,14 +28,17 @@ async function tryBigDataCloud(lat: number, lng: number): Promise<GeoLocation | 
 
     const city = data.city || data.locality || '';
     // County is in localityInfo.administrative — find the county-level entry
+    // In the US, counties are admin level 6, NOT level 2 (which is country)
     let county = '';
     const admins = data.localityInfo?.administrative;
     if (Array.isArray(admins)) {
-      // Look for adminLevel 2 (county) or name containing "County"
-      const countyEntry = admins.find(
-        (a: { adminLevel?: number; name?: string }) =>
-          a.adminLevel === 2 || (a.name && a.name.includes('County')),
-      );
+      // Priority 1: find entry whose name contains "County"
+      // Priority 2: admin level 6 (US county level)
+      // Priority 3: admin level 5 (some states use this)
+      const countyEntry =
+        admins.find((a: { name?: string }) => a.name && a.name.includes('County')) ??
+        admins.find((a: { adminLevel?: number }) => a.adminLevel === 6) ??
+        admins.find((a: { adminLevel?: number }) => a.adminLevel === 5);
       if (countyEntry?.name) {
         county = countyEntry.name;
       }
