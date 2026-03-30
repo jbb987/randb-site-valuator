@@ -5,6 +5,8 @@ import type { MapRef, MapLayerMouseEvent } from 'react-map-gl/maplibre';
 import { usePowerMap } from '../../hooks/usePowerMap';
 import {
   AVAILABILITY_BINS,
+  STATUS_COLORS,
+  STATUS_LABELS,
   type MapPowerPlant,
 } from '../../lib/powerMapData';
 import { US_STATES } from '../../lib/stateBounds';
@@ -15,6 +17,7 @@ import PlantPopup from './PlantPopup';
 interface LinePopupData {
   owner: string;
   voltage: number;
+  status: string;
   lng: number;
   lat: number;
 }
@@ -22,6 +25,7 @@ interface LinePopupData {
 interface SubstationPopupData {
   name: string;
   owner: string;
+  status: string;
   maxVolt: number;
   lineCount: number;
   availableMW: number;
@@ -34,7 +38,7 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const US_VIEW = { longitude: -98.5, latitude: 39.8, zoom: 4 };
 
 /** Generate a crisp lightning bolt icon (rendered at 2× for retina). */
-function createBoltImage(size = 48): ImageData {
+function createBoltImage(color: string, size = 48): ImageData {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -56,13 +60,13 @@ function createBoltImage(size = 48): ImageData {
   ctx.lineWidth = 2 * s;
   ctx.lineJoin = 'round';
   ctx.stroke();
-  ctx.fillStyle = '#F59E0B';
+  ctx.fillStyle = color;
   ctx.fill();
 
   return ctx.getImageData(0, 0, size, size);
 }
 
-// Build match expression for substation availability colors
+// Build match expression for substation availability colors (active only)
 const binColorMatch: unknown[] = ['match', ['get', 'bin']];
 for (const { bin, color } of AVAILABILITY_BINS) {
   binColorMatch.push(bin, color);
@@ -98,8 +102,19 @@ export default function PowerMapView() {
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (map && !map.hasImage('bolt')) {
-      map.addImage('bolt', createBoltImage(), { pixelRatio: 2 });
+    if (map) {
+      // Active plant bolt (green)
+      if (!map.hasImage('bolt')) {
+        map.addImage('bolt', createBoltImage('#22C55E'), { pixelRatio: 2 });
+      }
+      // Planned plant bolt (yellow)
+      if (!map.hasImage('bolt-planned')) {
+        map.addImage('bolt-planned', createBoltImage(STATUS_COLORS.planned), { pixelRatio: 2 });
+      }
+      // Retired plant bolt (grey)
+      if (!map.hasImage('bolt-retired')) {
+        map.addImage('bolt-retired', createBoltImage(STATUS_COLORS.retired), { pixelRatio: 2 });
+      }
     }
     setMapReady(true);
   }, []);
@@ -132,16 +147,40 @@ export default function PowerMapView() {
     }
   }, [clearState]);
 
-  // Substation counts by availability bin (single pass)
+  // Substation counts by availability bin (active substations only)
   const { subsRed, subsOrange, subsBlue } = useMemo(() => {
     let red = 0, orange = 0, blue = 0;
     for (const s of substations) {
+      if (s.status !== 'active') continue;
       if (s.availabilityBin === 0) red++;
       else if (s.availabilityBin === 1) orange++;
       else if (s.availabilityBin === 2) blue++;
     }
     return { subsRed: red, subsOrange: orange, subsBlue: blue };
   }, [substations]);
+
+  // Status counts for the legend
+  const statusCounts = useMemo(() => {
+    const counts = { activeSubs: 0, plannedSubs: 0, retiredSubs: 0,
+                     activeLines: 0, plannedLines: 0, retiredLines: 0,
+                     activePlants: 0, plannedPlants: 0, retiredPlants: 0 };
+    for (const s of substations) {
+      if (s.status === 'active') counts.activeSubs++;
+      else if (s.status === 'planned') counts.plannedSubs++;
+      else counts.retiredSubs++;
+    }
+    for (const l of lines) {
+      if (l.status === 'active') counts.activeLines++;
+      else if (l.status === 'planned') counts.plannedLines++;
+      else counts.retiredLines++;
+    }
+    for (const p of plants) {
+      if (p.status === 'active') counts.activePlants++;
+      else if (p.status === 'planned') counts.plannedPlants++;
+      else counts.retiredPlants++;
+    }
+    return counts;
+  }, [substations, lines, plants]);
 
   // ── GeoJSON Sources ──────────────────────────────────────────────────────
 
@@ -156,6 +195,7 @@ export default function PowerMapView() {
         primarySource: p.primarySource,
         capacityMW: p.capacityMW,
         totalMW: p.totalMW,
+        status: p.status,
         lat: p.lat,
         lng: p.lng,
       },
@@ -174,6 +214,7 @@ export default function PowerMapView() {
       properties: {
         name: s.name,
         owner: s.owner,
+        status: s.status,
         maxVolt: s.maxVolt,
         lineCount: s.lineCount,
         availableMW: s.availableMW,
@@ -186,16 +227,14 @@ export default function PowerMapView() {
     })),
   }), [substations]);
 
-  // 10-mile radius zones around bin-2 substations (200+ MW available).
-  // Derived from substationsGeoJSON to guarantee the zone and dot always
-  // agree on which bin a substation belongs to (single source of truth).
+  // 10-mile radius zones around bin-2 active substations (200+ MW available).
   const greenZonesGeoJSON: GeoJSON.FeatureCollection = useMemo(() => {
     const RADIUS_MI = 10;
-    const MI_TO_DEG_LAT = 1 / 69.0; // ~69 miles per degree latitude
+    const MI_TO_DEG_LAT = 1 / 69.0;
     const SEGMENTS = 48;
 
     const bin2Features = substationsGeoJSON.features.filter(
-      (f) => f.properties?.bin === 2,
+      (f) => f.properties?.bin === 2 && f.properties?.status === 'active',
     );
     const features: GeoJSON.Feature[] = bin2Features.map((f, i) => {
       const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
@@ -233,6 +272,7 @@ export default function PowerMapView() {
       properties: {
         voltage: line.voltage,
         owner: line.owner,
+        status: line.status,
       },
       geometry: {
         type: 'LineString' as const,
@@ -256,7 +296,6 @@ export default function PowerMapView() {
 
   // Close all popups, then open the one for the clicked layer
   const handleClick = useCallback((e: MapLayerMouseEvent) => {
-    // Clear all popups first
     setSelectedPlant(null);
     setSelectedLine(null);
     setSelectedSubstation(null);
@@ -274,6 +313,7 @@ export default function PowerMapView() {
         primarySource: props.primarySource,
         capacityMW: Number(props.capacityMW),
         totalMW: Number(props.totalMW),
+        status: props.status ?? 'active',
         lat: Number(props.lat),
         lng: Number(props.lng),
       });
@@ -281,13 +321,15 @@ export default function PowerMapView() {
       setSelectedLine({
         owner: props.owner || 'Unknown',
         voltage: Number(props.voltage) || 0,
+        status: props.status ?? 'active',
         lng: e.lngLat.lng,
         lat: e.lngLat.lat,
       });
-    } else if (layer === 'substations') {
+    } else if (layer === 'substations' || layer === 'substations-inactive') {
       setSelectedSubstation({
         name: props.name || 'Unknown',
         owner: props.owner || 'N/A',
+        status: props.status ?? 'active',
         maxVolt: Number(props.maxVolt) || 0,
         lineCount: Number(props.lineCount) || 0,
         availableMW: Number(props.availableMW) || 0,
@@ -301,7 +343,10 @@ export default function PowerMapView() {
     const ids: string[] = [];
     if (showGenerators) ids.push('plant-points');
     if (showLines) ids.push('transmission-lines');
-    if (showSubstations) ids.push('substations');
+    if (showSubstations) {
+      ids.push('substations');
+      ids.push('substations-inactive');
+    }
     return ids;
   }, [showGenerators, showLines, showSubstations]);
 
@@ -346,7 +391,7 @@ export default function PowerMapView() {
               </Source>
             )}
 
-            {/* 10-mile radius zones around bin-2 substations */}
+            {/* 10-mile radius zones around bin-2 active substations */}
             {visibleBins.has(2) && greenZonesGeoJSON.features.length > 0 && (
               <Source id="green-zones" type="geojson" data={greenZonesGeoJSON}>
                 <Layer
@@ -369,14 +414,20 @@ export default function PowerMapView() {
               </Source>
             )}
 
-            {/* Transmission lines */}
+            {/* Transmission lines — color by status */}
             {showLines && lines.length > 0 && (
               <Source id="transmission-lines" type="geojson" data={linesGeoJSON}>
                 <Layer
                   id="transmission-lines"
                   type="line"
                   paint={{
-                    'line-color': '#201F1E',
+                    'line-color': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', STATUS_COLORS.planned,
+                      'retired', STATUS_COLORS.retired,
+                      STATUS_COLORS.active,
+                    ] as never,
                     'line-width': [
                       'interpolate',
                       ['linear'],
@@ -386,21 +437,85 @@ export default function PowerMapView() {
                       345, 2.5,
                       765, 4,
                     ],
-                    'line-opacity': 0.7,
+                    'line-opacity': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', 0.6,
+                      'retired', 0.4,
+                      0.7,
+                    ] as never,
+                    'line-dasharray': [1, 0], // solid by default; see below
+                  }}
+                />
+                {/* Dashed overlay for non-active lines */}
+                <Layer
+                  id="transmission-lines-dashed"
+                  type="line"
+                  filter={['!=', ['get', 'status'], 'active']}
+                  paint={{
+                    'line-color': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', STATUS_COLORS.planned,
+                      'retired', STATUS_COLORS.retired,
+                      STATUS_COLORS.active,
+                    ] as never,
+                    'line-width': [
+                      'interpolate',
+                      ['linear'],
+                      ['get', 'voltage'],
+                      0, 1,
+                      100, 1.5,
+                      345, 2.5,
+                      765, 4,
+                    ],
+                    'line-opacity': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', 0.6,
+                      'retired', 0.4,
+                      0.7,
+                    ] as never,
+                    'line-dasharray': [4, 3],
                   }}
                 />
               </Source>
             )}
 
-            {/* Substations — colored by availability */}
+            {/* Substations — inactive (planned/retired) as outline circles */}
             {showSubstations && substations.length > 0 && (
               <Source id="substations" type="geojson" data={substationsGeoJSON}>
+                {/* Inactive substations: yellow or grey dashed outline, no fill */}
+                <Layer
+                  id="substations-inactive"
+                  type="circle"
+                  filter={['!=', ['get', 'status'], 'active']}
+                  paint={{
+                    'circle-radius': 5,
+                    'circle-color': 'transparent',
+                    'circle-stroke-color': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', STATUS_COLORS.planned,
+                      'retired', STATUS_COLORS.retired,
+                      '#201F1E',
+                    ] as never,
+                    'circle-stroke-width': 2,
+                    'circle-opacity': 0.6,
+                    'circle-stroke-opacity': 0.6,
+                  }}
+                />
+                {/* Active substations: solid fill by availability bin */}
                 <Layer
                   id="substations"
                   type="circle"
-                  filter={visibleBins.size < 3
-                    ? ['in', ['get', 'bin'], ['literal', [...visibleBins]]]
-                    : ['has', 'bin']}
+                  filter={[
+                    'all',
+                    ['==', ['get', 'status'], 'active'],
+                    ...(visibleBins.size < 3
+                      ? [['in', ['get', 'bin'], ['literal', [...visibleBins]]]]
+                      : []),
+                  ] as never}
                   paint={{
                     'circle-radius': 6,
                     'circle-color': binColorMatch as never,
@@ -411,14 +526,20 @@ export default function PowerMapView() {
               </Source>
             )}
 
-            {/* Power plants — bolt icons sized by capacity */}
+            {/* Power plants — bolt icons colored by status */}
             {showGenerators && plants.length > 0 && (
               <Source id="power-plants" type="geojson" data={plantsGeoJSON}>
                 <Layer
                   id="plant-points"
                   type="symbol"
                   layout={{
-                    'icon-image': 'bolt',
+                    'icon-image': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', 'bolt-planned',
+                      'retired', 'bolt-retired',
+                      'bolt',
+                    ] as never,
                     'icon-size': [
                       'interpolate',
                       ['linear'],
@@ -430,6 +551,15 @@ export default function PowerMapView() {
                     ],
                     'icon-allow-overlap': true,
                     'icon-ignore-placement': true,
+                  }}
+                  paint={{
+                    'icon-opacity': [
+                      'match',
+                      ['get', 'status'],
+                      'planned', 0.6,
+                      'retired', 0.4,
+                      1,
+                    ] as never,
                   }}
                 />
               </Source>
@@ -463,11 +593,22 @@ export default function PowerMapView() {
                   <h4 className="font-heading font-semibold text-sm text-[#201F1E] mb-1">
                     {selectedLine.owner}
                   </h4>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[#7A756E]">Voltage</span>
-                    <span className="font-medium text-[#201F1E]">
-                      {selectedLine.voltage ? `${selectedLine.voltage.toLocaleString()} kV` : 'N/A'}
-                    </span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[#7A756E]">Voltage</span>
+                      <span className="font-medium text-[#201F1E]">
+                        {selectedLine.voltage ? `${selectedLine.voltage.toLocaleString()} kV` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[#7A756E]">Status</span>
+                      <span
+                        className="font-semibold text-xs"
+                        style={{ color: STATUS_COLORS[selectedLine.status as keyof typeof STATUS_COLORS] ?? STATUS_COLORS.active }}
+                      >
+                        {STATUS_LABELS[selectedLine.status] ?? 'In Service'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </Popup>
@@ -489,8 +630,13 @@ export default function PowerMapView() {
                   </h4>
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="text-[#7A756E]">Owner</span>
-                      <span className="font-medium text-[#201F1E]">{selectedSubstation.owner}</span>
+                      <span className="text-[#7A756E]">Status</span>
+                      <span
+                        className="font-semibold text-xs"
+                        style={{ color: STATUS_COLORS[selectedSubstation.status as keyof typeof STATUS_COLORS] ?? STATUS_COLORS.active }}
+                      >
+                        {STATUS_LABELS[selectedSubstation.status] ?? 'In Service'}
+                      </span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-[#7A756E]">Max Voltage</span>
@@ -502,7 +648,7 @@ export default function PowerMapView() {
                       <span className="text-[#7A756E]">Lines</span>
                       <span className="font-medium text-[#201F1E]">{selectedSubstation.lineCount}</span>
                     </div>
-                    {(() => {
+                    {selectedSubstation.status === 'active' && (() => {
                       const avail = selectedSubstation.availableMW;
                       const color = avail >= 200 ? '#3B82F6' : avail > 0 ? '#F97316' : '#EF4444';
                       const label = avail <= 0 ? 'No capacity' : `${avail.toLocaleString()} MW`;
@@ -603,6 +749,7 @@ export default function PowerMapView() {
               totalSubstations={substations.length}
               totalLines={lines.length}
               loading={loading}
+              statusCounts={statusCounts}
             />
             <MapLegend
               showGenerators={showGenerators}

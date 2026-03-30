@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   fetchPowerPlants,
   fetchTransmissionLines,
+  fetchSubstations,
   fetchStateBoundary,
   calculateAvailability,
   type MapBounds,
@@ -9,6 +10,7 @@ import {
   type MapTransmissionLine,
   type MapSubstation,
 } from '../lib/powerMapData';
+import { fetchStateDemandMW, fetchStateCapacityFactors } from '../lib/eiaApi';
 import { getStateConsumption } from '../lib/eiaConsumption';
 import { getStateBounds } from '../lib/stateBounds';
 
@@ -85,12 +87,16 @@ export function usePowerMap() {
     try {
       const { signal } = controller;
 
-      // Fetch all data with pagination
-      const [plants, { lines, substations }, stateBoundary] = await Promise.all([
-        fetchPowerPlants(bounds, signal),
-        fetchTransmissionLines(bounds, signal),
-        fetchStateBoundary(stateAbbr, signal),
-      ]);
+      // Fetch all data in parallel: infrastructure + EIA live data
+      const [plants, lines, substations, stateBoundary, eiaDemandMW, eiaCapFactors] =
+        await Promise.all([
+          fetchPowerPlants(bounds, signal),
+          fetchTransmissionLines(bounds, signal),
+          fetchSubstations(bounds, signal),
+          fetchStateBoundary(stateAbbr, signal),
+          fetchStateDemandMW(stateAbbr, signal),
+          fetchStateCapacityFactors(stateAbbr, signal),
+        ]);
 
       if (signal.aborted) return;
 
@@ -105,11 +111,16 @@ export function usePowerMap() {
         return;
       }
 
-      // Use real state consumption data for availability calc
-      const stateConsumption = getStateConsumption(stateAbbr);
-      const stateDemandMW = stateConsumption?.avgDemandMW ?? 0;
+      // Use live EIA demand if available, fall back to hardcoded
+      const fallbackConsumption = getStateConsumption(stateAbbr);
+      const stateDemandMW = eiaDemandMW ?? fallbackConsumption?.avgDemandMW ?? 0;
 
-      const updatedSubstations = calculateAvailability(plants, substations, stateDemandMW);
+      const updatedSubstations = calculateAvailability(
+        plants,
+        substations,
+        stateDemandMW,
+        eiaCapFactors,
+      );
       const totalCapacityMW = Math.round(plants.reduce((sum, p) => sum + p.capacityMW, 0));
       const totalDemandMW = stateDemandMW;
 

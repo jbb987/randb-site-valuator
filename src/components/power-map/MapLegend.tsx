@@ -1,4 +1,4 @@
-import { AVAILABILITY_BINS } from '../../lib/powerMapData';
+import { AVAILABILITY_BINS, STATUS_COLORS } from '../../lib/powerMapData';
 
 interface MapLegendProps {
   showGenerators: boolean;
@@ -112,6 +112,43 @@ export default function MapLegend({
               </span>
             </label>
           ))}
+        </div>
+      </div>
+      <hr className="border-[#D8D5D0]" />
+
+      {/* Infrastructure Status legend */}
+      <div>
+        <h4 className="text-xs font-medium text-[#7A756E] uppercase tracking-wide mb-2">
+          Infrastructure Status
+        </h4>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="w-5 h-[2px] inline-block rounded-full"
+              style={{ backgroundColor: STATUS_COLORS.active }}
+            />
+            <span className="text-xs text-[#7A756E]">In Service</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="w-5 inline-block"
+              style={{
+                height: 0,
+                borderTop: `2px dashed ${STATUS_COLORS.planned}`,
+              }}
+            />
+            <span className="text-xs text-[#7A756E]">Planned / Under Construction</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="w-5 inline-block"
+              style={{
+                height: 0,
+                borderTop: `2px dashed ${STATUS_COLORS.retired}`,
+              }}
+            />
+            <span className="text-xs text-[#7A756E]">Retired</span>
+          </div>
         </div>
       </div>
     </div>
