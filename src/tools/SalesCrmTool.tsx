@@ -1,0 +1,96 @@
+import { useState } from 'react';
+import Layout from '../components/Layout';
+import CrmSidebar, { type CrmView } from '../components/crm/CrmSidebar';
+import LeadTable from '../components/crm/LeadTable';
+import LeadDetail from '../components/crm/LeadDetail';
+import LeadForm from '../components/crm/LeadForm';
+import BulkUpload from '../components/crm/BulkUpload';
+import CrmStats from '../components/crm/CrmStats';
+import CrmArchive from '../components/crm/CrmArchive';
+import { useLeads } from '../hooks/useLeads';
+
+export default function SalesCrmTool() {
+  const { leads, loading, createLead, createLeadsBulk, updateStatus, addNote, removeLead } = useLeads();
+  const [view, setView] = useState<CrmView>('fresh');
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+
+  const selectedLead = leads.find((l) => l.id === selectedLeadId) || null;
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-32">
+          <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#D8D5D0] border-t-[#ED202B]" />
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout fullWidth>
+      <main className="py-2">
+        <h2 className="font-heading text-2xl font-semibold text-[#201F1E] mb-5">Sales CRM</h2>
+
+        <div className="flex gap-5 items-start">
+          <CrmSidebar
+            view={view}
+            onViewChange={(v) => { setView(v); setSelectedLeadId(null); }}
+            onCreateLead={() => setShowForm(true)}
+            onBulkUpload={() => setShowBulkUpload(true)}
+            leads={leads}
+          />
+
+          {/* Main content area */}
+          {view === 'fresh' && (
+            <LeadTable
+              leads={leads}
+              selectedLeadId={selectedLeadId}
+              onSelectLead={setSelectedLeadId}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+            />
+          )}
+
+          {view === 'archive' && (
+            <CrmArchive
+              leads={leads}
+              onSelectLead={setSelectedLeadId}
+            />
+          )}
+
+          {view === 'stats' && (
+            <CrmStats leads={leads} />
+          )}
+        </div>
+      </main>
+
+      {/* Modals */}
+      {selectedLead && (
+        <LeadDetail
+          lead={selectedLead}
+          onUpdateStatus={updateStatus}
+          onAddNote={addNote}
+          onClose={() => setSelectedLeadId(null)}
+          onDelete={removeLead}
+        />
+      )}
+
+      {showForm && (
+        <LeadForm
+          onSubmit={createLead}
+          onClose={() => setShowForm(false)}
+        />
+      )}
+
+      {showBulkUpload && (
+        <BulkUpload
+          onUpload={createLeadsBulk}
+          onClose={() => setShowBulkUpload(false)}
+        />
+      )}
+    </Layout>
+  );
+}

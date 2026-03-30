@@ -9,6 +9,7 @@ import SiteRequestForm from './pages/SiteRequestForm';
 import UserManagement from './pages/UserManagement';
 import BroadbandLookupTool from './tools/BroadbandLookupTool';
 import GridPowerAnalyzer from './tools/GridPowerAnalyzer';
+import SalesCrmTool from './tools/SalesCrmTool';
 
 export default function App() {
   return (
@@ -49,6 +50,11 @@ export default function App() {
           <Route path="/grid-power-analyzer" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <GridPowerAnalyzer />
+            </ProtectedRoute>
+          } />
+          <Route path="/sales-crm" element={
+            <ProtectedRoute allowedRoles={['admin', 'employee']}>
+              <SalesCrmTool />
             </ProtectedRoute>
           } />
           {/* Redirect old route */}
