@@ -1,5 +1,5 @@
 import type { MapPowerPlant } from '../../lib/powerMapData';
-import { getSourceColor } from '../../lib/powerMapData';
+import { getSourceColor, STATUS_COLORS, STATUS_LABELS } from '../../lib/powerMapData';
 
 interface PlantPopupProps {
   plant: MapPowerPlant;
@@ -29,6 +29,15 @@ export default function PlantPopup({ plant, onClose }: PlantPopupProps) {
             style={{ backgroundColor: getSourceColor(plant.primarySource) }}
           />
           <span className="text-xs text-[#7A756E]">{plant.primarySource}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-[#7A756E]">Status</span>
+          <span
+            className="font-semibold"
+            style={{ color: STATUS_COLORS[plant.status as keyof typeof STATUS_COLORS] ?? STATUS_COLORS.active }}
+          >
+            {STATUS_LABELS[plant.status] ?? 'In Service'}
+          </span>
         </div>
         <div className="flex justify-between text-xs">
           <span className="text-[#7A756E]">Capacity</span>
