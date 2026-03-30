@@ -264,28 +264,40 @@ export async function fetchTransmissionLines(
 
 // ── Substations (HIFLD real data) ───────────────────────────────────────────
 
+/** Case-insensitive attribute lookup (ArcGIS field names vary by server). */
+function getAttr(attrs: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (attrs[key] !== undefined) return attrs[key];
+    const upper = key.toUpperCase();
+    const lower = key.toLowerCase();
+    if (attrs[upper] !== undefined) return attrs[upper];
+    if (attrs[lower] !== undefined) return attrs[lower];
+  }
+  return undefined;
+}
+
 function parseSubstationFeature(f: {
   attributes: Record<string, unknown>;
   geometry?: { x?: number; y?: number };
 }): MapSubstation | null {
   const a = f.attributes;
-  const name = String(a.NAME ?? '');
+  const name = String(getAttr(a, 'NAME', 'Name', 'name') ?? '');
   if (!name || name === 'NOT AVAILABLE') return null;
 
-  // Use LATITUDE/LONGITUDE attributes, fall back to geometry point if available
-  const lat = Number(a.LATITUDE) || f.geometry?.y || 0;
-  const lng = Number(a.LONGITUDE) || f.geometry?.x || 0;
+  // Try geometry point first, fall back to attribute fields
+  const lat = f.geometry?.y || Number(getAttr(a, 'LATITUDE', 'Latitude', 'LAT') ?? 0);
+  const lng = f.geometry?.x || Number(getAttr(a, 'LONGITUDE', 'Longitude', 'LONG', 'LON') ?? 0);
   if (!lat || !lng || lat === -999999 || lng === -999999) return null;
 
   return {
     name,
     owner: '',
-    status: normalizeStatus(String(a.STATUS ?? '')),
-    maxVolt: Number(a.MAX_VOLT) > 0 ? Number(a.MAX_VOLT) : 0,
-    minVolt: Number(a.MIN_VOLT) > 0 ? Number(a.MIN_VOLT) : 0,
+    status: normalizeStatus(String(getAttr(a, 'STATUS', 'Status') ?? '')),
+    maxVolt: Number(getAttr(a, 'MAX_VOLT', 'Max_Volt') ?? 0) > 0 ? Number(getAttr(a, 'MAX_VOLT', 'Max_Volt') ?? 0) : 0,
+    minVolt: Number(getAttr(a, 'MIN_VOLT', 'Min_Volt') ?? 0) > 0 ? Number(getAttr(a, 'MIN_VOLT', 'Min_Volt') ?? 0) : 0,
     lat,
     lng,
-    lineCount: Number(a.LINES) > 0 ? Number(a.LINES) : 0,
+    lineCount: Number(getAttr(a, 'LINES', 'Lines') ?? 0) > 0 ? Number(getAttr(a, 'LINES', 'Lines') ?? 0) : 0,
     connectedCapacityMW: 0,
     availableMW: 0,
     availabilityBin: 0,
@@ -296,51 +308,105 @@ export async function fetchSubstations(
   bounds: MapBounds,
   signal?: AbortSignal,
 ): Promise<MapSubstation[]> {
-  const allSubs: MapSubstation[] = [];
-  let offset = 0;
-  let pages = 0;
+  // Try multiple query strategies — HIFLD server can be finicky
+  const strategies = [
+    // Strategy 1: WHERE clause with lat/lon range (most compatible)
+    () => {
+      const w = `LATITUDE >= ${bounds.south} AND LATITUDE <= ${bounds.north} AND LONGITUDE >= ${bounds.west} AND LONGITUDE <= ${bounds.east}`;
+      return `${LAYERS.substations}/query?where=${encodeURIComponent(w)}&outFields=*&returnGeometry=true&outSR=4326&resultRecordCount=${PAGE_SIZE}&f=json`;
+    },
+    // Strategy 2: Geometry envelope with returnGeometry
+    () => {
+      return `${LAYERS.substations}/query?where=1%3D1&geometry=${encodeURIComponent(bboxEnvelope(bounds))}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&outFields=*&returnGeometry=true&resultRecordCount=${PAGE_SIZE}&f=json`;
+    },
+  ];
 
-  // Use WHERE clause with lat/lon range — more compatible than geometry envelope
-  // on the HIFLD server which may not support spatial queries the same way
-  const where = encodeURIComponent(
-    `LATITUDE>=${bounds.south} AND LATITUDE<=${bounds.north} AND LONGITUDE>=${bounds.west} AND LONGITUDE<=${bounds.east}`,
-  );
+  for (const buildUrl of strategies) {
+    try {
+      const allSubs: MapSubstation[] = [];
+      let offset = 0;
+      let pages = 0;
 
-  while (pages < MAX_PAGES) {
-    let url =
-      `${LAYERS.substations}/query?` +
-      `where=${where}` +
-      `&outFields=NAME%2CSTATUS%2CLINES%2CMAX_VOLT%2CMIN_VOLT%2CLATITUDE%2CLONGITUDE` +
-      `&returnGeometry=false` +
-      `&resultRecordCount=${PAGE_SIZE}` +
-      `&f=json`;
+      while (pages < MAX_PAGES) {
+        let url = buildUrl();
+        if (offset > 0) {
+          url += `&resultOffset=${offset}`;
+        }
 
-    if (offset > 0) {
-      url += `&resultOffset=${offset}`;
+        const res = await fetch(url, { signal });
+        if (!res.ok) continue; // try next strategy
+        const data = await res.json();
+        if (data.error) break; // try next strategy
+
+        const features = data.features ?? [];
+        for (const f of features) {
+          const sub = parseSubstationFeature(f);
+          if (sub) allSubs.push(sub);
+        }
+
+        if (features.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
+        pages++;
+      }
+
+      if (allSubs.length > 0) return allSubs;
+      // If 0 results, try next strategy
+    } catch {
+      // Try next strategy
     }
-
-    const res = await fetch(url, { signal });
-    if (!res.ok) {
-      throw new Error(`Substations fetch failed (HTTP ${res.status})`);
-    }
-    const data = await res.json();
-
-    if (data.error) {
-      throw new Error(data.error.message ?? 'ArcGIS query error (substations)');
-    }
-    const features = data.features ?? [];
-
-    for (const f of features) {
-      const sub = parseSubstationFeature(f);
-      if (sub) allSubs.push(sub);
-    }
-
-    if (features.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-    pages++;
   }
 
-  return allSubs;
+  // All strategies failed
+  console.warn('[PowerMap] HIFLD substation fetch returned 0 results for bounds:', bounds);
+  return [];
+}
+
+// ── Fallback: derive substations from transmission lines ────────────────────
+
+/** Derive substations from line endpoint names when HIFLD API is unavailable. */
+export function deriveSubstationsFromLines(lines: MapTransmissionLine[]): MapSubstation[] {
+  const subMap = new Map<
+    string,
+    { coords: { lat: number; lng: number }[]; voltages: number[]; owner: string; lineCount: number }
+  >();
+
+  for (const line of lines) {
+    if (line.status !== 'active') continue;
+    const paths = line.coordinates;
+    if (paths.length === 0) continue;
+
+    const firstPt = paths[0];
+    const lastPt = paths[paths.length - 1];
+
+    if (line.sub1 && line.sub1 !== 'NOT AVAILABLE' && firstPt) {
+      let sub = subMap.get(line.sub1);
+      if (!sub) { sub = { coords: [], voltages: [], owner: line.owner, lineCount: 0 }; subMap.set(line.sub1, sub); }
+      sub.coords.push({ lat: firstPt[1], lng: firstPt[0] });
+      if (line.voltage > 0) sub.voltages.push(line.voltage);
+      sub.lineCount++;
+    }
+    if (line.sub2 && line.sub2 !== 'NOT AVAILABLE' && lastPt) {
+      let sub = subMap.get(line.sub2);
+      if (!sub) { sub = { coords: [], voltages: [], owner: line.owner, lineCount: 0 }; subMap.set(line.sub2, sub); }
+      sub.coords.push({ lat: lastPt[1], lng: lastPt[0] });
+      if (line.voltage > 0) sub.voltages.push(line.voltage);
+      sub.lineCount++;
+    }
+  }
+
+  const result: MapSubstation[] = [];
+  for (const [name, info] of subMap) {
+    if (info.coords.length === 0) continue;
+    const avgLat = info.coords.reduce((s, c) => s + c.lat, 0) / info.coords.length;
+    const avgLng = info.coords.reduce((s, c) => s + c.lng, 0) / info.coords.length;
+    result.push({
+      name, owner: info.owner, status: 'active',
+      maxVolt: info.voltages.length > 0 ? Math.max(...info.voltages) : 0,
+      minVolt: 0, lat: avgLat, lng: avgLng, lineCount: info.lineCount,
+      connectedCapacityMW: 0, availableMW: 0, availabilityBin: 0,
+    });
+  }
+  return result;
 }
 
 // ── Availability calculation ─────────────────────────────────────────────────

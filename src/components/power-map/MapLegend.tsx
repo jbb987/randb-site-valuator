@@ -5,8 +5,6 @@ interface MapLegendProps {
   onToggleGenerators: () => void;
   showLines: boolean;
   onToggleLines: () => void;
-  showSubstations: boolean;
-  onToggleSubstations: () => void;
   subsRed: number;
   subsOrange: number;
   subsBlue: number;
@@ -25,8 +23,6 @@ export default function MapLegend({
   onToggleGenerators,
   showLines,
   onToggleLines,
-  showSubstations,
-  onToggleSubstations,
   subsRed,
   subsOrange,
   subsBlue,
@@ -51,17 +47,13 @@ export default function MapLegend({
           <span className="w-4 h-[2px] bg-[#201F1E] inline-block rounded-full" />
           <span className="text-[#7A756E]">Transmission Lines</span>
         </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={showSubstations} onChange={onToggleSubstations} className="accent-[#ED202B] w-3 h-3" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#201F1E] inline-block" />
-          <span className="text-[#7A756E]">Substations</span>
-        </label>
       </div>
 
       <hr className="border-[#D8D5D0]" />
 
-      {/* Substation availability */}
+      {/* Substations — the 3 colored dots are the substations */}
       <div className="space-y-1.5">
+        <span className="text-[#7A756E] font-medium">Substations</span>
         {AVAILABILITY_BINS.map(({ bin, color, label }) => (
           <label key={bin} className="flex items-center justify-between cursor-pointer">
             <span className="flex items-center gap-1.5">

@@ -94,7 +94,7 @@ export default function PowerMapView() {
   const [selectedSubstation, setSelectedSubstation] = useState<SubstationPopupData | null>(null);
   const [showGenerators, setShowGenerators] = useState(true);
   const [showLines, setShowLines] = useState(true);
-  const [showSubstations, setShowSubstations] = useState(true);
+  const [showSubstations] = useState(true);
   /** Which availability bins are visible (all on by default) */
   const [visibleBins, setVisibleBins] = useState<Set<number>>(new Set([0, 1, 2]));
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -694,11 +694,11 @@ export default function PowerMapView() {
             </button>
           </div>
 
-          {/* Sidebar toggle (left side, below back button) */}
-          <div className="absolute top-14 left-3 z-10">
+          {/* Sidebar: toggle + panels */}
+          <div className="absolute top-14 left-3 z-10 flex flex-col gap-2 max-h-[calc(100%-4.5rem)]">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="bg-white rounded-lg shadow-sm border border-[#D8D5D0] p-2 hover:bg-stone-50 transition"
+              className="bg-white rounded-lg shadow-sm border border-[#D8D5D0] p-2 hover:bg-stone-50 transition w-fit"
               title={sidebarOpen ? 'Hide legend' : 'Show legend'}
             >
               <svg
@@ -711,14 +711,12 @@ export default function PowerMapView() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
               </svg>
             </button>
-          </div>
 
-          {/* Sidebar panels */}
-          <div
-            className={`absolute top-[5.5rem] left-3 z-10 w-56 space-y-3 transition-all duration-300 max-h-[calc(100%-6rem)] overflow-y-auto ${
-              sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8 pointer-events-none'
-            }`}
-          >
+            <div
+              className={`w-56 space-y-3 overflow-y-auto transition-all duration-300 ${
+                sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8 pointer-events-none'
+              }`}
+            >
             <MapStats
               totalPlants={plants.length}
               totalCapacityMW={totalCapacityMW}
@@ -732,8 +730,6 @@ export default function PowerMapView() {
               onToggleGenerators={() => setShowGenerators(!showGenerators)}
               showLines={showLines}
               onToggleLines={() => setShowLines(!showLines)}
-              showSubstations={showSubstations}
-              onToggleSubstations={() => setShowSubstations(!showSubstations)}
               subsRed={subsRed}
               subsOrange={subsOrange}
               subsBlue={subsBlue}
@@ -745,6 +741,7 @@ export default function PowerMapView() {
                 setVisibleBins(next);
               }}
             />
+            </div>
           </div>
         </>
       )}

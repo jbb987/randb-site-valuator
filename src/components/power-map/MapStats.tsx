@@ -8,8 +8,8 @@ interface MapStatsProps {
 }
 
 function formatMW(mw: number): string {
-  if (mw >= 1000) return `${(mw / 1000).toFixed(1)} GW`;
-  return `${mw.toLocaleString()} MW`;
+  if (mw >= 1000) return `${Math.round(mw / 1000)} GW`;
+  return `${Math.round(mw).toLocaleString()} MW`;
 }
 
 export default function MapStats({
