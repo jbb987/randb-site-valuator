@@ -3,6 +3,7 @@ import {
   fetchPowerPlants,
   fetchTransmissionLines,
   fetchSubstations,
+  deriveSubstationsFromLines,
   fetchStateBoundary,
   calculateAvailability,
   type MapBounds,
@@ -88,8 +89,7 @@ export function usePowerMap() {
       const { signal } = controller;
 
       // Fetch all infrastructure data + EIA live data in parallel
-      // Substations use HIFLD (different server) — catch errors gracefully
-      const [plants, lines, substations, stateBoundary, eiaDemandMW, eiaCapFactors] =
+      const [plants, lines, hifldSubs, stateBoundary, eiaDemandMW, eiaCapFactors] =
         await Promise.all([
           fetchPowerPlants(bounds, signal),
           fetchTransmissionLines(bounds, signal),
@@ -98,6 +98,11 @@ export function usePowerMap() {
           fetchStateDemandMW(stateAbbr, signal),
           fetchStateCapacityFactors(stateAbbr, signal),
         ]);
+
+      // Use HIFLD substations if available, otherwise derive from line endpoints
+      const substations = hifldSubs.length > 0
+        ? hifldSubs
+        : deriveSubstationsFromLines(lines);
 
       if (signal.aborted) return;
 
