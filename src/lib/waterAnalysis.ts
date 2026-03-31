@@ -7,11 +7,11 @@
  * - USFWS NWI ArcGIS REST: National Wetlands Inventory (fwspublicservices.wim.usgs.gov)
  *
  * CORS notes:
- * - FEMA NFHL: supports CORS for public browser requests ✓
+ * - FEMA NFHL: does NOT support CORS — routed through corsproxy.io
  * - USGS NLDI: supports CORS ✓
- * - USFWS NWI: supports CORS ✓
- *   If any of these start failing with CORS errors in the future, a CORS proxy
- *   will be needed (e.g. a simple Cloudflare Worker forwarding the requests).
+ * - USFWS NWI: does NOT support CORS — routed through corsproxy.io
+ *   For production, replace corsproxy.io with a dedicated Cloudflare Worker or
+ *   backend proxy to avoid rate limits and third-party dependency.
  */
 
 import type {
@@ -24,6 +24,19 @@ import type {
   WetlandsInfo,
 } from './waterAnalysis.types';
 import { geocodeAddress } from './infraLookup';
+
+// ── CORS proxy ──────────────────────────────────────────────────────────────
+
+/**
+ * Fetch a URL through a CORS proxy.
+ * In development, government ArcGIS servers (FEMA, USFWS) block browser
+ * requests that lack an Origin they trust. We route through corsproxy.io
+ * as a stop-gap. Replace with a first-party proxy for production.
+ */
+async function corsFetch(url: string, init?: RequestInit): Promise<Response> {
+  const proxied = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  return fetch(proxied, init);
+}
 
 // ── FEMA NFHL ───────────────────────────────────────────────────────────────
 
@@ -93,7 +106,7 @@ async function fetchFloodZone(lat: number, lng: number): Promise<FloodZoneInfo> 
     f: 'json',
   });
 
-  const res = await fetch(`${FEMA_NFHL_URL}?${params}`, {
+  const res = await corsFetch(`${FEMA_NFHL_URL}?${params}`, {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`FEMA NFHL returned HTTP ${res.status}`);
@@ -306,7 +319,7 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
     f: 'json',
   });
 
-  const res = await fetch(`${NWI_URL}?${params}`, {
+  const res = await corsFetch(`${NWI_URL}?${params}`, {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`NWI service returned HTTP ${res.status}`);
