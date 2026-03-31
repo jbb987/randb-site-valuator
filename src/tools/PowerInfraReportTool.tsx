@@ -7,6 +7,7 @@ import LandValuationSection from '../components/piddr/LandValuationSection';
 import BroadbandSection from '../components/piddr/BroadbandSection';
 import InfrastructureResults from '../components/power-calculator/InfrastructureResults';
 import { usePiddrReport } from '../hooks/usePiddrReport';
+import { usePdfExport } from '../hooks/usePdfExport';
 import type { PiddrInputs } from '../hooks/usePiddrReport';
 
 const inputClass =
@@ -35,6 +36,9 @@ export default function PowerInfraReportTool() {
   const [ppaHigh, setPpaHigh] = useState(0);
 
   const report = usePiddrReport();
+  const pdfExport = usePdfExport();
+
+  const canExportPdf = report.hasReport && !report.isGenerating && report.inputs && report.generatedAt;
 
   const canGenerate = !report.isGenerating && (address.trim() !== '' || coordinates.trim() !== '');
 
@@ -203,13 +207,50 @@ export default function PowerInfraReportTool() {
             </button>
 
             {report.hasReport && !report.isGenerating && (
-              <button
-                type="button"
-                onClick={report.reset}
-                className="rounded-lg border border-[#D8D5D0] bg-white px-4 py-3 text-sm text-[#7A756E] hover:bg-[#F5F4F2] transition"
-              >
-                Clear Report
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={!canExportPdf || pdfExport.generating}
+                  onClick={() => {
+                    if (!canExportPdf) return;
+                    pdfExport.generatePdf({
+                      inputs: report.inputs!,
+                      appraisal: report.appraisal.data,
+                      infra: report.infra.data,
+                      broadband: report.broadband.data,
+                      generatedAt: report.generatedAt!,
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#ED202B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#9B0E18] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                >
+                  {pdfExport.generating ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Generating PDF...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download Report
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={report.reset}
+                  className="rounded-lg border border-[#D8D5D0] bg-white px-4 py-3 text-sm text-[#7A756E] hover:bg-[#F5F4F2] transition"
+                >
+                  Clear Report
+                </button>
+              </>
+            )}
+            {pdfExport.error && (
+              <span className="text-xs text-red-600">{pdfExport.error}</span>
             )}
 
             {!canGenerate && !report.isGenerating && (
