@@ -7,11 +7,11 @@
  * - USFWS NWI ArcGIS REST: National Wetlands Inventory (fwspublicservices.wim.usgs.gov)
  *
  * CORS notes:
- * - FEMA NFHL: does NOT support CORS — routed through corsproxy.io
- * - USGS NLDI: supports CORS ✓
- * - USFWS NWI: does NOT support CORS — routed through corsproxy.io
- *   For production, replace corsproxy.io with a dedicated Cloudflare Worker or
- *   backend proxy to avoid rate limits and third-party dependency.
+ * - FEMA NFHL: does NOT support CORS — proxied via Vite dev server (/api/fema)
+ * - USGS NLDI: supports CORS natively ✓
+ * - USFWS NWI: does NOT support CORS — proxied via Vite dev server (/api/nwi)
+ *   For production (GitHub Pages), these will need a Cloudflare Worker or
+ *   similar serverless proxy since there's no backend server to proxy through.
  */
 
 import type {
@@ -25,27 +25,17 @@ import type {
 } from './waterAnalysis.types';
 import { geocodeAddress } from './infraLookup';
 
-// ── CORS proxy ──────────────────────────────────────────────────────────────
-
-/**
- * Fetch a URL through a CORS proxy.
- * In development, government ArcGIS servers (FEMA, USFWS) block browser
- * requests that lack an Origin they trust. We route through corsproxy.io
- * as a stop-gap. Replace with a first-party proxy for production.
- */
-async function corsFetch(url: string, init?: RequestInit): Promise<Response> {
-  const proxied = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-  return fetch(proxied, init);
-}
-
 // ── FEMA NFHL ───────────────────────────────────────────────────────────────
 
 /**
  * FEMA National Flood Hazard Layer — Flood Hazard Area sublayer (28).
  * MapServer 28 = S_FLD_HAZ_AR (Flood Hazard Areas)
+ *
+ * Proxied through Vite dev server to avoid CORS.
+ * Vite proxy: /api/fema → https://hazards.fema.gov
  */
 const FEMA_NFHL_URL =
-  'https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28/query';
+  '/api/fema/gis/nfhl/rest/services/public/NFHL/MapServer/28/query';
 
 const FLOOD_ZONE_DESCRIPTIONS: Record<string, string> = {
   X: 'Minimal flood hazard — outside of the 0.2% annual chance floodplain',
@@ -106,7 +96,7 @@ async function fetchFloodZone(lat: number, lng: number): Promise<FloodZoneInfo> 
     f: 'json',
   });
 
-  const res = await corsFetch(`${FEMA_NFHL_URL}?${params}`, {
+  const res = await fetch(`${FEMA_NFHL_URL}?${params}`, {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`FEMA NFHL returned HTTP ${res.status}`);
@@ -266,8 +256,12 @@ async function fetchMonitoringStations(comid: string): Promise<MonitoringStation
  * Layer 0 = Wetlands polygons.
  * Buffer: ~500 feet (~0.0023 degrees latitude).
  */
+/**
+ * Proxied through Vite dev server to avoid CORS.
+ * Vite proxy: /api/nwi → https://fwspublicservices.wim.usgs.gov
+ */
 const NWI_URL =
-  'https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer/0/query';
+  '/api/nwi/wetlandsmapservice/rest/services/Wetlands/MapServer/0/query';
 
 const BUFFER_DEG = 0.0023;
 
@@ -319,7 +313,7 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
     f: 'json',
   });
 
-  const res = await corsFetch(`${NWI_URL}?${params}`, {
+  const res = await fetch(`${NWI_URL}?${params}`, {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`NWI service returned HTTP ${res.status}`);
