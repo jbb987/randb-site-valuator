@@ -5,6 +5,7 @@
  */
 
 import { getCapacityFactor } from './eiaApi';
+import { cachedFetch, TTL_INFRASTRUCTURE } from './requestCache';
 
 const GEOPLATFORM = 'https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services';
 const HIFLD = 'https://services.arcgis.com/G4S1dGvn7PIgYd6Y/ArcGIS/rest/services';
@@ -515,30 +516,27 @@ export const AVAILABILITY_BINS = [
 const CENSUS_STATES =
   'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/12/query';
 
-const stateBoundaryCache = new Map<string, GeoJSON.FeatureCollection>();
-
 /** Fetch the GeoJSON boundary polygon for a US state abbreviation. */
 export async function fetchStateBoundary(
   stateAbbr: string,
   signal?: AbortSignal,
 ): Promise<GeoJSON.FeatureCollection> {
-  const cached = stateBoundaryCache.get(stateAbbr);
-  if (cached) return cached;
+  const key = `census:stateBoundary:${stateAbbr}`;
+  return cachedFetch(key, async () => {
+    const url =
+      `${CENSUS_STATES}?where=${encodeURIComponent(`STUSAB='${stateAbbr}'`)}` +
+      `&outFields=STUSAB` +
+      `&returnGeometry=true` +
+      `&outSR=4326` +
+      `&f=geojson`;
 
-  const url =
-    `${CENSUS_STATES}?where=${encodeURIComponent(`STUSAB='${stateAbbr}'`)}` +
-    `&outFields=STUSAB` +
-    `&returnGeometry=true` +
-    `&outSR=4326` +
-    `&f=geojson`;
-
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`State boundary fetch failed (HTTP ${res.status})`);
-  const data = await res.json();
-  const fc: GeoJSON.FeatureCollection = {
-    type: 'FeatureCollection',
-    features: data.features ?? [],
-  };
-  stateBoundaryCache.set(stateAbbr, fc);
-  return fc;
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`State boundary fetch failed (HTTP ${res.status})`);
+    const data = await res.json();
+    const fc: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: data.features ?? [],
+    };
+    return fc;
+  }, TTL_INFRASTRUCTURE);
 }

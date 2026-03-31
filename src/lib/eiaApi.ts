@@ -8,16 +8,13 @@
  * Falls back to hardcoded values if the API is unreachable.
  */
 
+import { cachedFetch, TTL_INFRASTRUCTURE } from './requestCache';
+
 const EIA_BASE = 'https://api.eia.gov/v2/electricity';
 
 function getApiKey(): string | null {
   return import.meta.env.VITE_EIA_API_KEY ?? null;
 }
-
-// ── Caches ──────────────────────────────────────────────────────────────────
-
-const demandCache = new Map<string, number>();
-const capacityFactorCache = new Map<string, Map<string, number>>();
 
 // ── Hardcoded fallbacks (EIA 2024 national averages) ────────────────────────
 
@@ -65,46 +62,45 @@ export async function fetchStateDemandMW(
   stateAbbr: string,
   signal?: AbortSignal,
 ): Promise<number | null> {
-  const cached = demandCache.get(stateAbbr);
-  if (cached !== undefined) return cached;
-
   const apiKey = getApiKey();
   if (!apiKey) return null;
 
-  try {
-    const url =
-      `${EIA_BASE}/retail-sales/data/` +
-      `?api_key=${encodeURIComponent(apiKey)}` +
-      `&data[0]=sales` +
-      `&facets[stateid][]=${stateAbbr}` +
-      `&facets[sectorid][]=ALL` +
-      `&frequency=monthly` +
-      `&sort[0][column]=period&sort[0][direction]=desc` +
-      `&length=12`;
+  const key = `eia:demand:${stateAbbr}`;
+  return cachedFetch(key, async () => {
+    try {
+      const url =
+        `${EIA_BASE}/retail-sales/data/` +
+        `?api_key=${encodeURIComponent(apiKey)}` +
+        `&data[0]=sales` +
+        `&facets[stateid][]=${stateAbbr}` +
+        `&facets[sectorid][]=ALL` +
+        `&frequency=monthly` +
+        `&sort[0][column]=period&sort[0][direction]=desc` +
+        `&length=12`;
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) return null;
+      const res = await fetch(url, { signal });
+      if (!res.ok) return null;
 
-    const json = await res.json();
-    const rows = json?.response?.data;
-    if (!Array.isArray(rows) || rows.length === 0) return null;
+      const json = await res.json();
+      const rows = json?.response?.data;
+      if (!Array.isArray(rows) || rows.length === 0) return null;
 
-    // Sum last 12 months of sales (in million kWh = GWh)
-    let totalGWh = 0;
-    for (const row of rows) {
-      const sales = Number(row.sales);
-      if (!isNaN(sales) && sales > 0) {
-        totalGWh += sales; // already in million kWh = GWh
+      // Sum last 12 months of sales (in million kWh = GWh)
+      let totalGWh = 0;
+      for (const row of rows) {
+        const sales = Number(row.sales);
+        if (!isNaN(sales) && sales > 0) {
+          totalGWh += sales; // already in million kWh = GWh
+        }
       }
-    }
 
-    // Convert annual GWh to average MW: (GWh × 1000) / 8760
-    const avgDemandMW = Math.round((totalGWh * 1000) / 8760);
-    demandCache.set(stateAbbr, avgDemandMW);
-    return avgDemandMW;
-  } catch {
-    return null;
-  }
+      // Convert annual GWh to average MW: (GWh × 1000) / 8760
+      const avgDemandMW = Math.round((totalGWh * 1000) / 8760);
+      return avgDemandMW;
+    } catch {
+      return null;
+    }
+  }, TTL_INFRASTRUCTURE);
 }
 
 // ── Capacity factors by state + fuel type ───────────────────────────────────
@@ -117,69 +113,68 @@ export async function fetchStateCapacityFactors(
   stateAbbr: string,
   signal?: AbortSignal,
 ): Promise<Map<string, number> | null> {
-  const cached = capacityFactorCache.get(stateAbbr);
-  if (cached) return cached;
-
   const apiKey = getApiKey();
   if (!apiKey) return null;
 
-  try {
-    // Request capacity factors for all major fuel types
-    const fuelFacets = Object.values(SOURCE_TO_FUEL_ID)
-      .map((id) => `&facets[fueltypeid][]=${id}`)
-      .join('');
+  const key = `eia:capacityFactors:${stateAbbr}`;
+  return cachedFetch(key, async () => {
+    try {
+      // Request capacity factors for all major fuel types
+      const fuelFacets = Object.values(SOURCE_TO_FUEL_ID)
+        .map((id) => `&facets[fueltypeid][]=${id}`)
+        .join('');
 
-    // Try to compute capacity factors from generation and nameplate capacity
-    // EIA provides net generation (thousand MWh) and nameplate capacity (MW)
-    const url =
-      `${EIA_BASE}/electric-power-operational-data/data/` +
-      `?api_key=${encodeURIComponent(apiKey)}` +
-      `&data[0]=generation` +
-      `&data[1]=total-nameplate-capacity` +
-      `&facets[stateid][]=${stateAbbr}` +
-      `&facets[sectorid][]=ALL` +
-      fuelFacets +
-      `&frequency=annual` +
-      `&sort[0][column]=period&sort[0][direction]=desc` +
-      `&length=20`;
+      // Try to compute capacity factors from generation and nameplate capacity
+      // EIA provides net generation (thousand MWh) and nameplate capacity (MW)
+      const url =
+        `${EIA_BASE}/electric-power-operational-data/data/` +
+        `?api_key=${encodeURIComponent(apiKey)}` +
+        `&data[0]=generation` +
+        `&data[1]=total-nameplate-capacity` +
+        `&facets[stateid][]=${stateAbbr}` +
+        `&facets[sectorid][]=ALL` +
+        fuelFacets +
+        `&frequency=annual` +
+        `&sort[0][column]=period&sort[0][direction]=desc` +
+        `&length=20`;
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) return null;
+      const res = await fetch(url, { signal });
+      if (!res.ok) return null;
 
-    const json = await res.json();
-    const rows = json?.response?.data;
-    if (!Array.isArray(rows) || rows.length === 0) return null;
+      const json = await res.json();
+      const rows = json?.response?.data;
+      if (!Array.isArray(rows) || rows.length === 0) return null;
 
-    // Compute capacity factor = generation(MWh) / (capacity(MW) × 8760)
-    // EIA generation is in thousand MWh, nameplate capacity in MW
-    const result = new Map<string, number>();
-    const seenFuels = new Set<string>();
+      // Compute capacity factor = generation(MWh) / (capacity(MW) × 8760)
+      // EIA generation is in thousand MWh, nameplate capacity in MW
+      const result = new Map<string, number>();
+      const seenFuels = new Set<string>();
 
-    for (const row of rows) {
-      const fuelId = String(row.fueltypeid ?? '');
-      const sourceName = FUEL_ID_TO_SOURCE[fuelId];
-      if (!sourceName || seenFuels.has(fuelId)) continue;
+      for (const row of rows) {
+        const fuelId = String(row.fueltypeid ?? '');
+        const sourceName = FUEL_ID_TO_SOURCE[fuelId];
+        if (!sourceName || seenFuels.has(fuelId)) continue;
 
-      const genThousandMWh = Number(row.generation);
-      const capacityMW = Number(row['total-nameplate-capacity']);
+        const genThousandMWh = Number(row.generation);
+        const capacityMW = Number(row['total-nameplate-capacity']);
 
-      if (capacityMW > 0 && !isNaN(genThousandMWh)) {
-        const cf = (genThousandMWh * 1000) / (capacityMW * 8760);
-        if (cf > 0 && cf <= 1) {
-          result.set(sourceName, Number(cf.toFixed(3)));
-          seenFuels.add(fuelId);
+        if (capacityMW > 0 && !isNaN(genThousandMWh)) {
+          const cf = (genThousandMWh * 1000) / (capacityMW * 8760);
+          if (cf > 0 && cf <= 1) {
+            result.set(sourceName, Number(cf.toFixed(3)));
+            seenFuels.add(fuelId);
+          }
         }
       }
-    }
 
-    if (result.size > 0) {
-      capacityFactorCache.set(stateAbbr, result);
-      return result;
+      if (result.size > 0) {
+        return result;
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
-  } catch {
-    return null;
-  }
+  }, TTL_INFRASTRUCTURE);
 }
 
 /**

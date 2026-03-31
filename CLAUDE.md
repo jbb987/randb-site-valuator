@@ -100,6 +100,7 @@ src/
     electricityAverages.ts    # State-level electricity price averages (EIA data)
     eiaConsumption.ts         # State-level power consumption estimates (EIA data)
     powerMapData.ts           # Power map data fetching and availability calculations
+    requestCache.ts           # Shared in-memory request cache with dedup and TTL
     leads.ts                  # Lead Firestore operations (Sales CRM)
   types/
     index.ts                  # UserRole, Project, SiteInputs, AppraisalResult, SavedSite, SiteRequest, etc.
