@@ -1,4 +1,11 @@
-import type { GasAnalysisResult, PipelineInfo, PipelineType } from '../../lib/gasAnalysis';
+import type {
+  GasAnalysisResult,
+  PipelineInfo,
+  PipelineType,
+  GasQualityRating,
+  ReliabilityRating,
+  ComplianceStatus,
+} from '../../lib/gasAnalysis';
 
 // ── Shared sub-components ────────────────────────────────────────────────────
 
@@ -422,6 +429,308 @@ function LDCAssessmentSection({ result }: { result: GasAnalysisResult }) {
   );
 }
 
+// ── Section: Gas Quality Assessment (Phase 2) ───────────────────────────────
+
+const qualityRatingStyle: Record<GasQualityRating, { bg: string; text: string; label: string }> = {
+  'pipeline-quality':   { bg: 'bg-green-100',  text: 'text-green-800',  label: 'PIPELINE QUALITY' },
+  'acceptable':         { bg: 'bg-amber-100',  text: 'text-amber-800',  label: 'ACCEPTABLE' },
+  'requires-treatment': { bg: 'bg-red-100',    text: 'text-red-800',    label: 'REQUIRES TREATMENT' },
+};
+
+function GasQualitySection({ result }: { result: GasAnalysisResult }) {
+  const { gasQuality } = result;
+  const rs = qualityRatingStyle[gasQuality.rating];
+
+  return (
+    <SectionCard
+      title="Gas Quality Assessment"
+      badge={<StatusBadge variant="estimated" />}
+    >
+      <p className="text-xs text-[#7A756E] mb-4">
+        Pipeline-quality natural gas specifications per FERC/NAESB tariff standards.
+        Actual gas composition should be verified with the pipeline operator.
+      </p>
+
+      {/* Rating Badge */}
+      <div className="mb-4">
+        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${rs.bg} ${rs.text}`}>
+          {rs.label}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <p className="text-xs text-blue-700 mb-1">BTU Content (HHV)</p>
+          <p className="text-lg font-semibold font-heading text-blue-900">
+            {gasQuality.btuContent.typical} Btu/scf
+          </p>
+          <p className="text-xs text-blue-600 mt-0.5">
+            Range: {gasQuality.btuContent.min}–{gasQuality.btuContent.max} Btu/scf
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+          <p className="text-xs text-purple-700 mb-1">H₂S Limit</p>
+          <p className="text-lg font-semibold font-heading text-purple-900">
+            ≤{gasQuality.h2sLimit.maxGrains} gr/100scf
+          </p>
+          <p className="text-xs text-purple-600 mt-0.5">
+            ≈{gasQuality.h2sLimit.maxPpm} ppm maximum
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+          <p className="text-xs text-green-700 mb-1">Wobbe Index</p>
+          <p className="text-lg font-semibold font-heading text-green-900">
+            {gasQuality.wobbeIndex.typical} Btu/scf
+          </p>
+          <p className="text-xs text-green-600 mt-0.5">
+            Range: {gasQuality.wobbeIndex.min}–{gasQuality.wobbeIndex.max} Btu/scf
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-stone-50 border border-[#D8D5D0] px-4 py-3">
+        <p className="text-sm text-[#201F1E]">{gasQuality.note}</p>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ── Section: Supply Reliability Score (Phase 2) ─────────────────────────────
+
+function reliabilityColor(rating: ReliabilityRating) {
+  if (rating === 'high')     return 'text-green-700';
+  if (rating === 'moderate') return 'text-amber-700';
+  return 'text-red-700';
+}
+
+function reliabilityBg(rating: ReliabilityRating) {
+  if (rating === 'high')     return 'bg-green-50 border-green-200';
+  if (rating === 'moderate') return 'bg-amber-50 border-amber-200';
+  return 'bg-red-50 border-red-200';
+}
+
+function SupplyReliabilitySection({ result }: { result: GasAnalysisResult }) {
+  const { supplyReliability: sr } = result;
+
+  return (
+    <SectionCard title="Supply Reliability Score" badge={<StatusBadge variant="estimated" />}>
+      <p className="text-xs text-[#7A756E] mb-4">
+        Reliability assessment based on post-Winter Storm Uri weatherization status, curtailment history,
+        and regional storage availability.
+      </p>
+
+      {/* Score Banner */}
+      <div className={`rounded-lg border px-4 py-3 mb-4 ${reliabilityBg(sr.rating)}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`text-2xl font-heading font-bold ${reliabilityColor(sr.rating)}`}>
+              {sr.overallScore}
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${reliabilityColor(sr.rating)}`}>
+                {sr.rating === 'high' && 'High Reliability'}
+                {sr.rating === 'moderate' && 'Moderate Reliability'}
+                {sr.rating === 'low' && 'Low Reliability'}
+              </p>
+              <p className={`text-xs ${reliabilityColor(sr.rating)}`}>out of 100</p>
+            </div>
+          </div>
+
+          {/* Weatherization badge */}
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            sr.weatherizationStatus.postUri
+              ? 'bg-green-100 text-green-800'
+              : 'bg-stone-100 text-stone-700'
+          }`}>
+            {sr.weatherizationStatus.postUri ? 'POST-URI COMPLIANT' : 'NO STATE MANDATE'}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        {/* Weatherization */}
+        <div className="rounded-xl border border-[#D8D5D0] bg-[#FAFAF9] p-4">
+          <p className="text-xs font-semibold text-[#201F1E] mb-2">Weatherization Status</p>
+          <p className="text-xs text-[#7A756E] leading-relaxed">{sr.weatherizationStatus.complianceNote}</p>
+        </div>
+
+        {/* Curtailment */}
+        <div className="rounded-xl border border-[#D8D5D0] bg-[#FAFAF9] p-4">
+          <p className="text-xs font-semibold text-[#201F1E] mb-2 flex items-center gap-2">
+            Curtailment History
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              sr.curtailmentHistory.riskLevel === 'low' ? 'bg-green-100 text-green-800' :
+              sr.curtailmentHistory.riskLevel === 'medium' ? 'bg-amber-100 text-amber-800' :
+              'bg-red-100 text-red-800'
+            }`}>
+              {sr.curtailmentHistory.riskLevel.toUpperCase()} RISK
+            </span>
+          </p>
+          <p className="text-xs text-[#7A756E] leading-relaxed mb-2">{sr.curtailmentHistory.note}</p>
+          {sr.curtailmentHistory.recentEvents.length > 0 && (
+            <ul className="text-xs text-[#7A756E] list-disc pl-4 space-y-0.5">
+              {sr.curtailmentHistory.recentEvents.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <StatCard
+        label="Regional Storage"
+        value={sr.storageFactor}
+        accent="blue"
+      />
+    </SectionCard>
+  );
+}
+
+// ── Section: Gas Pricing Context (Phase 2) ──────────────────────────────────
+
+function GasPricingSection({ result }: { result: GasAnalysisResult }) {
+  const { gasPricing } = result;
+
+  return (
+    <SectionCard title="Gas Pricing Context" badge={<StatusBadge variant="estimated" />}>
+      <p className="text-xs text-[#7A756E] mb-4">
+        Nearest liquid trading hub and estimated basis differentials. Actual pricing depends on
+        contract terms, transport agreements, and market conditions.
+      </p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <StatCard
+          label="Nearest Trading Hub"
+          value={gasPricing.nearestHub.name}
+          sub={gasPricing.nearestHub.pipelineIndex}
+          accent="blue"
+        />
+        <StatCard
+          label="Distance to Hub"
+          value={gasPricing.nearestHub.distanceMiles != null
+            ? `${gasPricing.nearestHub.distanceMiles} mi`
+            : '—'}
+          accent="blue"
+        />
+        <StatCard
+          label="Basis Differential"
+          value={`$${gasPricing.basisDifferential.low >= 0 ? '+' : ''}${gasPricing.basisDifferential.low.toFixed(2)} to $${gasPricing.basisDifferential.high >= 0 ? '+' : ''}${gasPricing.basisDifferential.high.toFixed(2)}`}
+          sub={gasPricing.basisDifferential.unit}
+          accent={gasPricing.basisDifferential.low < 0 ? 'green' : gasPricing.basisDifferential.high > 1 ? 'red' : 'amber'}
+        />
+        <StatCard
+          label="Transport Adder"
+          value={`$${gasPricing.transportAdder.low.toFixed(2)}–$${gasPricing.transportAdder.high.toFixed(2)}`}
+          sub={gasPricing.transportAdder.unit}
+          accent="blue"
+        />
+      </div>
+
+      <div className="rounded-lg bg-stone-50 border border-[#D8D5D0] px-4 py-3 mb-3">
+        <p className="text-sm text-[#201F1E]">{gasPricing.note}</p>
+      </div>
+
+      <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
+        <div className="flex items-start gap-2">
+          <svg className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-xs text-blue-800">
+            <strong>Benchmark:</strong> {gasPricing.henryHubBenchmark}
+          </p>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ── Section: Environmental Compliance Checklist (Phase 2) ───────────────────
+
+const complianceStatusStyle: Record<ComplianceStatus, { bg: string; text: string; label: string }> = {
+  'required':        { bg: 'bg-red-100',    text: 'text-red-800',    label: 'REQUIRED' },
+  'recommended':     { bg: 'bg-amber-100',  text: 'text-amber-800',  label: 'RECOMMENDED' },
+  'not-applicable':  { bg: 'bg-stone-100',  text: 'text-stone-600',  label: 'N/A' },
+};
+
+function EnvironmentalComplianceSection({ result }: { result: GasAnalysisResult }) {
+  const { environmentalCompliance: ec } = result;
+  const requiredCount = ec.items.filter((i) => i.status === 'required').length;
+  const recommendedCount = ec.items.filter((i) => i.status === 'recommended').length;
+
+  return (
+    <SectionCard title="Environmental Compliance Checklist" badge={<StatusBadge variant="action" />}>
+      <p className="text-xs text-[#7A756E] mb-4">
+        Permit and compliance requirements for natural gas generation
+        {ec.state ? ` in ${ec.state}` : ''}. This is an indicative checklist —
+        consult with environmental counsel for final determination.
+      </p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+        <StatCard
+          label="Required Permits"
+          value={String(requiredCount)}
+          accent="red"
+        />
+        <StatCard
+          label="Recommended"
+          value={String(recommendedCount)}
+          accent="amber"
+        />
+        <StatCard
+          label="Primary Authority"
+          value={ec.state === 'TX' ? 'TCEQ / RRC' : ec.state ? `${ec.state} DEQ` : 'State Agency'}
+          accent="blue"
+        />
+      </div>
+
+      {/* Compliance table */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px]">
+          <thead>
+            <tr className="border-b border-[#D8D5D0]">
+              <th className={thClass}>Permit / Requirement</th>
+              <th className={thClass}>Authority</th>
+              <th className={thClass}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ec.items.map((item, i) => {
+              const ss = complianceStatusStyle[item.status];
+              return (
+                <tr key={i} className="border-b border-[#D8D5D0]/60 hover:bg-[#FAFAF9] transition">
+                  <td className={tdClass}>
+                    <div>
+                      <span className="font-medium text-[#201F1E]">{item.item}</span>
+                      <p className="text-xs text-[#7A756E] mt-0.5 leading-relaxed">{item.detail}</p>
+                    </div>
+                  </td>
+                  <td className={`${tdClass} text-[#7A756E] text-xs`}>{item.authority}</td>
+                  <td className={tdClass}>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${ss.bg} ${ss.text}`}>
+                      {ss.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+        <div className="flex items-start gap-2">
+          <svg className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p className="text-xs text-amber-900">{ec.note}</p>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 // ── Main Export ───────────────────────────────────────────────────────────────
 
 export default function GasReport({ result }: { result: GasAnalysisResult }) {
@@ -458,12 +767,14 @@ export default function GasReport({ result }: { result: GasAnalysisResult }) {
             </p>
           </div>
           <div>
-            <p className="text-xs text-[#7A756E]">CC Daily Demand</p>
-            <p className="font-semibold text-[#201F1E]">{result.gasDemand.combinedCycle.dailyDemandMMscf} MMscf/day</p>
+            <p className="text-xs text-[#7A756E]">Supply Reliability</p>
+            <p className={`font-semibold ${reliabilityColor(result.supplyReliability.rating)}`}>
+              {result.supplyReliability.overallScore}/100 ({result.supplyReliability.rating})
+            </p>
           </div>
           <div>
-            <p className="text-xs text-[#7A756E]">Nearest Basin</p>
-            <p className="font-semibold text-[#201F1E]">{result.productionContext.nearestBasin ?? '—'}</p>
+            <p className="text-xs text-[#7A756E]">Nearest Trading Hub</p>
+            <p className="font-semibold text-[#201F1E]">{result.gasPricing.nearestHub.name}</p>
           </div>
         </div>
       </div>
@@ -474,6 +785,10 @@ export default function GasReport({ result }: { result: GasAnalysisResult }) {
       <LateralEstimateSection result={result} />
       <ProductionContextSection result={result} />
       <LDCAssessmentSection result={result} />
+      <GasQualitySection result={result} />
+      <SupplyReliabilitySection result={result} />
+      <GasPricingSection result={result} />
+      <EnvironmentalComplianceSection result={result} />
     </div>
   );
 }
