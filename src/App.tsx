@@ -11,6 +11,7 @@ import BroadbandLookupTool from './tools/BroadbandLookupTool';
 import GridPowerAnalyzer from './tools/GridPowerAnalyzer';
 import SalesCrmTool from './tools/SalesCrmTool';
 import SalesAdminDashboard from './tools/SalesAdminDashboard';
+import PowerCalculatorTool from './tools/PowerCalculatorTool';
 
 export default function App() {
   return (
@@ -61,6 +62,11 @@ export default function App() {
           <Route path="/sales-admin" element={
             <ProtectedRoute toolId="sales-admin">
               <SalesAdminDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/power-calculator" element={
+            <ProtectedRoute toolId="power-calculator">
+              <PowerCalculatorTool />
             </ProtectedRoute>
           } />
           {/* Redirect old route */}

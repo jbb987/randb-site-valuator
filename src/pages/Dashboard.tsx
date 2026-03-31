@@ -49,6 +49,13 @@ const tools: Tool[] = [
     icon: 'grid',
   },
   {
+    id: 'power-calculator',
+    name: 'Power Calculator',
+    description: 'Analyze power infrastructure, substations, and transmission lines for any location',
+    path: '/power-calculator',
+    icon: 'bolt',
+  },
+  {
     id: 'sales-crm',
     name: 'Leads',
     description: 'Manage and track sales leads through the outreach pipeline',
@@ -123,6 +130,13 @@ function ToolIcon({ type }: { type: string }) {
       </svg>
     );
   }
+  if (type === 'bolt') {
+    return (
+      <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    );
+  }
   if (type === 'users') {
     return (
       <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -169,23 +183,6 @@ export default function Dashboard() {
             </button>
           ))}
 
-          {/* Placeholder — Power Due Diligence Report (coming soon) */}
-          {role === 'admin' && (
-            <div className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-6 text-left opacity-75">
-              <div className="flex items-start justify-between mb-4">
-                <div className="h-10 w-10 rounded-lg bg-[#ED202B]/10 flex items-center justify-center">
-                  <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <span className="text-xs font-medium text-[#7A756E] bg-[#FAFAF9] rounded-full px-2.5 py-0.5">
-                  Coming Soon
-                </span>
-              </div>
-              <h3 className="font-heading font-semibold text-[#201F1E] mb-1">Power Due Diligence Report</h3>
-              <p className="text-sm text-[#7A756E]">Generate due diligence reports for power infrastructure</p>
-            </div>
-          )}
         </div>
       </main>
     </Layout>
