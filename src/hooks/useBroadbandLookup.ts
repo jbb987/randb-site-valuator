@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { lookupBroadband } from '../lib/broadbandLookup';
 import type { BroadbandResult } from '../types';
+import { parseCoordinates } from '../utils/parseCoordinates';
 
 interface UseBroadbandLookupReturn {
   loading: boolean;
@@ -8,17 +9,6 @@ interface UseBroadbandLookupReturn {
   result: BroadbandResult | null;
   lookup: (opts: { address?: string; coordinates?: string }) => Promise<BroadbandResult | null>;
   clear: () => void;
-}
-
-/** Parse a "lat, lng" string into numbers. Returns null if invalid. */
-function parseCoords(raw: string): { lat: number; lng: number } | null {
-  const parts = raw.split(',').map((s) => s.trim());
-  if (parts.length !== 2) return null;
-  const lat = parseFloat(parts[0]);
-  const lng = parseFloat(parts[1]);
-  if (isNaN(lat) || isNaN(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
-  return { lat, lng };
 }
 
 export function useBroadbandLookup(): UseBroadbandLookupReturn {
@@ -32,7 +22,7 @@ export function useBroadbandLookup(): UseBroadbandLookupReturn {
       setError(null);
 
       try {
-        const coords = opts.coordinates ? parseCoords(opts.coordinates) : null;
+        const coords = opts.coordinates ? parseCoordinates(opts.coordinates) : null;
         const res = await lookupBroadband({
           coordinates: coords ?? undefined,
           address: opts.address || undefined,

@@ -155,13 +155,13 @@ export default function SetupPanel({ inputs, onChange, onClose }: Props) {
                 className="overflow-hidden"
               >
                 <div className="space-y-3">
-                  <Field label="Coordinates" hint="Latitude, Longitude">
+                  <Field label="Coordinates" hint="Decimal or DMS format">
                     <input
                       type="text"
                       className={inputClass}
                       value={inputs.coordinates}
                       onChange={(e) => set('coordinates', e.target.value)}
-                      placeholder="41.1400, -104.8200"
+                      placeholder="28°39'22.0&quot;N 98°50'38.3&quot;W"
                     />
                   </Field>
                   <Field label="Prior Usage / Property Type">
