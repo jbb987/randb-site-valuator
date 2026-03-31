@@ -299,6 +299,37 @@ export interface Lead {
   updatedAt: number;
 }
 
+// ── Site Registry ─────────────────────────────────────────────────────────
+
+export interface SiteRegistryEntry {
+  id: string;
+  name: string;
+  address: string;
+  coordinates: { lat: number; lng: number };
+  acreage: number;
+  mwCapacity: number;
+  dollarPerAcreLow: number;
+  dollarPerAcreHigh: number;
+
+  // Project link
+  projectId?: string;
+
+  // Visibility & ownership
+  createdBy: string;
+  memberIds: string[];
+
+  // Tool results (populated as tools are run)
+  appraisalResult?: AppraisalResult | null;
+  infraResult?: Record<string, unknown> | null;
+  broadbandResult?: BroadbandResult | null;
+  piddrGeneratedAt?: number | null;
+
+  // Metadata
+  createdAt: number;
+  updatedAt: number;
+  detectedState?: string;
+}
+
 // Site Request types
 export interface SiteRequestSite {
   address: string;
