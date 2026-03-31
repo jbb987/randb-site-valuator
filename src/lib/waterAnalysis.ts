@@ -1,10 +1,17 @@
 /**
- * Water Analysis — Phase 1
+ * Water Analysis — Phase 1 & 2
  *
  * Data sources (all public, free):
+ * Phase 1:
  * - FEMA NFHL ArcGIS REST: Flood zone designation (hazards.fema.gov)
  * - USGS NLDI API: Stream/basin delineation and monitoring stations (api.water.usgs.gov/nldi)
  * - USFWS NWI ArcGIS REST: National Wetlands Inventory (fwspublicservices.wim.usgs.gov)
+ *
+ * Phase 2:
+ * - USGS NWIS IV: Groundwater monitoring wells (waterservices.usgs.gov) — CORS ✓
+ * - ESRI Live Feed: US Drought Intensity current conditions — CORS ✓
+ * - EPA ECHO: NPDES discharge permits (echodata.epa.gov) — CORS ✓ (2-step)
+ * - NOAA ACIS: Historical precipitation (data.rcc-acis.org) — CORS ✓
  *
  * CORS notes:
  * - FEMA NFHL: does NOT support CORS — proxied via Vite dev server (/api/fema)
@@ -15,9 +22,16 @@
  */
 
 import type {
+  DischargePermit,
+  DischargePermitsInfo,
+  DroughtInfo,
+  DroughtLevel,
   FloodRiskLevel,
   FloodZoneInfo,
+  GroundwaterInfo,
+  GroundwaterWell,
   MonitoringStation,
+  PrecipitationInfo,
   StreamInfo,
   WaterAnalysisResult,
   WetlandFeature,
@@ -355,6 +369,288 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
   return { hasWetlands: true, wetlands, nearestWetlandFt: bufferFt };
 }
 
+// ── Phase 2: USGS Groundwater Monitoring ─────────────────────────────────────
+
+/**
+ * USGS NWIS Instantaneous Values service.
+ * Parameter 72019 = depth to water level (ft below land surface).
+ * Uses bBox query to find active GW monitoring wells near the site.
+ * CORS: Access-Control-Allow-Origin: * ✓
+ */
+const USGS_IV_URL = 'https://waterservices.usgs.gov/nwis/iv/';
+
+async function fetchGroundwaterData(lat: number, lng: number): Promise<GroundwaterInfo> {
+  const bboxPad = 0.5;
+  const bbox = `${lng - bboxPad},${lat - bboxPad},${lng + bboxPad},${lat + bboxPad}`;
+
+  // Use last 90 days of data to ensure we get recent readings
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - 90);
+  const startDT = startDate.toISOString().split('T')[0];
+  const endDT = endDate.toISOString().split('T')[0];
+
+  const params = new URLSearchParams({
+    format: 'json',
+    bBox: bbox,
+    parameterCd: '72019',
+    siteType: 'GW',
+    siteStatus: 'active',
+    startDT,
+    endDT,
+  });
+
+  const res = await fetch(`${USGS_IV_URL}?${params}`, {
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`USGS NWIS returned HTTP ${res.status}`);
+
+  const data = await res.json();
+  const timeSeries: Array<Record<string, unknown>> = data?.value?.timeSeries ?? [];
+
+  if (timeSeries.length === 0) {
+    return { wells: [], wellCount: 0 };
+  }
+
+  const wells: GroundwaterWell[] = timeSeries.slice(0, 10).map((series) => {
+    const sourceInfo = series.sourceInfo as Record<string, unknown>;
+    const siteName = String(sourceInfo?.siteName ?? '');
+    const siteCode = (sourceInfo?.siteCode as Array<{ value: string }>)?.[0]?.value ?? '';
+    const values = (series.values as Array<{ value: Array<{ value: string; dateTime: string }> }>)?.[0]?.value ?? [];
+
+    // Find the latest non-null, non-sentinel reading
+    let depthToWaterFt: number | null = null;
+    let measurementDate: string | null = null;
+    for (let i = values.length - 1; i >= 0; i--) {
+      const v = values[i];
+      const num = parseFloat(v.value);
+      if (!isNaN(num) && num > -999000) {
+        depthToWaterFt = num;
+        measurementDate = v.dateTime ?? null;
+        break;
+      }
+    }
+
+    return {
+      siteNo: siteCode,
+      name: siteName,
+      depthToWaterFt,
+      measurementDate,
+      url: siteCode
+        ? `https://waterdata.usgs.gov/nwis/uv?site_no=${siteCode}`
+        : 'https://waterdata.usgs.gov',
+    };
+  });
+
+  return { wells, wellCount: timeSeries.length };
+}
+
+// ── Phase 2: US Drought Monitor ──────────────────────────────────────────────
+
+/**
+ * ESRI ArcGIS Online: US Drought Intensity — Current Conditions live feed.
+ * Layer 3 = current weekly USDM snapshot.
+ * Source: esri_livefeeds2 (public, no auth required)
+ * CORS: Access-Control-Allow-Origin: * ✓
+ */
+const DROUGHT_LAYER_URL =
+  'https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/US_Drought_Intensity_v1/FeatureServer/3/query';
+
+const DROUGHT_LABELS: Record<number, string> = {
+  0: 'D0 — Abnormally Dry',
+  1: 'D1 — Moderate Drought',
+  2: 'D2 — Severe Drought',
+  3: 'D3 — Extreme Drought',
+  4: 'D4 — Exceptional Drought',
+};
+
+function dmToLevel(dm: number): DroughtLevel {
+  const map: Record<number, DroughtLevel> = { 0: 'D0', 1: 'D1', 2: 'D2', 3: 'D3', 4: 'D4' };
+  return map[dm] ?? 'none';
+}
+
+async function fetchDroughtData(lat: number, lng: number): Promise<DroughtInfo> {
+  const geometry = JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } });
+
+  const params = new URLSearchParams({
+    geometry,
+    geometryType: 'esriGeometryPoint',
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: 'dm,ddate',
+    returnGeometry: 'false',
+    f: 'json',
+  });
+
+  const res = await fetch(`${DROUGHT_LAYER_URL}?${params}`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`Drought layer returned HTTP ${res.status}`);
+
+  const data = await res.json();
+  if (data.error) throw new Error(`Drought query error: ${data.error.message ?? data.error.code}`);
+
+  const features: Array<{ attributes: Record<string, unknown> }> = data.features ?? [];
+
+  if (features.length === 0) {
+    // No drought polygon = no drought conditions
+    return {
+      currentLevel: 'none',
+      levelLabel: 'No Drought',
+      measureDate: '',
+    };
+  }
+
+  const attrs = features[0].attributes;
+  const dm = typeof attrs.dm === 'number' ? attrs.dm : parseInt(String(attrs.dm ?? '-1'), 10);
+  const ddateMs = typeof attrs.ddate === 'number' ? attrs.ddate : null;
+
+  const measureDate = ddateMs
+    ? new Date(ddateMs).toISOString().split('T')[0]
+    : '';
+
+  const currentLevel = dm >= 0 ? dmToLevel(dm) : 'none';
+  const levelLabel = dm >= 0 ? (DROUGHT_LABELS[dm] ?? `D${dm}`) : 'No Drought';
+
+  return { currentLevel, levelLabel, measureDate };
+}
+
+// ── Phase 2: EPA ECHO Discharge Permits ──────────────────────────────────────
+
+/**
+ * EPA ECHO CWA REST services.
+ * Two-step: get_facilities returns a QueryID, then get_qid retrieves facilities.
+ * CORS: both endpoints return Access-Control-Allow-Origin headers ✓
+ */
+const ECHO_BASE = 'https://echodata.epa.gov/echo';
+const ECHO_RADIUS_MI = 10;
+
+async function fetchDischargePermits(lat: number, lng: number): Promise<DischargePermitsInfo> {
+  // Step 1: query to get a QueryID
+  const step1Params = new URLSearchParams({
+    output: 'JSON',
+    p_lat: String(lat),
+    p_long: String(lng),
+    p_radius: String(ECHO_RADIUS_MI),
+  });
+
+  const step1Res = await fetch(`${ECHO_BASE}/cwa_rest_services.get_facilities?${step1Params}`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!step1Res.ok) throw new Error(`EPA ECHO get_facilities returned HTTP ${step1Res.status}`);
+
+  const step1Data = await step1Res.json();
+  const results1 = step1Data?.Results ?? {};
+  const queryId: string = String(results1.QueryID ?? '');
+  const totalCount = parseInt(String(results1.QueryRows ?? '0'), 10);
+
+  if (!queryId) throw new Error('EPA ECHO did not return a QueryID');
+
+  if (totalCount === 0) {
+    return { permits: [], totalCount: 0, radiusMi: ECHO_RADIUS_MI };
+  }
+
+  // Step 2: retrieve actual facilities using the QueryID
+  const step2Params = new URLSearchParams({
+    qid: queryId,
+    pageno: '1',
+    output: 'JSON',
+  });
+
+  const step2Res = await fetch(`${ECHO_BASE}/cwa_rest_services.get_qid?${step2Params}`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!step2Res.ok) throw new Error(`EPA ECHO get_qid returned HTTP ${step2Res.status}`);
+
+  const step2Data = await step2Res.json();
+  const facilities: Array<Record<string, unknown>> = step2Data?.Results?.Facilities ?? [];
+
+  const permits: DischargePermit[] = facilities
+    .slice(0, 10)
+    .map((f) => ({
+      facilityName: String(f.CWPName ?? f.FacName ?? ''),
+      permitNumber: String(f.MasterExternalPermitNmbr ?? f.SourceID ?? ''),
+      permitStatus: String(f.CWPPermitStatusDesc ?? ''),
+      city: String(f.CWPCity ?? f.FacCity ?? ''),
+      state: String(f.CWPState ?? f.FacState ?? ''),
+    }))
+    .filter((p) => p.facilityName || p.permitNumber);
+
+  return { permits, totalCount, radiusMi: ECHO_RADIUS_MI };
+}
+
+// ── Phase 2: Historical Precipitation ────────────────────────────────────────
+
+/**
+ * NOAA Regional Climate Centers Applied Climate Information System (ACIS).
+ * Grid 1 = PRISM 800m climatological analysis.
+ * Returns daily precipitation (inches) — we aggregate to annual averages.
+ * CORS: Access-Control-Allow-Origin: * ✓
+ */
+const ACIS_URL = 'https://data.rcc-acis.org/GridData';
+const PRECIP_YEARS = 10;
+
+async function fetchPrecipitation(lat: number, lng: number): Promise<PrecipitationInfo> {
+  const endYear = new Date().getFullYear() - 1; // last completed year
+  const startYear = endYear - PRECIP_YEARS + 1;
+  const sdate = `${startYear}-01-01`;
+  const edate = `${endYear}-12-31`;
+
+  const params = new URLSearchParams({
+    loc: `${lng},${lat}`,
+    grid: '1',
+    sdate,
+    edate,
+    elems: 'pcpn',
+  });
+
+  const res = await fetch(`${ACIS_URL}?${params}`, {
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`NOAA ACIS returned HTTP ${res.status}`);
+
+  const data = await res.json();
+  const records: Array<[string, number | string | null]> = data?.data ?? [];
+
+  if (records.length === 0) {
+    throw new Error('NOAA ACIS returned no precipitation data for this location');
+  }
+
+  // Aggregate daily values to annual totals
+  const annualTotals: Record<string, number> = {};
+  const annualCounts: Record<string, number> = {};
+
+  for (const [date, val] of records) {
+    if (val === null || val === 'M' || val === 'T') continue;
+    const num = typeof val === 'number' ? val : parseFloat(String(val));
+    if (isNaN(num) || num < 0) continue;
+    const year = date.slice(0, 4);
+    annualTotals[year] = (annualTotals[year] ?? 0) + num;
+    annualCounts[year] = (annualCounts[year] ?? 0) + 1;
+  }
+
+  // Only include years with nearly complete data (≥350 days)
+  const completedYears = Object.keys(annualTotals).filter(
+    (y) => (annualCounts[y] ?? 0) >= 350,
+  );
+
+  if (completedYears.length === 0) {
+    throw new Error('Insufficient precipitation data — fewer than 350 valid days per year');
+  }
+
+  const totalInches = completedYears.reduce((sum, y) => sum + annualTotals[y], 0);
+  const avgAnnualInches = Math.round((totalInches / completedYears.length) * 10) / 10;
+
+  const firstYear = completedYears[0];
+  const lastYear = completedYears[completedYears.length - 1];
+  const dataYearsRange = firstYear === lastYear ? firstYear : `${firstYear}–${lastYear}`;
+
+  return {
+    avgAnnualInches,
+    dataYearsRange,
+    dataSource: 'NOAA ACIS / PRISM 800m Grid',
+  };
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 export interface WaterAnalysisOptions {
@@ -370,11 +666,29 @@ export async function analyzeWater(opts: WaterAnalysisOptions): Promise<WaterAna
     ({ lat, lng } = await geocodeAddress(opts.address));
   }
 
-  const [floodResult, streamResult, wetlandsResult] = await Promise.allSettled([
+  const [
+    floodResult,
+    streamResult,
+    wetlandsResult,
+    groundwaterResult,
+    droughtResult,
+    permitsResult,
+    precipResult,
+  ] = await Promise.allSettled([
     fetchFloodZone(lat, lng),
     fetchStreamData(lat, lng),
     fetchWetlands(lat, lng),
+    fetchGroundwaterData(lat, lng),
+    fetchDroughtData(lat, lng),
+    fetchDischargePermits(lat, lng),
+    fetchPrecipitation(lat, lng),
   ]);
+
+  function errMsg(r: PromiseSettledResult<unknown>, fallback: string): string | null {
+    return r.status === 'rejected'
+      ? (r.reason instanceof Error ? r.reason.message : fallback)
+      : null;
+  }
 
   return {
     lat,
@@ -382,21 +696,24 @@ export async function analyzeWater(opts: WaterAnalysisOptions): Promise<WaterAna
     analyzedAt: Date.now(),
 
     floodZone: floodResult.status === 'fulfilled' ? floodResult.value : null,
-    floodZoneError:
-      floodResult.status === 'rejected'
-        ? (floodResult.reason instanceof Error ? floodResult.reason.message : 'Flood zone lookup failed')
-        : null,
+    floodZoneError: errMsg(floodResult, 'Flood zone lookup failed'),
 
     stream: streamResult.status === 'fulfilled' ? streamResult.value : null,
-    streamError:
-      streamResult.status === 'rejected'
-        ? (streamResult.reason instanceof Error ? streamResult.reason.message : 'Stream data lookup failed')
-        : null,
+    streamError: errMsg(streamResult, 'Stream data lookup failed'),
 
     wetlands: wetlandsResult.status === 'fulfilled' ? wetlandsResult.value : null,
-    wetlandsError:
-      wetlandsResult.status === 'rejected'
-        ? (wetlandsResult.reason instanceof Error ? wetlandsResult.reason.message : 'Wetlands lookup failed')
-        : null,
+    wetlandsError: errMsg(wetlandsResult, 'Wetlands lookup failed'),
+
+    groundwater: groundwaterResult.status === 'fulfilled' ? groundwaterResult.value : null,
+    groundwaterError: errMsg(groundwaterResult, 'Groundwater lookup failed'),
+
+    drought: droughtResult.status === 'fulfilled' ? droughtResult.value : null,
+    droughtError: errMsg(droughtResult, 'Drought data lookup failed'),
+
+    dischargePermits: permitsResult.status === 'fulfilled' ? permitsResult.value : null,
+    dischargePermitsError: errMsg(permitsResult, 'Discharge permits lookup failed'),
+
+    precipitation: precipResult.status === 'fulfilled' ? precipResult.value : null,
+    precipitationError: errMsg(precipResult, 'Precipitation data lookup failed'),
   };
 }

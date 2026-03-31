@@ -41,7 +41,7 @@ export default function WaterAnalysisTool() {
             Water Analysis
           </h2>
           <p className="text-sm text-[#7A756E] mt-0.5">
-            Enter site coordinates or address to analyze flood zones, stream networks, and wetlands.
+            Enter site coordinates or address to analyze flood zones, stream networks, wetlands, groundwater, drought, discharge permits, and precipitation.
           </p>
         </div>
 
@@ -154,7 +154,7 @@ export default function WaterAnalysisTool() {
               Enter coordinates or an address above and click <strong>Analyze</strong> to generate a water due diligence report.
             </p>
             <p className="text-xs text-[#7A756E] mt-2">
-              Covers FEMA flood zones · USGS stream networks · USFWS wetlands
+              Covers FEMA flood zones · USGS stream networks · USFWS wetlands · groundwater · drought · NPDES permits · precipitation
             </p>
           </div>
         )}
