@@ -1,16 +1,7 @@
+import { parseCoordinates } from '../../utils/parseCoordinates';
+
 interface Props {
   coordinates: string;
-}
-
-function parseCoordinates(coords: string | undefined): { lat: number; lng: number } | null {
-  if (!coords || !coords.trim()) return null;
-  const parts = coords.split(',').map((s) => s.trim());
-  if (parts.length !== 2) return null;
-  const lat = parseFloat(parts[0]);
-  const lng = parseFloat(parts[1]);
-  if (isNaN(lat) || isNaN(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
-  return { lat, lng };
 }
 
 export default function SiteMapCard({ coordinates }: Props) {
