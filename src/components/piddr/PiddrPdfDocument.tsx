@@ -269,8 +269,8 @@ const s = StyleSheet.create({
   badgeGray: { backgroundColor: '#F5F5F4', color: '#57534E' },
   // Misc
   paragraph: { ...body, fontSize: 9, color: TEXT_PRIMARY, lineHeight: 1.6, marginBottom: 8 },
-  noteText: { ...body, fontSize: 7.5, color: TEXT_MUTED, fontStyle: 'italic', marginTop: 4 },
-  noData: { ...body, fontSize: 8.5, color: TEXT_MUTED, fontStyle: 'italic', marginVertical: 6 },
+  noteText: { ...body, fontSize: 7.5, color: TEXT_MUTED, marginTop: 4 },
+  noData: { ...body, fontSize: 8.5, color: TEXT_MUTED, marginVertical: 6 },
 });
 
 // ── Data Props ─────────────────────────────────────────────────────────────
