@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import SiteSelector from '../components/SiteSelector';
 import type { SiteSelectorSite } from '../components/SiteSelector';
@@ -11,6 +11,15 @@ import InfrastructureResults from '../components/power-calculator/Infrastructure
 import { usePiddrReport } from '../hooks/usePiddrReport';
 import { usePdfExport } from '../hooks/usePdfExport';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
+import { useAuth } from '../hooks/useAuth';
+import {
+  saveAppraisalToSite,
+  saveInfraToSite,
+  saveBroadbandToSite,
+  savePiddrTimestamp,
+  createSiteEntry,
+} from '../lib/siteRegistry';
+import { parseCoordinates } from '../utils/parseCoordinates';
 import type { PiddrInputs } from '../hooks/usePiddrReport';
 
 const inputClass =
@@ -38,13 +47,75 @@ export default function PowerInfraReportTool() {
   const [ppaLow, setPpaLow] = useState(0);
   const [ppaHigh, setPpaHigh] = useState(0);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [wasManualEntry, setWasManualEntry] = useState(true);
+
+  const [savingToRegistry, setSavingToRegistry] = useState(false);
+  const [savedToRegistry, setSavedToRegistry] = useState(false);
+  const writebackDoneRef = useRef<number | null>(null);
 
   const report = usePiddrReport();
   const pdfExport = usePdfExport();
   const { sites: registrySites, loading: sitesLoading } = useSiteRegistry();
+  const { user } = useAuth();
+
+  // Write back results to site registry when report generation completes
+  useEffect(() => {
+    if (!selectedSiteId || report.isGenerating || !report.hasReport) return;
+    // Avoid re-triggering for the same generation
+    if (writebackDoneRef.current === report.generatedAt) return;
+    writebackDoneRef.current = report.generatedAt;
+
+    const promises: Promise<void>[] = [];
+    if (report.appraisal.data) {
+      promises.push(saveAppraisalToSite(selectedSiteId, report.appraisal.data));
+    }
+    if (report.infra.data) {
+      promises.push(saveInfraToSite(selectedSiteId, report.infra.data as unknown as Record<string, unknown>));
+    }
+    if (report.broadband.data) {
+      promises.push(saveBroadbandToSite(selectedSiteId, report.broadband.data));
+    }
+    promises.push(savePiddrTimestamp(selectedSiteId));
+
+    void Promise.all(promises).then(
+      () => console.log('[PIDDR] Results saved to site registry'),
+      (err) => console.error('[PIDDR] Failed to save results:', err),
+    );
+  }, [selectedSiteId, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data]);
+
+  async function handleSaveToRegistry() {
+    if (!user || !report.inputs) return;
+    setSavingToRegistry(true);
+    try {
+      const coords = parseCoordinates(report.inputs.coordinates);
+      const newId = await createSiteEntry({
+        name: report.inputs.siteName,
+        address: report.inputs.address,
+        coordinates: coords ?? { lat: 0, lng: 0 },
+        acreage: report.inputs.acreage,
+        mwCapacity: report.inputs.mw,
+        dollarPerAcreLow: report.inputs.ppaLow,
+        dollarPerAcreHigh: report.inputs.ppaHigh,
+        createdBy: user.uid,
+        memberIds: [user.uid],
+        appraisalResult: report.appraisal.data ?? null,
+        infraResult: report.infra.data ? (report.infra.data as unknown as Record<string, unknown>) : null,
+        broadbandResult: report.broadband.data ?? null,
+        piddrGeneratedAt: report.generatedAt ?? Date.now(),
+      });
+      setSelectedSiteId(newId);
+      setSavedToRegistry(true);
+      console.log('[PIDDR] Site saved to registry:', newId);
+    } catch (err) {
+      console.error('[PIDDR] Failed to save site to registry:', err);
+    } finally {
+      setSavingToRegistry(false);
+    }
+  }
 
   function handleSiteSelect(site: SiteSelectorSite) {
     setSelectedSiteId(site.id);
+    setWasManualEntry(false);
     setSiteName(site.name);
     if (site.address) setAddress(site.address);
     if (site.coordinates) {
@@ -56,6 +127,8 @@ export default function PowerInfraReportTool() {
 
   function handleSiteClear() {
     setSelectedSiteId(null);
+    setWasManualEntry(true);
+    setSavedToRegistry(false);
   }
 
   const canExportPdf = report.hasReport && !report.isGenerating && report.inputs && report.generatedAt;
@@ -276,6 +349,41 @@ export default function PowerInfraReportTool() {
                 >
                   Clear Report
                 </button>
+
+                {/* Save to My Sites — only show for manual entry (no registry site selected) */}
+                {wasManualEntry && !savedToRegistry && (
+                  <button
+                    type="button"
+                    onClick={handleSaveToRegistry}
+                    disabled={savingToRegistry}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[#ED202B] bg-white px-4 py-3 text-sm font-medium text-[#ED202B] transition hover:bg-[#ED202B]/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {savingToRegistry ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Save to My Sites
+                      </>
+                    )}
+                  </button>
+                )}
+                {savedToRegistry && (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Saved to site registry
+                  </span>
+                )}
               </>
             )}
             {pdfExport.error && (

@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSites } from '../hooks/useSites';
 import { useProjects } from '../hooks/useProjects';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
+import { saveAppraisalToSite } from '../lib/siteRegistry';
 import Layout from '../components/Layout';
 import SiteSelector from '../components/SiteSelector';
 import type { SiteSelectorSite } from '../components/SiteSelector';
@@ -98,6 +99,16 @@ export default function SiteAppraiserTool() {
   const loading = sitesLoading || projectsLoading;
   const inputs = activeSite?.inputs ?? emptyInputs;
   const result = useAppraisal(inputs);
+
+  // Write back appraisal results to site registry when they change
+  useEffect(() => {
+    if (selectedRegistrySiteId && result && result.energizedValue > 0) {
+      void saveAppraisalToSite(selectedRegistrySiteId, result).then(
+        () => console.log('[SiteAppraiser] Appraisal saved to site registry'),
+        (err) => console.error('[SiteAppraiser] Failed to save appraisal:', err),
+      );
+    }
+  }, [selectedRegistrySiteId, result]);
 
   // For employees, only show sites belonging to their visible projects
   const visibleProjectIds = new Set(projects.map((p) => p.id));

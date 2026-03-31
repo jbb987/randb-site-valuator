@@ -4,6 +4,7 @@ import SiteSelector from '../components/SiteSelector';
 import type { SiteSelectorSite } from '../components/SiteSelector';
 import { useInfraLookup } from '../hooks/useInfraLookup';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
+import { saveInfraToSite } from '../lib/siteRegistry';
 import InfrastructureResults from '../components/power-calculator/InfrastructureResults';
 import type { InfrastructureData } from '../components/power-calculator/InfrastructureResults';
 
@@ -51,7 +52,7 @@ export default function PowerCalculatorTool() {
     const res = await lookup({ coordinates, address });
     if (res) {
       setHasRunAnalysis(true);
-      setData({
+      const infraData: InfrastructureData = {
         iso: res.iso.length > 0 ? res.iso.join(' / ') : 'Not Available',
         utilityTerritory: res.utilityTerritory.length > 0 ? res.utilityTerritory.join(' / ') : 'Not Available',
         tsp: res.tsp.length > 0 ? res.tsp.join(' / ') : 'Not Available',
@@ -65,7 +66,16 @@ export default function PowerCalculatorTool() {
         electricityPrice: res.electricityPrice ?? null,
         detectedState: res.detectedState ?? null,
         lastAnalyzedAt: Date.now(),
-      });
+      };
+      setData(infraData);
+
+      // Write back to site registry if a site is selected
+      if (selectedSiteId) {
+        void saveInfraToSite(selectedSiteId, infraData as unknown as Record<string, unknown>).then(
+          () => console.log('[PowerCalculator] Infra results saved to site registry'),
+          (err) => console.error('[PowerCalculator] Failed to save infra results:', err),
+        );
+      }
     }
   }
 

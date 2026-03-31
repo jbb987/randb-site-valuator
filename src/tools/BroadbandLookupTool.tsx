@@ -5,6 +5,7 @@ import SiteSelector from '../components/SiteSelector';
 import type { SiteSelectorSite } from '../components/SiteSelector';
 import { useBroadbandLookup } from '../hooks/useBroadbandLookup';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
+import { saveBroadbandToSite } from '../lib/siteRegistry';
 
 export default function BroadbandLookupTool() {
   const [address, setAddress] = useState('');
@@ -18,13 +19,21 @@ export default function BroadbandLookupTool() {
     ? coordinates.trim().length > 0
     : address.trim().length > 0;
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!canAnalyze) return;
-    lookup(
+    const res = await lookup(
       inputMode === 'coordinates'
         ? { coordinates: coordinates.trim() }
         : { address: address.trim() },
     );
+
+    // Write back to site registry if a site is selected
+    if (res && selectedSiteId) {
+      void saveBroadbandToSite(selectedSiteId, res).then(
+        () => console.log('[BroadbandLookup] Results saved to site registry'),
+        (err) => console.error('[BroadbandLookup] Failed to save results:', err),
+      );
+    }
   };
 
   const handleClear = () => {
