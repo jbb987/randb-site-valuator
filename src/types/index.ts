@@ -7,6 +7,7 @@ export type ToolId =
   | 'broadband-lookup'
   | 'grid-power-analyzer'
   | 'power-calculator'
+  | 'piddr'
   | 'sales-crm'
   | 'sales-admin';
 
@@ -17,6 +18,7 @@ export const ALL_TOOL_IDS: ToolId[] = [
   'broadband-lookup',
   'grid-power-analyzer',
   'power-calculator',
+  'piddr',
   'sales-crm',
   'sales-admin',
 ];
@@ -28,6 +30,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   'broadband-lookup': 'Broadband Lookup',
   'grid-power-analyzer': 'Grid Power Analyzer',
   'power-calculator': 'Power Calculator',
+  'piddr': 'Infrastructure Report',
   'sales-crm': 'Leads',
   'sales-admin': 'Sales Dashboard',
 };
