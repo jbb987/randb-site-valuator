@@ -95,6 +95,7 @@ src/
     useLeads.ts               # Lead CRUD operations (Sales CRM)
     useAnimatedNumber.ts      # Number animation utility
     useInfraData.ts           # Cached infrastructure data hooks (plants, substations, EIA, solar)
+    useUserHistory.ts         # Per-user activity history (log, subscribe, clear)
   lib/
     firebase.ts               # Firebase config
     projects.ts               # Project Firestore operations
@@ -105,10 +106,11 @@ src/
     powerMapData.ts           # Power map data fetching and availability calculations
     requestCache.ts           # Shared in-memory request cache with dedup and TTL
     leads.ts                  # Lead Firestore operations (Sales CRM)
+    userHistory.ts            # User activity history Firestore operations
     firebaseInfra.ts          # Firestore CRUD for cached infrastructure data
     infraIngestion.ts         # Admin data ingestion pipeline (ArcGIS → Firestore)
   types/
-    index.ts                  # UserRole, Project, SiteInputs, AppraisalResult, SavedSite, SiteRequest, etc.
+    index.ts                  # UserRole, Project, SiteInputs, AppraisalResult, SavedSite, SiteRequest, UserActivityEntry, etc.
     infrastructure.ts         # CachedPowerPlant, CachedSubstation, EiaStateData, SolarStateAverage, InfraRefreshLog
   utils/
     format.ts                 # Formatting helpers

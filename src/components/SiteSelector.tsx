@@ -16,6 +16,7 @@ export interface SiteSelectorProps {
   onSelect: (site: SiteSelectorSite) => void;
   onClear: () => void;
   placeholder?: string;
+  recentSiteIds?: string[];
 }
 
 export default function SiteSelector({
@@ -25,6 +26,7 @@ export default function SiteSelector({
   onSelect,
   onClear,
   placeholder = 'Select a saved site...',
+  recentSiteIds,
 }: SiteSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -56,6 +58,18 @@ export default function SiteSelector({
 
   // Sort: alphabetical by name
   const sorted = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Split into recent and rest when recentSiteIds is provided
+  const recentSet = new Set(recentSiteIds ?? []);
+  const hasRecent = recentSiteIds && recentSiteIds.length > 0;
+  const recentSites = hasRecent
+    ? recentSiteIds!
+        .map((id) => filtered.find((s) => s.id === id))
+        .filter((s): s is SiteSelectorSite => s != null)
+    : [];
+  const restSites = hasRecent
+    ? sorted.filter((s) => !recentSet.has(s.id))
+    : sorted;
 
   if (sites.length === 0 && !loading) return null;
 
@@ -148,27 +162,80 @@ export default function SiteSelector({
                     </p>
                   </div>
                 ) : (
-                  sorted.map((site) => (
-                    <button
-                      key={site.id}
-                      type="button"
-                      onClick={() => {
-                        onSelect(site);
-                        setOpen(false);
-                        setSearch('');
-                      }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[#F5F4F2] transition flex flex-col gap-0.5"
-                    >
-                      <span className="text-sm font-medium text-[#201F1E] truncate">
-                        {site.name}
-                      </span>
-                      {site.address && (
-                        <span className="text-xs text-[#7A756E] truncate">
-                          {site.address}
+                  <>
+                    {/* Recent section */}
+                    {recentSites.length > 0 && (
+                      <>
+                        <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] bg-[#F5F4F2]">
+                          Recent
+                        </div>
+                        {recentSites.map((site) => (
+                          <button
+                            key={`recent-${site.id}`}
+                            type="button"
+                            onClick={() => {
+                              onSelect(site);
+                              setOpen(false);
+                              setSearch('');
+                            }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-[#F5F4F2] transition flex items-center gap-2"
+                          >
+                            {/* Clock icon */}
+                            <svg
+                              className="h-3.5 w-3.5 text-[#7A756E] shrink-0"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={1.5}
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="text-sm font-medium text-[#201F1E] truncate">
+                                {site.name}
+                              </span>
+                              {site.address && (
+                                <span className="text-xs text-[#7A756E] truncate">
+                                  {site.address}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {/* All sites section */}
+                    {recentSites.length > 0 && restSites.length > 0 && (
+                      <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#7A756E] bg-[#F5F4F2]">
+                        All Sites
+                      </div>
+                    )}
+                    {restSites.map((site) => (
+                      <button
+                        key={site.id}
+                        type="button"
+                        onClick={() => {
+                          onSelect(site);
+                          setOpen(false);
+                          setSearch('');
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-[#F5F4F2] transition flex flex-col gap-0.5"
+                      >
+                        <span className="text-sm font-medium text-[#201F1E] truncate">
+                          {site.name}
                         </span>
-                      )}
-                    </button>
-                  ))
+                        {site.address && (
+                          <span className="text-xs text-[#7A756E] truncate">
+                            {site.address}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
 

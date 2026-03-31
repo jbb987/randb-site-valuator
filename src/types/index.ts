@@ -330,6 +330,19 @@ export interface SiteRegistryEntry {
   detectedState?: string;
 }
 
+// ── User Activity History ────────────────────────────────────────────────
+
+export interface UserActivityEntry {
+  id: string;
+  userId: string;
+  toolId: ToolId;
+  siteRegistryId?: string;  // linked registry site, if any
+  siteName: string;
+  siteAddress: string;
+  action: string;            // e.g. "Generated PIDDR report", "Ran broadband lookup", "Computed land valuation"
+  createdAt: number;
+}
+
 // Site Request types
 export interface SiteRequestSite {
   address: string;
