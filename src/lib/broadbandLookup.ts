@@ -20,6 +20,7 @@ import type {
 } from '../types';
 import { MOBILE_TECH_CODE_MAP, TECH_CODE_MAP } from '../types';
 import { geocodeAddress } from './infraLookup';
+import { cachedFetch, TTL_LOCATION, TTL_INFRASTRUCTURE } from './requestCache';
 
 // ── Endpoints ───────────────────────────────────────────────────────────────
 
@@ -66,49 +67,49 @@ async function queryCensusBlock(lat: number, lng: number): Promise<CensusBlockRe
     format: 'json',
   });
 
-  const res = await fetch(`${FCC_CENSUS_URL}?${params}`);
-  if (!res.ok) throw new Error(`FCC Census API returned ${res.status}`);
+  const cacheKey = `fcc:census:${lat.toFixed(5)},${lng.toFixed(5)}`;
+  return cachedFetch(cacheKey, async () => {
+    const res = await fetch(`${FCC_CENSUS_URL}?${params}`);
+    if (!res.ok) throw new Error(`FCC Census API returned ${res.status}`);
 
-  const data = await res.json();
-  if (data.status !== 'OK' || !data.Block?.FIPS) {
-    throw new Error('Could not resolve census block for these coordinates.');
-  }
+    const data = await res.json();
+    if (data.status !== 'OK' || !data.Block?.FIPS) {
+      throw new Error('Could not resolve census block for these coordinates.');
+    }
 
-  return {
-    fips: data.Block.FIPS,
-    countyFips: data.County?.FIPS ?? data.Block.FIPS.slice(0, 5),
-    countyName: data.County?.name ?? '',
-    stateCode: data.State?.code ?? '',
-    stateName: data.State?.name ?? '',
-  };
+    return {
+      fips: data.Block.FIPS,
+      countyFips: data.County?.FIPS ?? data.Block.FIPS.slice(0, 5),
+      countyName: data.County?.name ?? '',
+      stateCode: data.State?.code ?? '',
+      stateName: data.State?.name ?? '',
+    };
+  }, TTL_LOCATION);
 }
 
 // ── ArcGIS FCC BDC Query ────────────────────────────────────────────────────
 
 /**
  * Discover the working FeatureServer URL by trying multiple vintage names.
- * Caches the result for the session.
+ * Result is cached via the shared request cache.
  */
-let _cachedServiceUrl: string | null = null;
-
 async function discoverServiceUrl(): Promise<string | null> {
-  if (_cachedServiceUrl) return _cachedServiceUrl;
-
-  for (const name of BDC_SERVICE_NAMES) {
-    const url = `${ARCGIS_FCC_BDC}/${name}/FeatureServer`;
-    try {
-      const res = await fetch(`${url}?f=json`, { signal: AbortSignal.timeout(5000) });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data.layers && data.layers.length > 0) {
-        _cachedServiceUrl = url;
-        return url;
+  return cachedFetch('bdc:serviceUrl', async () => {
+    for (const name of BDC_SERVICE_NAMES) {
+      const url = `${ARCGIS_FCC_BDC}/${name}/FeatureServer`;
+      try {
+        const res = await fetch(`${url}?f=json`, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data.layers && data.layers.length > 0) {
+          return url;
+        }
+      } catch {
+        continue;
       }
-    } catch {
-      continue;
     }
-  }
-  return null;
+    return null;
+  }, TTL_INFRASTRUCTURE);
 }
 
 /** Block-level summary attributes from the ArcGIS BDC layer. */
@@ -160,51 +161,54 @@ async function findBlock(
   lng: number,
   fips: string,
 ): Promise<BlockSummary | null> {
-  // Strategy 1: spatial point query
-  const spatialUrl =
-    `${serviceUrl}/${BLOCK_LAYER}/query?` +
-    `where=1%3D1` +
-    `&geometry=${lng}%2C${lat}` +
-    `&geometryType=esriGeometryPoint` +
-    `&spatialRel=esriSpatialRelIntersects` +
-    `&inSR=4326` +
-    `&outFields=*` +
-    `&returnGeometry=false` +
-    `&resultRecordCount=1` +
-    `&f=json`;
+  const cacheKey = `bdc:block:${lat.toFixed(5)},${lng.toFixed(5)}:${fips}`;
+  return cachedFetch(cacheKey, async () => {
+    // Strategy 1: spatial point query
+    const spatialUrl =
+      `${serviceUrl}/${BLOCK_LAYER}/query?` +
+      `where=1%3D1` +
+      `&geometry=${lng}%2C${lat}` +
+      `&geometryType=esriGeometryPoint` +
+      `&spatialRel=esriSpatialRelIntersects` +
+      `&inSR=4326` +
+      `&outFields=*` +
+      `&returnGeometry=false` +
+      `&resultRecordCount=1` +
+      `&f=json`;
 
-  try {
-    const res = await fetch(spatialUrl, { signal: AbortSignal.timeout(10000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.error && data.features?.length > 0) {
-        const a = data.features[0].attributes;
-        return { attributes: a, objectId: a.OBJECTID ?? a.FID ?? null };
+    try {
+      const res = await fetch(spatialUrl, { signal: AbortSignal.timeout(10000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.error && data.features?.length > 0) {
+          const a = data.features[0].attributes;
+          return { attributes: a, objectId: a.OBJECTID ?? a.FID ?? null };
+        }
       }
-    }
-  } catch { /* fall through */ }
+    } catch { /* fall through */ }
 
-  // Strategy 2: attribute query by FIPS code
-  const fipsUrl =
-    `${serviceUrl}/${BLOCK_LAYER}/query?` +
-    `where=GEOID%3D%27${fips}%27+OR+geoid20%3D%27${fips}%27` +
-    `&outFields=*` +
-    `&returnGeometry=false` +
-    `&resultRecordCount=1` +
-    `&f=json`;
+    // Strategy 2: attribute query by FIPS code
+    const fipsUrl =
+      `${serviceUrl}/${BLOCK_LAYER}/query?` +
+      `where=GEOID%3D%27${fips}%27+OR+geoid20%3D%27${fips}%27` +
+      `&outFields=*` +
+      `&returnGeometry=false` +
+      `&resultRecordCount=1` +
+      `&f=json`;
 
-  try {
-    const res = await fetch(fipsUrl, { signal: AbortSignal.timeout(10000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.error && data.features?.length > 0) {
-        const a = data.features[0].attributes;
-        return { attributes: a, objectId: a.OBJECTID ?? a.FID ?? null };
+    try {
+      const res = await fetch(fipsUrl, { signal: AbortSignal.timeout(10000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.error && data.features?.length > 0) {
+          const a = data.features[0].attributes;
+          return { attributes: a, objectId: a.OBJECTID ?? a.FID ?? null };
+        }
       }
-    }
-  } catch { /* fall through */ }
+    } catch { /* fall through */ }
 
-  return null;
+    return null;
+  }, TTL_LOCATION);
 }
 
 /**
@@ -220,31 +224,34 @@ async function queryProvidersByGeoid(
   serviceUrl: string,
   geoid: string,
 ): Promise<BroadbandProvider[]> {
-  try {
-    const url =
-      `${serviceUrl}/${BLOCK_PROVIDER_TABLE}/query?` +
-      `where=${encodeURIComponent(`GEOID='${geoid}'`)}` +
-      `&outFields=*` +
-      `&returnGeometry=false` +
-      `&resultRecordCount=50` +
-      `&f=json`;
+  const key = `bdc:providers:${geoid}`;
+  return cachedFetch(key, async () => {
+    try {
+      const url =
+        `${serviceUrl}/${BLOCK_PROVIDER_TABLE}/query?` +
+        `where=${encodeURIComponent(`GEOID='${geoid}'`)}` +
+        `&outFields=*` +
+        `&returnGeometry=false` +
+        `&resultRecordCount=50` +
+        `&f=json`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) return [];
 
-    const data = await res.json();
-    if (data.error || !data.features?.length) return [];
+      const data = await res.json();
+      if (data.error || !data.features?.length) return [];
 
-    const providers: BroadbandProvider[] = [];
-    for (const f of data.features) {
-      const p = parseProviderRecord(f.attributes);
-      if (p) providers.push(p);
+      const providers: BroadbandProvider[] = [];
+      for (const f of data.features) {
+        const p = parseProviderRecord(f.attributes);
+        if (p) providers.push(p);
+      }
+
+      return deduplicateProviders(providers);
+    } catch {
+      return [];
     }
-
-    return deduplicateProviders(providers);
-  } catch {
-    return [];
-  }
+  }, TTL_LOCATION);
 }
 
 /**
@@ -458,34 +465,37 @@ function detectIso(lat: number, lng: number): string {
 const COUNTY_PROVIDER_TABLE = 10; // "BDC Records for Counties"
 
 async function queryCountyProviders(countyFips: string): Promise<BroadbandProvider[]> {
-  const serviceUrl = await discoverServiceUrl();
-  if (!serviceUrl) return [];
+  const key = `bdc:county:${countyFips}`;
+  return cachedFetch(key, async () => {
+    const serviceUrl = await discoverServiceUrl();
+    if (!serviceUrl) return [];
 
-  try {
-    const url =
-      `${serviceUrl}/${COUNTY_PROVIDER_TABLE}/query?` +
-      `where=${encodeURIComponent(`GEOID='${countyFips}'`)}` +
-      `&outFields=*` +
-      `&returnGeometry=false` +
-      `&resultRecordCount=200` +
-      `&f=json`;
+    try {
+      const url =
+        `${serviceUrl}/${COUNTY_PROVIDER_TABLE}/query?` +
+        `where=${encodeURIComponent(`GEOID='${countyFips}'`)}` +
+        `&outFields=*` +
+        `&returnGeometry=false` +
+        `&resultRecordCount=200` +
+        `&f=json`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) return [];
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) return [];
 
-    const data = await res.json();
-    if (data.error || !data.features?.length) return [];
+      const data = await res.json();
+      if (data.error || !data.features?.length) return [];
 
-    const providers: BroadbandProvider[] = [];
-    for (const f of data.features) {
-      const p = parseProviderRecord(f.attributes);
-      if (p) providers.push(p);
+      const providers: BroadbandProvider[] = [];
+      for (const f of data.features) {
+        const p = parseProviderRecord(f.attributes);
+        if (p) providers.push(p);
+      }
+
+      return deduplicateProviders(providers);
+    } catch {
+      return [];
     }
-
-    return deduplicateProviders(providers);
-  } catch {
-    return [];
-  }
+  }, TTL_LOCATION);
 }
 
 // ── Nearby Fiber Routes ─────────────────────────────────────────────────────
@@ -513,60 +523,63 @@ function fiberEnvelope(lat: number, lng: number): string {
 }
 
 async function queryNearbyFiber(lat: number, lng: number): Promise<NearbyFiberRoute[]> {
-  try {
-    const url =
-      `${FIBER_ROUTES_URL}/query?` +
-      `where=1%3D1` +
-      `&geometry=${encodeURIComponent(fiberEnvelope(lat, lng))}` +
-      `&geometryType=esriGeometryEnvelope` +
-      `&spatialRel=esriSpatialRelIntersects` +
-      `&inSR=4326&outSR=4326` +
-      `&outFields=*` +
-      `&returnGeometry=true` +
-      `&resultRecordCount=50` +
-      `&f=json`;
+  const key = `fiber:nearby:${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return cachedFetch(key, async () => {
+    try {
+      const url =
+        `${FIBER_ROUTES_URL}/query?` +
+        `where=1%3D1` +
+        `&geometry=${encodeURIComponent(fiberEnvelope(lat, lng))}` +
+        `&geometryType=esriGeometryEnvelope` +
+        `&spatialRel=esriSpatialRelIntersects` +
+        `&inSR=4326&outSR=4326` +
+        `&outFields=*` +
+        `&returnGeometry=true` +
+        `&resultRecordCount=50` +
+        `&f=json`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) return [];
 
-    const data = await res.json();
-    if (data.error) return [];
+      const data = await res.json();
+      if (data.error) return [];
 
-    const routeMap = new Map<string, NearbyFiberRoute>();
+      const routeMap = new Map<string, NearbyFiberRoute>();
 
-    for (const f of data.features ?? []) {
-      const a = f.attributes as Record<string, unknown>;
-      const paths: number[][][] | undefined = f.geometry?.paths;
+      for (const f of data.features ?? []) {
+        const a = f.attributes as Record<string, unknown>;
+        const paths: number[][][] | undefined = f.geometry?.paths;
 
-      const name = String(a.NAME ?? a.Name ?? a.ROUTE_NAME ?? 'Unknown Route');
-      const owner = String(a.OWNER ?? a.Owner ?? a.OPERATOR ?? '');
+        const name = String(a.NAME ?? a.Name ?? a.ROUTE_NAME ?? 'Unknown Route');
+        const owner = String(a.OWNER ?? a.Owner ?? a.OPERATOR ?? '');
 
-      // Find closest vertex on the polyline
-      let minDist = Infinity;
-      if (paths) {
-        for (const path of paths) {
-          for (const pt of path) {
-            const d = haversineMi(lat, lng, pt[1], pt[0]); // [lng, lat]
-            if (d < minDist) minDist = d;
+        // Find closest vertex on the polyline
+        let minDist = Infinity;
+        if (paths) {
+          for (const path of paths) {
+            for (const pt of path) {
+              const d = haversineMi(lat, lng, pt[1], pt[0]); // [lng, lat]
+              if (d < minDist) minDist = d;
+            }
           }
+        }
+
+        const existing = routeMap.get(name);
+        if (!existing || minDist < existing.distanceMi) {
+          routeMap.set(name, {
+            name,
+            owner,
+            type: 'long-haul',
+            distanceMi: Math.round(minDist * 10) / 10,
+          });
         }
       }
 
-      const existing = routeMap.get(name);
-      if (!existing || minDist < existing.distanceMi) {
-        routeMap.set(name, {
-          name,
-          owner,
-          type: 'long-haul',
-          distanceMi: Math.round(minDist * 10) / 10,
-        });
-      }
+      return [...routeMap.values()].sort((a, b) => a.distanceMi - b.distanceMi);
+    } catch {
+      return [];
     }
-
-    return [...routeMap.values()].sort((a, b) => a.distanceMi - b.distanceMi);
-  } catch {
-    return [];
-  }
+  }, TTL_LOCATION);
 }
 
 // ── Mobile Broadband Coverage ────────────────────────────────────────────────
@@ -591,37 +604,40 @@ async function queryMobileCoverage(
   _lng: number,
   fips: string,
 ): Promise<MobileBroadbandProvider[]> {
-  const serviceUrl = await discoverServiceUrl();
-  if (!serviceUrl) return [];
+  const key = `bdc:mobile:${fips}`;
+  return cachedFetch(key, async () => {
+    const serviceUrl = await discoverServiceUrl();
+    if (!serviceUrl) return [];
 
-  try {
-    // Try the block-level detail table — mobile records use tech codes 300-600
-    const url =
-      `${serviceUrl}/${BLOCK_PROVIDER_TABLE}/query?` +
-      `where=${encodeURIComponent(
-        `GEOID='${fips}' AND (Technology=300 OR Technology=400 OR Technology=500 OR Technology=600)`,
-      )}` +
-      `&outFields=*` +
-      `&returnGeometry=false` +
-      `&resultRecordCount=50` +
-      `&f=json`;
+    try {
+      // Try the block-level detail table — mobile records use tech codes 300-600
+      const url =
+        `${serviceUrl}/${BLOCK_PROVIDER_TABLE}/query?` +
+        `where=${encodeURIComponent(
+          `GEOID='${fips}' AND (Technology=300 OR Technology=400 OR Technology=500 OR Technology=600)`,
+        )}` +
+        `&outFields=*` +
+        `&returnGeometry=false` +
+        `&resultRecordCount=50` +
+        `&f=json`;
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) return [];
 
-    const data = await res.json();
-    if (data.error || !data.features?.length) return [];
+      const data = await res.json();
+      if (data.error || !data.features?.length) return [];
 
-    const providers: MobileBroadbandProvider[] = [];
-    for (const f of data.features) {
-      const p = parseMobileProviderRecord(f.attributes);
-      if (p) providers.push(p);
+      const providers: MobileBroadbandProvider[] = [];
+      for (const f of data.features) {
+        const p = parseMobileProviderRecord(f.attributes);
+        if (p) providers.push(p);
+      }
+
+      return deduplicateMobileProviders(providers);
+    } catch {
+      return [];
     }
-
-    return deduplicateMobileProviders(providers);
-  } catch {
-    return [];
-  }
+  }, TTL_LOCATION);
 }
 
 /** Estimated mobile speeds by technology (conservative). */

@@ -19,6 +19,7 @@ import type {
 } from '../types';
 import { detectState } from './solarAverages';
 import { getStateElectricityAverage } from './electricityAverages';
+import { cachedFetch, TTL_LOCATION, TTL_INFRASTRUCTURE } from './requestCache';
 
 export interface InfraResult {
   iso: string[];
@@ -168,19 +169,22 @@ function envelope(lat: number, lng: number): string {
 }
 
 export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
-  const params = new URLSearchParams({
-    singleLine: address,
-    outFields: 'Match_addr',
-    maxLocations: '1',
-    f: 'json',
-  });
-  const res = await fetch(`${GEOCODE_URL}?${params}`);
-  if (!res.ok) throw new Error(`Geocode request failed (${res.status})`);
-  const data = await res.json();
-  if (!data.candidates?.length) {
-    throw new Error('Address could not be geocoded — check the address and try again.');
-  }
-  return { lat: data.candidates[0].location.y, lng: data.candidates[0].location.x };
+  const key = `geocode:${address.trim().toLowerCase()}`;
+  return cachedFetch(key, async () => {
+    const params = new URLSearchParams({
+      singleLine: address,
+      outFields: 'Match_addr',
+      maxLocations: '1',
+      f: 'json',
+    });
+    const res = await fetch(`${GEOCODE_URL}?${params}`);
+    if (!res.ok) throw new Error(`Geocode request failed (${res.status})`);
+    const data = await res.json();
+    if (!data.candidates?.length) {
+      throw new Error('Address could not be geocoded — check the address and try again.');
+    }
+    return { lat: data.candidates[0].location.y, lng: data.candidates[0].location.x };
+  }, TTL_INFRASTRUCTURE);
 }
 
 // ── Queries ─────────────────────────────────────────────────────────────────
@@ -195,86 +199,92 @@ interface LineFeature {
 }
 
 async function queryLinesWithGeometry(lat: number, lng: number): Promise<LineFeature[]> {
-  const url =
-    `${LAYERS.transmissionLines}/query?` +
-    `where=1%3D1` +
-    `&geometry=${encodeURIComponent(envelope(lat, lng))}` +
-    `&geometryType=esriGeometryEnvelope` +
-    `&spatialRel=esriSpatialRelIntersects` +
-    `&inSR=4326&outSR=4326` +
-    `&outFields=OWNER%2CVOLTAGE%2CVOLT_CLASS%2CSUB_1%2CSUB_2%2CSTATUS` +
-    `&returnGeometry=true` +
-    `&resultRecordCount=50` +
-    `&f=json`;
+  const key = `infra:lines:${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return cachedFetch(key, async () => {
+    const url =
+      `${LAYERS.transmissionLines}/query?` +
+      `where=1%3D1` +
+      `&geometry=${encodeURIComponent(envelope(lat, lng))}` +
+      `&geometryType=esriGeometryEnvelope` +
+      `&spatialRel=esriSpatialRelIntersects` +
+      `&inSR=4326&outSR=4326` +
+      `&outFields=OWNER%2CVOLTAGE%2CVOLT_CLASS%2CSUB_1%2CSUB_2%2CSTATUS` +
+      `&returnGeometry=true` +
+      `&resultRecordCount=50` +
+      `&f=json`;
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (data.error) return [];
-    return (data.features ?? [])
-      .map((f: { attributes: Record<string, unknown>; geometry?: { paths?: number[][][] } }) => {
-        const a = f.attributes;
-        const paths = f.geometry?.paths;
-        const firstPath = paths?.[0];
-        const lastPath = paths?.[paths.length - 1];
-        return {
-          line: {
-            owner: String(a.OWNER ?? ''),
-            voltage: Number(a.VOLTAGE) || 0,
-            voltClass: String(a.VOLT_CLASS ?? ''),
-            sub1: String(a.SUB_1 ?? ''),
-            sub2: String(a.SUB_2 ?? ''),
-            status: String(a.STATUS ?? ''),
-          } satisfies NearbyLine,
-          startPt: firstPath?.[0] ? [firstPath[0][0], firstPath[0][1]] as [number, number] : null,
-          endPt: lastPath
-            ? [lastPath[lastPath.length - 1][0], lastPath[lastPath.length - 1][1]] as [number, number]
-            : null,
-        } satisfies LineFeature;
-      })
-      .sort((a: LineFeature, b: LineFeature) => b.line.voltage - a.line.voltage);
-  } catch {
-    return [];
-  }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (data.error) return [];
+      return (data.features ?? [])
+        .map((f: { attributes: Record<string, unknown>; geometry?: { paths?: number[][][] } }) => {
+          const a = f.attributes;
+          const paths = f.geometry?.paths;
+          const firstPath = paths?.[0];
+          const lastPath = paths?.[paths.length - 1];
+          return {
+            line: {
+              owner: String(a.OWNER ?? ''),
+              voltage: Number(a.VOLTAGE) || 0,
+              voltClass: String(a.VOLT_CLASS ?? ''),
+              sub1: String(a.SUB_1 ?? ''),
+              sub2: String(a.SUB_2 ?? ''),
+              status: String(a.STATUS ?? ''),
+            } satisfies NearbyLine,
+            startPt: firstPath?.[0] ? [firstPath[0][0], firstPath[0][1]] as [number, number] : null,
+            endPt: lastPath
+              ? [lastPath[lastPath.length - 1][0], lastPath[lastPath.length - 1][1]] as [number, number]
+              : null,
+          } satisfies LineFeature;
+        })
+        .sort((a: LineFeature, b: LineFeature) => b.line.voltage - a.line.voltage);
+    } catch {
+      return [];
+    }
+  }, TTL_LOCATION);
 }
 
 async function queryPowerPlants(lat: number, lng: number): Promise<NearbyPowerPlant[]> {
-  const url =
-    `${LAYERS.powerPlants}/query?` +
-    `where=1%3D1` +
-    `&geometry=${encodeURIComponent(envelope(lat, lng))}` +
-    `&geometryType=esriGeometryEnvelope` +
-    `&spatialRel=esriSpatialRelIntersects` +
-    `&inSR=4326` +
-    `&outFields=Plant_Name%2CPrimSource%2CInstall_MW%2CTotal_MW%2CUtility_Na%2CLatitude%2CLongitude` +
-    `&returnGeometry=false` +
-    `&resultRecordCount=25` +
-    `&f=json`;
+  const key = `infra:plants:${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return cachedFetch(key, async () => {
+    const url =
+      `${LAYERS.powerPlants}/query?` +
+      `where=1%3D1` +
+      `&geometry=${encodeURIComponent(envelope(lat, lng))}` +
+      `&geometryType=esriGeometryEnvelope` +
+      `&spatialRel=esriSpatialRelIntersects` +
+      `&inSR=4326` +
+      `&outFields=Plant_Name%2CPrimSource%2CInstall_MW%2CTotal_MW%2CUtility_Na%2CLatitude%2CLongitude` +
+      `&returnGeometry=false` +
+      `&resultRecordCount=25` +
+      `&f=json`;
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (data.error) return [];
-    return (data.features ?? [])
-      .map((f: { attributes: Record<string, unknown> }) => {
-        const a = f.attributes;
-        const pLat = Number(a.Latitude) || 0;
-        const pLng = Number(a.Longitude) || 0;
-        return {
-          name: String(a.Plant_Name ?? ''),
-          operator: String(a.Utility_Na ?? ''),
-          primarySource: String(a.PrimSource ?? ''),
-          capacityMW: Number(a.Install_MW) || 0,
-          status: 'OP',
-          distanceMi: haversineMi(lat, lng, pLat, pLng),
-        } satisfies NearbyPowerPlant;
-      })
-      .sort((a: NearbyPowerPlant, b: NearbyPowerPlant) => a.distanceMi - b.distanceMi);
-  } catch {
-    return [];
-  }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (data.error) return [];
+      return (data.features ?? [])
+        .map((f: { attributes: Record<string, unknown> }) => {
+          const a = f.attributes;
+          const pLat = Number(a.Latitude) || 0;
+          const pLng = Number(a.Longitude) || 0;
+          return {
+            name: String(a.Plant_Name ?? ''),
+            operator: String(a.Utility_Na ?? ''),
+            primarySource: String(a.PrimSource ?? ''),
+            capacityMW: Number(a.Install_MW) || 0,
+            status: 'OP',
+            distanceMi: haversineMi(lat, lng, pLat, pLng),
+          } satisfies NearbyPowerPlant;
+        })
+        .sort((a: NearbyPowerPlant, b: NearbyPowerPlant) => a.distanceMi - b.distanceMi);
+    } catch {
+      return [];
+    }
+  }, TTL_LOCATION);
 }
 
 /**
@@ -373,29 +383,32 @@ function deriveUtility(lines: NearbyLine[]): string[] {
 }
 
 async function querySolarWind(lat: number, lng: number): Promise<SolarWindResource | null> {
-  try {
-    const params = new URLSearchParams({
-      api_key: NREL_API_KEY,
-      lat: String(lat),
-      lon: String(lng),
-    });
-    const res = await fetch(`${NREL_SOLAR_URL}?${params}`);
-    if (!res.ok) {
-      console.warn(`NREL Solar API returned ${res.status}. ${NREL_API_KEY === 'DEMO_KEY' ? 'Using DEMO_KEY — set VITE_NREL_API_KEY env var for higher rate limits.' : `NREL API error (status ${res.status}) — check your API key or retry later.`}`);
+  const key = `nrel:solar:${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return cachedFetch(key, async () => {
+    try {
+      const params = new URLSearchParams({
+        api_key: NREL_API_KEY,
+        lat: String(lat),
+        lon: String(lng),
+      });
+      const res = await fetch(`${NREL_SOLAR_URL}?${params}`);
+      if (!res.ok) {
+        console.warn(`NREL Solar API returned ${res.status}. ${NREL_API_KEY === 'DEMO_KEY' ? 'Using DEMO_KEY — set VITE_NREL_API_KEY env var for higher rate limits.' : `NREL API error (status ${res.status}) — check your API key or retry later.`}`);
+        return null;
+      }
+      const data = await res.json();
+      const o = data.outputs;
+      if (!o) return null;
+      return {
+        ghi: Number(o.avg_ghi?.annual) || 0,
+        dni: Number(o.avg_dni?.annual) || 0,
+        windSpeed: Number(o.avg_wind_speed?.annual) || 0,
+        capacity: Number(o.avg_lat_tilt?.annual) || 0,
+      };
+    } catch {
       return null;
     }
-    const data = await res.json();
-    const o = data.outputs;
-    if (!o) return null;
-    return {
-      ghi: Number(o.avg_ghi?.annual) || 0,
-      dni: Number(o.avg_dni?.annual) || 0,
-      windSpeed: Number(o.avg_wind_speed?.annual) || 0,
-      capacity: Number(o.avg_lat_tilt?.annual) || 0,
-    };
-  } catch {
-    return null;
-  }
+  }, TTL_INFRASTRUCTURE);
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────

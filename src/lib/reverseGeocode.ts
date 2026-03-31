@@ -4,19 +4,14 @@
  * Primary: BigDataCloud (no API key, client-side, fast).
  * Fallback: Nominatim / OpenStreetMap.
  *
- * Results are cached by rounded coordinates to avoid repeat lookups.
+ * Results are cached via the shared request cache.
  */
+
+import { cachedFetch, TTL_LOCATION } from './requestCache';
 
 export interface GeoLocation {
   city: string;
   county: string;
-}
-
-// Cache by rounded lat/lng (3 decimal places ≈ 100m precision)
-const cache = new Map<string, GeoLocation>();
-
-function cacheKey(lat: number, lng: number): string {
-  return `${lat.toFixed(3)},${lng.toFixed(3)}`;
 }
 
 async function tryBigDataCloud(lat: number, lng: number): Promise<GeoLocation | null> {
@@ -72,15 +67,11 @@ async function tryNominatim(lat: number, lng: number): Promise<GeoLocation | nul
 
 /**
  * Reverse geocode a lat/lng to get county and nearest city.
- * Returns cached result if available.
+ * Results are cached via the shared request cache.
  */
 export async function reverseGeocode(lat: number, lng: number): Promise<GeoLocation> {
-  const key = cacheKey(lat, lng);
-  const cached = cache.get(key);
-  if (cached) return cached;
-
-  const result = (await tryBigDataCloud(lat, lng)) ?? (await tryNominatim(lat, lng)) ?? { city: '', county: '' };
-
-  cache.set(key, result);
-  return result;
+  const key = `reverseGeo:${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return cachedFetch(key, async () => {
+    return (await tryBigDataCloud(lat, lng)) ?? (await tryNominatim(lat, lng)) ?? { city: '', county: '' };
+  }, TTL_LOCATION);
 }
