@@ -287,33 +287,49 @@ function decodeWetlandType(attribute: string): string {
   return `Wetland (${attribute})`;
 }
 
+/**
+ * The NWI MapServer is notoriously slow and frequently returns 500/503.
+ * We use a 5-second timeout and fail gracefully with a manual-check link.
+ */
+const NWI_TIMEOUT_MS = 5000;
+
 async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
   const envelope = `${lng - BUFFER_DEG},${lat - BUFFER_DEG},${lng + BUFFER_DEG},${lat + BUFFER_DEG}`;
 
-  // returnGeometry=false — avoids server timeouts from serializing large polygons.
-  // Distance is approximated from the ~500 ft search buffer instead.
   const params = new URLSearchParams({
     geometry: envelope,
     geometryType: 'esriGeometryEnvelope',
     inSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
-    // NWI MapServer requires table-prefixed field names
     outFields: 'Wetlands.ATTRIBUTE,Wetlands.WETLAND_TYPE,Wetlands.ACRES',
     returnGeometry: 'false',
     resultRecordCount: '20',
     f: 'json',
   });
 
-  const res = await fetch(`${NWI_URL}?${params}`, {
-    signal: AbortSignal.timeout(20000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${NWI_URL}?${params}`, {
+      signal: AbortSignal.timeout(NWI_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error(
+      'NWI service unavailable — verify wetlands manually at https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer',
+    );
+  }
 
-  if (!res.ok) throw new Error(`NWI service returned HTTP ${res.status}`);
+  if (!res.ok) {
+    throw new Error(
+      'NWI service unavailable — verify wetlands manually at https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer',
+    );
+  }
 
   // The NWI service sometimes returns HTML error pages instead of JSON
   const text = await res.text();
   if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
-    throw new Error('NWI service temporarily unavailable');
+    throw new Error(
+      'NWI service temporarily unavailable — verify wetlands manually at https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer',
+    );
   }
 
   const data = JSON.parse(text);
@@ -328,13 +344,11 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
 
   for (const f of data.features) {
     const a = f.attributes as Record<string, unknown>;
-    // NWI MapServer returns fields prefixed with "Wetlands."
     const attribute = String(a['Wetlands.ATTRIBUTE'] ?? a.ATTRIBUTE ?? '');
     const wetlandType = String(a['Wetlands.WETLAND_TYPE'] ?? a.WETLAND_TYPE ?? '') || decodeWetlandType(attribute);
     const rawAcres = a['Wetlands.ACRES'] ?? a.ACRES;
     const acres = rawAcres != null ? Number(rawAcres) : null;
 
-    // Without geometry, approximate distance as "within buffer radius"
     wetlands.push({ attribute, wetlandType: wetlandType || decodeWetlandType(attribute), acres, distanceFt: bufferFt });
   }
 

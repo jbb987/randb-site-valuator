@@ -74,8 +74,20 @@ function Section({
       </div>
       <div className="px-5 py-4">
         {error ? (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
-            {error}
+          <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-xs text-yellow-800">
+            {error.includes('https://') ? (
+              <>
+                {error.split('https://')[0]}
+                <a
+                  href={`https://${error.split('https://')[1]}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline text-[#ED202B] hover:text-[#9B0E18]"
+                >
+                  {`https://${error.split('https://')[1]}`}
+                </a>
+              </>
+            ) : error}
           </div>
         ) : (
           children
