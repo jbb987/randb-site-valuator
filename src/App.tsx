@@ -11,6 +11,7 @@ import BroadbandLookupTool from './tools/BroadbandLookupTool';
 import GridPowerAnalyzer from './tools/GridPowerAnalyzer';
 import SalesCrmTool from './tools/SalesCrmTool';
 import SalesAdminDashboard from './tools/SalesAdminDashboard';
+import WaterAnalysisTool from './tools/WaterAnalysisTool';
 
 export default function App() {
   return (
@@ -61,6 +62,11 @@ export default function App() {
           <Route path="/sales-admin" element={
             <ProtectedRoute toolId="sales-admin">
               <SalesAdminDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/water-analysis" element={
+            <ProtectedRoute toolId="water-analysis">
+              <WaterAnalysisTool />
             </ProtectedRoute>
           } />
           {/* Redirect old route */}
