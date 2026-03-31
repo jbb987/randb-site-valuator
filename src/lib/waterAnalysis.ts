@@ -287,39 +287,36 @@ function decodeWetlandType(attribute: string): string {
   return `Wetland (${attribute})`;
 }
 
-function distanceFt(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 20925524;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
   const envelope = `${lng - BUFFER_DEG},${lat - BUFFER_DEG},${lng + BUFFER_DEG},${lat + BUFFER_DEG}`;
 
+  // returnGeometry=false — avoids server timeouts from serializing large polygons.
+  // Distance is approximated from the ~500 ft search buffer instead.
   const params = new URLSearchParams({
     geometry: envelope,
     geometryType: 'esriGeometryEnvelope',
     inSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
+    // NWI MapServer requires table-prefixed field names
     outFields: 'Wetlands.ATTRIBUTE,Wetlands.WETLAND_TYPE,Wetlands.ACRES',
-    returnGeometry: 'true',
-    outSR: '4326',
+    returnGeometry: 'false',
     resultRecordCount: '20',
     f: 'json',
   });
 
   const res = await fetch(`${NWI_URL}?${params}`, {
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(20000),
   });
+
   if (!res.ok) throw new Error(`NWI service returned HTTP ${res.status}`);
 
-  const data = await res.json();
+  // The NWI service sometimes returns HTML error pages instead of JSON
+  const text = await res.text();
+  if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
+    throw new Error('NWI service temporarily unavailable');
+  }
+
+  const data = JSON.parse(text);
   if (data.error) throw new Error(`NWI error: ${data.error.message}`);
 
   if (!data.features || data.features.length === 0) {
@@ -327,30 +324,21 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
   }
 
   const wetlands: WetlandFeature[] = [];
+  const bufferFt = Math.round(BUFFER_DEG * 364000); // ~500 ft
 
   for (const f of data.features) {
     const a = f.attributes as Record<string, unknown>;
-    // NWI fields are prefixed with "Wetlands." in the MapServer response
+    // NWI MapServer returns fields prefixed with "Wetlands."
     const attribute = String(a['Wetlands.ATTRIBUTE'] ?? a.ATTRIBUTE ?? '');
     const wetlandType = String(a['Wetlands.WETLAND_TYPE'] ?? a.WETLAND_TYPE ?? '') || decodeWetlandType(attribute);
     const rawAcres = a['Wetlands.ACRES'] ?? a.ACRES;
     const acres = rawAcres != null ? Number(rawAcres) : null;
 
-    let distFt: number | null = null;
-    const rings: number[][][] = f.geometry?.rings ?? [];
-    if (rings.length > 0 && rings[0].length > 0) {
-      const ring = rings[0];
-      const avgLng = ring.reduce((s: number, p: number[]) => s + p[0], 0) / ring.length;
-      const avgLat = ring.reduce((s: number, p: number[]) => s + p[1], 0) / ring.length;
-      distFt = Math.round(distanceFt(lat, lng, avgLat, avgLng));
-    }
-
-    wetlands.push({ attribute, wetlandType: wetlandType || decodeWetlandType(attribute), acres, distanceFt: distFt });
+    // Without geometry, approximate distance as "within buffer radius"
+    wetlands.push({ attribute, wetlandType: wetlandType || decodeWetlandType(attribute), acres, distanceFt: bufferFt });
   }
 
-  wetlands.sort((a, b) => (a.distanceFt ?? Infinity) - (b.distanceFt ?? Infinity));
-
-  return { hasWetlands: true, wetlands, nearestWetlandFt: wetlands[0]?.distanceFt ?? null };
+  return { hasWetlands: true, wetlands, nearestWetlandFt: bufferFt };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
