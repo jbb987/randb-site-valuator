@@ -32,10 +32,11 @@ import { geocodeAddress } from './infraLookup';
  * MapServer 28 = S_FLD_HAZ_AR (Flood Hazard Areas)
  *
  * Proxied through Vite dev server to avoid CORS.
- * Vite proxy: /api/fema → https://hazards.fema.gov
+ * Vite proxy: /api/fema → https://hazards.fema.gov/arcgis
+ * Actual URL: https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query
  */
 const FEMA_NFHL_URL =
-  '/api/fema/gis/nfhl/rest/services/public/NFHL/MapServer/28/query';
+  '/api/fema/rest/services/public/NFHL/MapServer/28/query';
 
 const FLOOD_ZONE_DESCRIPTIONS: Record<string, string> = {
   X: 'Minimal flood hazard — outside of the 0.2% annual chance floodplain',
@@ -90,7 +91,7 @@ async function fetchFloodZone(lat: number, lng: number): Promise<FloodZoneInfo> 
     geometry: `${lng},${lat}`,
     geometryType: 'esriGeometryPoint',
     inSR: '4326',
-    spatialRel: 'esriSpatialRelContains',
+    spatialRel: 'esriSpatialRelIntersects',
     outFields: 'FLD_ZONE,ZONE_SUBTY,STATIC_BFE',
     returnGeometry: 'false',
     f: 'json',
@@ -306,7 +307,7 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
     geometryType: 'esriGeometryEnvelope',
     inSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
-    outFields: 'ATTRIBUTE,WETLAND_TYPE,ACRES',
+    outFields: 'Wetlands.ATTRIBUTE,Wetlands.WETLAND_TYPE,Wetlands.ACRES',
     returnGeometry: 'true',
     outSR: '4326',
     resultRecordCount: '20',
@@ -329,9 +330,11 @@ async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
 
   for (const f of data.features) {
     const a = f.attributes as Record<string, unknown>;
-    const attribute = String(a.ATTRIBUTE ?? a.attribute ?? '');
-    const wetlandType = String(a.WETLAND_TYPE ?? a.wetland_type ?? '') || decodeWetlandType(attribute);
-    const acres = a.ACRES != null ? Number(a.ACRES) : null;
+    // NWI fields are prefixed with "Wetlands." in the MapServer response
+    const attribute = String(a['Wetlands.ATTRIBUTE'] ?? a.ATTRIBUTE ?? '');
+    const wetlandType = String(a['Wetlands.WETLAND_TYPE'] ?? a.WETLAND_TYPE ?? '') || decodeWetlandType(attribute);
+    const rawAcres = a['Wetlands.ACRES'] ?? a.ACRES;
+    const acres = rawAcres != null ? Number(rawAcres) : null;
 
     let distFt: number | null = null;
     const rings: number[][][] = f.geometry?.rings ?? [];
