@@ -24,7 +24,6 @@ import type {
   WetlandsInfo,
 } from './waterAnalysis.types';
 import { geocodeAddress } from './infraLookup';
-import { cachedFetch, TTL_LOCATION } from './requestCache';
 
 // ── FEMA NFHL ───────────────────────────────────────────────────────────────
 
@@ -54,11 +53,9 @@ function describeZone(zone: string): string {
   const base = FLOOD_ZONE_DESCRIPTIONS[zone];
   if (base) return base;
 
-  // A1–A30 (numbered zones with BFE)
   if (/^A\d+$/.test(zone)) {
     return 'Special Flood Hazard Area — 1% annual chance flood with Base Flood Elevations (numbered zone)';
   }
-  // V1–V30 (numbered coastal zones)
   if (/^V\d+$/.test(zone)) {
     return 'Coastal High Hazard Area — 1% annual chance flood with wave action (numbered zone)';
   }
@@ -69,70 +66,60 @@ function describeZone(zone: string): string {
 function classifyFloodRisk(zone: string, subtype: string): FloodRiskLevel {
   if (!zone || zone === 'AREA NOT INCLUDED') return 'unknown';
 
-  // Coastal high hazard
   if (zone === 'VE' || /^V\d+$/.test(zone) || zone === 'V') return 'very-high';
 
-  // Special Flood Hazard Areas (100-year floodplain)
   if (zone === 'A' || /^A\d+$/.test(zone) || zone === 'AE' || zone === 'AH' ||
       zone === 'AO' || zone === 'AR') return 'high';
 
-  // Floodway within SFHA
   if (subtype === 'FLOODWAY') return 'very-high';
 
-  // Moderate hazard
   if (zone === 'B' || zone === 'D') return 'moderate';
 
-  // 0.2% annual chance (shaded X)
   if (zone === 'X' && subtype && subtype.includes('0.2')) return 'moderate';
 
-  // Zone X unshaded or C = minimal
   if (zone === 'X' || zone === 'C') return 'minimal';
 
   return 'unknown';
 }
 
 async function fetchFloodZone(lat: number, lng: number): Promise<FloodZoneInfo> {
-  const cacheKey = `fema:flood:${lat.toFixed(5)},${lng.toFixed(5)}`;
-  return cachedFetch(cacheKey, async () => {
-    const params = new URLSearchParams({
-      geometry: `${lng},${lat}`,
-      geometryType: 'esriGeometryPoint',
-      inSR: '4326',
-      spatialRel: 'esriSpatialRelContains',
-      outFields: 'FLD_ZONE,ZONE_SUBTY,STATIC_BFE',
-      returnGeometry: 'false',
-      f: 'json',
-    });
+  const params = new URLSearchParams({
+    geometry: `${lng},${lat}`,
+    geometryType: 'esriGeometryPoint',
+    inSR: '4326',
+    spatialRel: 'esriSpatialRelContains',
+    outFields: 'FLD_ZONE,ZONE_SUBTY,STATIC_BFE',
+    returnGeometry: 'false',
+    f: 'json',
+  });
 
-    const res = await fetch(`${FEMA_NFHL_URL}?${params}`, {
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`FEMA NFHL returned HTTP ${res.status}`);
+  const res = await fetch(`${FEMA_NFHL_URL}?${params}`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`FEMA NFHL returned HTTP ${res.status}`);
 
-    const data = await res.json();
-    if (data.error) throw new Error(`FEMA NFHL error: ${data.error.message}`);
+  const data = await res.json();
+  if (data.error) throw new Error(`FEMA NFHL error: ${data.error.message}`);
 
-    if (!data.features || data.features.length === 0) {
-      // No flood zone polygon found — outside NFHL coverage or unmapped area
-      return {
-        zone: 'UNMAPPED',
-        zoneSubtype: '',
-        staticBfe: null,
-        riskLevel: 'unknown' as FloodRiskLevel,
-        description: 'No FEMA flood zone data available for this location. The area may be unmapped.',
-      };
-    }
+  if (!data.features || data.features.length === 0) {
+    return {
+      zone: 'UNMAPPED',
+      zoneSubtype: '',
+      staticBfe: null,
+      riskLevel: 'unknown' as FloodRiskLevel,
+      description: 'No FEMA flood zone data available for this location. The area may be unmapped.',
+    };
+  }
 
-    const a = data.features[0].attributes as Record<string, unknown>;
-    const zone = String(a.FLD_ZONE ?? 'UNKNOWN').trim();
-    const zoneSubtype = String(a.ZONE_SUBTY ?? '').trim();
-    const bfeRaw = a.STATIC_BFE;
-    const staticBfe = bfeRaw != null && Number(bfeRaw) > -9000 ? Number(bfeRaw) : null;
-    const riskLevel = classifyFloodRisk(zone, zoneSubtype);
-    const description = describeZone(zone);
+  const a = data.features[0].attributes as Record<string, unknown>;
+  const zone = String(a.FLD_ZONE ?? 'UNKNOWN').trim();
+  const zoneSubtype = String(a.ZONE_SUBTY ?? '').trim();
+  const bfeRaw = a.STATIC_BFE;
+  const staticBfe = bfeRaw != null && Number(bfeRaw) > -9000 ? Number(bfeRaw) : null;
+  const riskLevel = classifyFloodRisk(zone, zoneSubtype);
+  const description = describeZone(zone);
 
-    return { zone, zoneSubtype, staticBfe, riskLevel, description };
-  }, TTL_LOCATION);
+  return { zone, zoneSubtype, staticBfe, riskLevel, description };
 }
 
 // ── USGS NLDI ───────────────────────────────────────────────────────────────
@@ -161,68 +148,62 @@ interface NldiStationFeature {
 }
 
 async function fetchStreamData(lat: number, lng: number): Promise<StreamInfo> {
-  const cacheKey = `nldi:stream:${lat.toFixed(5)},${lng.toFixed(5)}`;
-  return cachedFetch(cacheKey, async () => {
-    // Step 1: Find the nearest NHD+ reach by position
-    const positionUrl =
-      `${NLDI_BASE}/comid/position?coords=POINT(${lng}%20${lat})`;
+  const positionUrl =
+    `${NLDI_BASE}/comid/position?coords=POINT(${lng}%20${lat})`;
 
-    let comid: string | null = null;
-    let streamName: string | null = null;
-    let reachCode: string | null = null;
-    let streamOrder: number | null = null;
+  let comid: string | null = null;
+  let streamName: string | null = null;
+  let reachCode: string | null = null;
+  let streamOrder: number | null = null;
 
-    try {
-      const posRes = await fetch(positionUrl, { signal: AbortSignal.timeout(15000) });
-      if (posRes.ok) {
-        const posData = (await posRes.json()) as NldiComidResponse;
-        const feature = posData.features?.[0];
-        if (feature) {
-          comid = feature.properties.comid != null
-            ? String(feature.properties.comid)
-            : null;
-          streamName = feature.properties.name || null;
-          reachCode = feature.properties.reachcode || null;
-          streamOrder = typeof feature.properties.streamleve === 'number'
-            ? feature.properties.streamleve
-            : null;
-        }
+  try {
+    const posRes = await fetch(positionUrl, { signal: AbortSignal.timeout(15000) });
+    if (posRes.ok) {
+      const posData = (await posRes.json()) as NldiComidResponse;
+      const feature = posData.features?.[0];
+      if (feature) {
+        comid = feature.properties.comid != null
+          ? String(feature.properties.comid)
+          : null;
+        streamName = feature.properties.name || null;
+        reachCode = feature.properties.reachcode || null;
+        streamOrder = typeof feature.properties.streamleve === 'number'
+          ? feature.properties.streamleve
+          : null;
       }
-    } catch { /* NLDI position query failed — continue */ }
-
-    if (!comid) {
-      return {
-        comid: null,
-        streamName: null,
-        reachCode: null,
-        streamOrder: null,
-        basinAreaKm2: null,
-        navigationStatus: 'not-found',
-        monitoringStations: [],
-      };
     }
+  } catch { /* NLDI position query failed — continue */ }
 
-    // Step 2 & 3 in parallel — basin summary + upstream NWIS stations
-    const [basinAreaKm2, monitoringStations] = await Promise.all([
-      fetchBasinArea(comid),
-      fetchMonitoringStations(comid),
-    ]);
-
+  if (!comid) {
     return {
-      comid,
-      streamName,
-      reachCode,
-      streamOrder,
-      basinAreaKm2,
-      navigationStatus: 'found',
-      monitoringStations,
+      comid: null,
+      streamName: null,
+      reachCode: null,
+      streamOrder: null,
+      basinAreaKm2: null,
+      navigationStatus: 'not-found',
+      monitoringStations: [],
     };
-  }, TTL_LOCATION);
+  }
+
+  const [basinAreaKm2, monitoringStations] = await Promise.all([
+    fetchBasinArea(comid),
+    fetchMonitoringStations(comid),
+  ]);
+
+  return {
+    comid,
+    streamName,
+    reachCode,
+    streamOrder,
+    basinAreaKm2,
+    navigationStatus: 'found',
+    monitoringStations,
+  };
 }
 
 async function fetchBasinArea(comid: string): Promise<number | null> {
   try {
-    // The NLDI basin endpoint returns a GeoJSON polygon for the upstream basin
     const url = `${NLDI_BASE}/comid/${comid}/basin?simplified=true`;
     const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
     if (!res.ok) return null;
@@ -231,7 +212,6 @@ async function fetchBasinArea(comid: string): Promise<number | null> {
     const feature = data.features?.[0];
     if (!feature) return null;
 
-    // The basin area is in the properties if available; otherwise approximate from geometry
     const areaSqKm = feature.properties?.areasqkm ?? feature.properties?.AreaSqKm ?? null;
     return areaSqKm != null ? Number(areaSqKm) : null;
   } catch {
@@ -241,7 +221,6 @@ async function fetchBasinArea(comid: string): Promise<number | null> {
 
 async function fetchMonitoringStations(comid: string): Promise<MonitoringStation[]> {
   try {
-    // Navigate upstream to find NWIS gauge stations
     const url = `${NLDI_BASE}/comid/${comid}/navigate/UT/nwissite?distance=50`;
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return [];
@@ -272,22 +251,18 @@ async function fetchMonitoringStations(comid: string): Promise<MonitoringStation
 /**
  * USFWS National Wetlands Inventory ArcGIS REST service.
  * Layer 0 = Wetlands polygons.
- *
- * NOTE: This service queries using a bounding-box envelope around the point.
- * The buffer is approximately 500 feet (~0.0023 degrees latitude).
+ * Buffer: ~500 feet (~0.0023 degrees latitude).
  */
 const NWI_URL =
   'https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer/0/query';
 
-const BUFFER_DEG = 0.0023; // ~500 ft radius buffer in degrees
+const BUFFER_DEG = 0.0023;
 
-/** Map NWI attribute code prefix to human-readable type. */
 function decodeWetlandType(attribute: string): string {
   if (!attribute) return 'Unknown Wetland';
 
   const code = attribute.toUpperCase();
 
-  // System codes
   if (code.startsWith('PEM')) return 'Palustrine Emergent Marsh';
   if (code.startsWith('PFO')) return 'Palustrine Forested Wetland';
   if (code.startsWith('PSS')) return 'Palustrine Scrub-Shrub Wetland';
@@ -300,18 +275,12 @@ function decodeWetlandType(attribute: string): string {
   if (code.startsWith('R'))   return 'Riverine Wetland';
   if (code.startsWith('E'))   return 'Estuarine Wetland';
   if (code.startsWith('M'))   return 'Marine Wetland';
-  if (code === 'POND')        return 'Pond';
-  if (code === 'Freshwater Pond') return 'Freshwater Pond';
 
   return `Wetland (${attribute})`;
 }
 
-/**
- * Calculate rough distance in feet between two lat/lng points.
- * Only used for ranking nearby wetlands — not displayed as a precise measurement.
- */
 function distanceFt(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 20925524; // Earth radius in feet
+  const R = 20925524;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
@@ -323,62 +292,55 @@ function distanceFt(lat1: number, lng1: number, lat2: number, lng2: number): num
 }
 
 async function fetchWetlands(lat: number, lng: number): Promise<WetlandsInfo> {
-  const cacheKey = `nwi:wetlands:${lat.toFixed(5)},${lng.toFixed(5)}`;
-  return cachedFetch(cacheKey, async () => {
-    const envelope = `${lng - BUFFER_DEG},${lat - BUFFER_DEG},${lng + BUFFER_DEG},${lat + BUFFER_DEG}`;
+  const envelope = `${lng - BUFFER_DEG},${lat - BUFFER_DEG},${lng + BUFFER_DEG},${lat + BUFFER_DEG}`;
 
-    const params = new URLSearchParams({
-      geometry: envelope,
-      geometryType: 'esriGeometryEnvelope',
-      inSR: '4326',
-      spatialRel: 'esriSpatialRelIntersects',
-      outFields: 'ATTRIBUTE,WETLAND_TYPE,ACRES',
-      returnGeometry: 'true',
-      outSR: '4326',
-      resultRecordCount: '20',
-      f: 'json',
-    });
+  const params = new URLSearchParams({
+    geometry: envelope,
+    geometryType: 'esriGeometryEnvelope',
+    inSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: 'ATTRIBUTE,WETLAND_TYPE,ACRES',
+    returnGeometry: 'true',
+    outSR: '4326',
+    resultRecordCount: '20',
+    f: 'json',
+  });
 
-    const res = await fetch(`${NWI_URL}?${params}`, {
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`NWI service returned HTTP ${res.status}`);
+  const res = await fetch(`${NWI_URL}?${params}`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`NWI service returned HTTP ${res.status}`);
 
-    const data = await res.json();
-    if (data.error) throw new Error(`NWI error: ${data.error.message}`);
+  const data = await res.json();
+  if (data.error) throw new Error(`NWI error: ${data.error.message}`);
 
-    if (!data.features || data.features.length === 0) {
-      return { hasWetlands: false, wetlands: [], nearestWetlandFt: null };
+  if (!data.features || data.features.length === 0) {
+    return { hasWetlands: false, wetlands: [], nearestWetlandFt: null };
+  }
+
+  const wetlands: WetlandFeature[] = [];
+
+  for (const f of data.features) {
+    const a = f.attributes as Record<string, unknown>;
+    const attribute = String(a.ATTRIBUTE ?? a.attribute ?? '');
+    const wetlandType = String(a.WETLAND_TYPE ?? a.wetland_type ?? '') || decodeWetlandType(attribute);
+    const acres = a.ACRES != null ? Number(a.ACRES) : null;
+
+    let distFt: number | null = null;
+    const rings: number[][][] = f.geometry?.rings ?? [];
+    if (rings.length > 0 && rings[0].length > 0) {
+      const ring = rings[0];
+      const avgLng = ring.reduce((s: number, p: number[]) => s + p[0], 0) / ring.length;
+      const avgLat = ring.reduce((s: number, p: number[]) => s + p[1], 0) / ring.length;
+      distFt = Math.round(distanceFt(lat, lng, avgLat, avgLng));
     }
 
-    const wetlands: WetlandFeature[] = [];
+    wetlands.push({ attribute, wetlandType: wetlandType || decodeWetlandType(attribute), acres, distanceFt: distFt });
+  }
 
-    for (const f of data.features) {
-      const a = f.attributes as Record<string, unknown>;
-      const attribute = String(a.ATTRIBUTE ?? a.attribute ?? '');
-      const wetlandType = String(a.WETLAND_TYPE ?? a.wetland_type ?? '') || decodeWetlandType(attribute);
-      const acres = a.ACRES != null ? Number(a.ACRES) : null;
+  wetlands.sort((a, b) => (a.distanceFt ?? Infinity) - (b.distanceFt ?? Infinity));
 
-      // Estimate centroid of the polygon ring for distance calc
-      let distFt: number | null = null;
-      const rings: number[][][] = f.geometry?.rings ?? [];
-      if (rings.length > 0 && rings[0].length > 0) {
-        const ring = rings[0];
-        const avgLng = ring.reduce((s: number, p: number[]) => s + p[0], 0) / ring.length;
-        const avgLat = ring.reduce((s: number, p: number[]) => s + p[1], 0) / ring.length;
-        distFt = Math.round(distanceFt(lat, lng, avgLat, avgLng));
-      }
-
-      wetlands.push({ attribute, wetlandType: wetlandType || decodeWetlandType(attribute), acres, distanceFt: distFt });
-    }
-
-    // Sort by nearest first
-    wetlands.sort((a, b) => (a.distanceFt ?? Infinity) - (b.distanceFt ?? Infinity));
-
-    const nearestWetlandFt = wetlands[0]?.distanceFt ?? null;
-
-    return { hasWetlands: true, wetlands, nearestWetlandFt };
-  }, TTL_LOCATION);
+  return { hasWetlands: true, wetlands, nearestWetlandFt: wetlands[0]?.distanceFt ?? null };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -396,7 +358,6 @@ export async function analyzeWater(opts: WaterAnalysisOptions): Promise<WaterAna
     ({ lat, lng } = await geocodeAddress(opts.address));
   }
 
-  // Run all three queries in parallel — a failure in one does not affect the others
   const [floodResult, streamResult, wetlandsResult] = await Promise.allSettled([
     fetchFloodZone(lat, lng),
     fetchStreamData(lat, lng),
