@@ -1,10 +1,8 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import type { SiteInputs, AppraisalResult } from '../../types';
 import { formatCurrencyShort } from '../../utils/format';
-import { exportElementToPdf } from '../../utils/exportPdf';
 import PresentationView from '../PresentationView';
 import SiteMapCard from './SiteMapCard';
-import SolarResourceWidget from './SolarResourceWidget';
 
 interface Props {
   inputs: SiteInputs;
@@ -28,20 +26,6 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsChange }: Props) {
   const captureRef = useRef<HTMLDivElement>(null);
-  const [exporting, setExporting] = useState(false);
-
-  async function handleExportPdf() {
-    if (!captureRef.current) return;
-    setExporting(true);
-    try {
-      const name = inputs.siteName?.trim() || 'Site Appraisal';
-      await exportElementToPdf(captureRef.current, name);
-    } catch (err) {
-      console.error('PDF export failed:', err);
-    } finally {
-      setExporting(false);
-    }
-  }
 
   function set<K extends keyof SiteInputs>(key: K, value: SiteInputs[K]) {
     onInputsChange({ ...inputs, [key]: value });
@@ -55,33 +39,6 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Download PDF button */}
-      <div className="flex justify-end no-print">
-        <button
-          type="button"
-          onClick={handleExportPdf}
-          disabled={exporting}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#ED202B] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#9B0E18] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {exporting ? (
-            <>
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Exporting…
-            </>
-          ) : (
-            <>
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
-              </svg>
-              Download PDF
-            </>
-          )}
-        </button>
-      </div>
-
       <div ref={captureRef} className="space-y-6">
       {/* Site Location Map */}
       <SiteMapCard coordinates={inputs.coordinates} />
@@ -212,13 +169,6 @@ export default function SiteDetailPanel({ inputs, result, onMWChange, onInputsCh
         </div>
       </div>
 
-      {inputs.solarWind && (
-        <SolarResourceWidget
-          solarWind={inputs.solarWind}
-          detectedState={inputs.detectedState ?? null}
-          loading={false}
-        />
-      )}
       </div>
     </div>
   );

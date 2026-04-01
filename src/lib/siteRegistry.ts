@@ -12,7 +12,8 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppraisalResult, BroadbandResult, SiteRegistryEntry, UserRole } from '../types';
+import type { AppraisalResult, BroadbandResult, SiteInputs, SiteRegistryEntry, UserRole } from '../types';
+import { parseCoordinates } from '../utils/parseCoordinates';
 
 const COLLECTION = 'sites-registry';
 
@@ -143,6 +144,52 @@ export function subscribeSiteRegistry(
       onError?.(err);
     },
   );
+}
+
+// ── Sync helper (Site Appraiser → Registry) ───────────────────────────────
+
+/**
+ * Sync a Site Appraiser site to the registry by coordinates.
+ * If a matching entry exists, updates it. Otherwise creates a new one.
+ * Returns the registry entry ID, or null if coordinates are invalid.
+ */
+export async function syncSiteToRegistry(
+  registrySites: SiteRegistryEntry[],
+  siteInputs: SiteInputs,
+  appraisalResult: AppraisalResult | null,
+  userId: string,
+): Promise<string | null> {
+  const coords = parseCoordinates(siteInputs.coordinates);
+  if (!coords) return null;
+
+  const match = findSiteByCoordinates(registrySites, coords.lat, coords.lng);
+
+  const data = {
+    name: siteInputs.siteName || 'Untitled Site',
+    address: siteInputs.address,
+    coordinates: coords,
+    acreage: siteInputs.totalAcres,
+    mwCapacity: siteInputs.mw,
+    dollarPerAcreLow: siteInputs.ppaLow,
+    dollarPerAcreHigh: siteInputs.ppaHigh,
+    projectId: siteInputs.projectId || undefined,
+    ...(appraisalResult && appraisalResult.energizedValue > 0
+      ? { appraisalResult }
+      : {}),
+  };
+
+  if (match) {
+    await updateSiteEntry(match.id, data);
+    return match.id;
+  }
+
+  const newId = await createSiteEntry({
+    ...data,
+    coordinates: coords,
+    createdBy: userId,
+    memberIds: [userId],
+  });
+  return newId;
 }
 
 // ── Write-back helpers (tools save results to site profile) ──────────────

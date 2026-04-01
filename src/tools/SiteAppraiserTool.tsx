@@ -4,15 +4,14 @@ import { useAuth } from '../hooks/useAuth';
 import { useSites } from '../hooks/useSites';
 import { useProjects } from '../hooks/useProjects';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
-import { saveAppraisalToSite } from '../lib/siteRegistry';
+import { syncSiteToRegistry } from '../lib/siteRegistry';
 import Layout from '../components/Layout';
-import SiteSelector from '../components/SiteSelector';
-import type { SiteSelectorSite } from '../components/SiteSelector';
 import ProjectSidebar from '../components/appraiser/ProjectSidebar';
 import SiteDetailPanel from '../components/appraiser/SiteDetailPanel';
 import ProjectOverview from '../components/appraiser/ProjectOverview';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SiteInputs } from '../types';
+import { parseCoordinates } from '../utils/parseCoordinates';
 
 const emptyInputs: SiteInputs = {
   id: '',
@@ -75,40 +74,47 @@ export default function SiteAppraiserTool() {
   const [view, setView] = useState<View>('project-overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [selectedRegistrySiteId, setSelectedRegistrySiteId] = useState<string | null>(null);
-  const { sites: registrySites, loading: sitesRegistryLoading } = useSiteRegistry();
+  const { sites: registrySites } = useSiteRegistry();
 
   const isAdmin = role === 'admin';
-
-  const handleRegistrySiteSelect = useCallback((site: SiteSelectorSite) => {
-    setSelectedRegistrySiteId(site.id);
-    if (activeSite) {
-      const updated = { ...activeSite.inputs };
-      if (site.address) updated.address = site.address;
-      if (site.coordinates) updated.coordinates = `${site.coordinates.lat}, ${site.coordinates.lng}`;
-      if (site.acreage) updated.totalAcres = site.acreage;
-      if (site.mwCapacity) updated.mw = site.mwCapacity;
-      updateInputs(updated);
-    }
-  }, [activeSite, updateInputs]);
-
-  const handleRegistrySiteClear = useCallback(() => {
-    setSelectedRegistrySiteId(null);
-  }, []);
 
   const loading = sitesLoading || projectsLoading;
   const inputs = activeSite?.inputs ?? emptyInputs;
   const result = useAppraisal(inputs);
 
-  // Write back appraisal results to site registry when they change
+  // Auto-sync active site to registry when it has valid coordinates
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lastSyncKey = useRef<string>('');
+
   useEffect(() => {
-    if (selectedRegistrySiteId && result && result.energizedValue > 0) {
-      void saveAppraisalToSite(selectedRegistrySiteId, result).then(
-        () => console.log('[SiteAppraiser] Appraisal saved to site registry'),
-        (err) => console.error('[SiteAppraiser] Failed to save appraisal:', err),
+    if (!user || !activeSite) return;
+
+    const coords = parseCoordinates(activeSite.inputs.coordinates);
+    if (!coords) return;
+
+    // Build a key to avoid re-syncing identical data
+    const key = `${activeSite.id}:${activeSite.inputs.coordinates}:${activeSite.inputs.siteName}:${activeSite.inputs.address}:${activeSite.inputs.totalAcres}:${activeSite.inputs.mw}:${activeSite.inputs.ppaLow}:${activeSite.inputs.ppaHigh}:${result?.energizedValue ?? 0}`;
+    if (key === lastSyncKey.current) return;
+
+    // Debounce the sync (2s after last change to avoid hammering during edits)
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      lastSyncKey.current = key;
+      void syncSiteToRegistry(
+        registrySites,
+        activeSite.inputs,
+        result && result.energizedValue > 0 ? result : null,
+        user.uid,
+      ).then(
+        (id) => id && console.log('[SiteAppraiser] Synced to registry:', id),
+        (err) => console.error('[SiteAppraiser] Registry sync failed:', err),
       );
-    }
-  }, [selectedRegistrySiteId, result]);
+    }, 2000);
+
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [user, activeSite, result, registrySites]);
 
   // For employees, only show sites belonging to their visible projects
   const visibleProjectIds = new Set(projects.map((p) => p.id));
@@ -212,18 +218,6 @@ export default function SiteAppraiserTool() {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          {/* Site Selector */}
-          {view === 'site-detail' && (
-            <SiteSelector
-              sites={registrySites}
-              loading={sitesRegistryLoading}
-              selectedSiteId={selectedRegistrySiteId}
-              onSelect={handleRegistrySiteSelect}
-              onClear={handleRegistrySiteClear}
-              placeholder="Auto-fill from a saved site..."
-            />
-          )}
-
           {/* Mobile toggle button */}
           <button
             onClick={() => setMobileSidebarOpen(true)}
