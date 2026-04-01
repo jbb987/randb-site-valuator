@@ -16,7 +16,7 @@ import PlantPopup from './PlantPopup';
 import SubstationList from './SubstationList';
 import CoordinateSearch from './CoordinateSearch';
 import { reverseGeocode, type GeoLocation } from '../../lib/reverseGeocode';
-import { detectState } from '../../lib/solarAverages';
+import { detectStateFromCoords } from '../../lib/solarAverages';
 import { lookupInfrastructure } from '../../lib/infraLookup';
 import type { InfraResult } from '../../lib/infraLookup';
 import type { SiteRegistryEntry } from '../../types';
@@ -262,7 +262,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
     setSelectedSite(null);
 
     // Detect state and load if needed
-    const detectedAbbr = detectState(lat, lng);
+    const detectedAbbr = await detectStateFromCoords(lat, lng);
     if (detectedAbbr && detectedAbbr !== selectedState) {
       pendingFly.current = coords;
       selectState(detectedAbbr);

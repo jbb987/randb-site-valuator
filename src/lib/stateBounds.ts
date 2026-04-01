@@ -51,7 +51,7 @@ export const US_STATES: StateBoundary[] = [
   { abbr: 'NC', name: 'North Carolina', latMin: 33.84, latMax: 36.59, lngMin: -84.32, lngMax: -75.46, centerLat: 35.21, centerLng: -79.89 },
   { abbr: 'ND', name: 'North Dakota', latMin: 45.94, latMax: 49.00, lngMin: -104.05, lngMax: -96.55, centerLat: 47.47, centerLng: -100.30 },
   { abbr: 'OH', name: 'Ohio', latMin: 38.40, latMax: 41.98, lngMin: -84.82, lngMax: -80.52, centerLat: 40.19, centerLng: -82.67 },
-  { abbr: 'OK', name: 'Oklahoma', latMin: 33.62, latMax: 37.00, lngMin: -103.00, lngMax: -94.43, centerLat: 35.31, centerLng: -98.72 },
+  { abbr: 'OK', name: 'Oklahoma', latMin: 33.84, latMax: 37.00, lngMin: -103.00, lngMax: -94.43, centerLat: 35.31, centerLng: -98.72 },
   { abbr: 'OR', name: 'Oregon', latMin: 41.99, latMax: 46.29, lngMin: -124.57, lngMax: -116.46, centerLat: 44.14, centerLng: -120.51 },
   { abbr: 'PA', name: 'Pennsylvania', latMin: 39.72, latMax: 42.27, lngMin: -80.52, lngMax: -74.69, centerLat: 40.99, centerLng: -77.60 },
   { abbr: 'RI', name: 'Rhode Island', latMin: 41.15, latMax: 42.02, lngMin: -71.86, lngMax: -71.12, centerLat: 41.58, centerLng: -71.49 },
