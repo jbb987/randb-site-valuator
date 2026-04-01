@@ -17,6 +17,7 @@
 import { detectState } from './solarAverages';
 import { geocodeAddress } from './infraLookup';
 import { fetchHenryHubPrice, fetchStateGasPrice } from './eiaApi';
+import { cachedFetch, TTL_LOCATION } from './requestCache';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,10 +220,17 @@ async function queryPipelines(lat: number, lng: number): Promise<PipelineInfo[]>
     `&f=json`;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (data.error) return [];
+    const data = await cachedFetch(
+      `gas:pipelines:${lat.toFixed(3)},${lng.toFixed(3)}`,
+      async () => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (json.error) throw new Error(json.error.message ?? 'Pipeline query error');
+        return json;
+      },
+      TTL_LOCATION,
+    );
 
     type Feature = {
       attributes: Record<string, unknown>;
