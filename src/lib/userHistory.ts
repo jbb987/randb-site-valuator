@@ -25,8 +25,9 @@ export async function logActivity(
   entry: Omit<UserActivityEntry, 'id'>,
 ): Promise<void> {
   const id = doc(collection(db, COLLECTION)).id;
-  const full: UserActivityEntry = { ...entry, id };
-  await setDoc(doc(db, COLLECTION, id), full);
+  // Strip undefined values — Firestore rejects them
+  const clean = JSON.parse(JSON.stringify({ ...entry, id })) as UserActivityEntry;
+  await setDoc(doc(db, COLLECTION, id), clean);
 }
 
 /** Fetch history for a user, ordered by most recent first. */

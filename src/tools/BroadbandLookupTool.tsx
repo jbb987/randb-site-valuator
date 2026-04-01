@@ -10,33 +10,23 @@ import { useUserHistory } from '../hooks/useUserHistory';
 import { saveBroadbandToSite } from '../lib/siteRegistry';
 
 export default function BroadbandLookupTool() {
-  const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState('');
-  const [inputMode, setInputMode] = useState<'coordinates' | 'address'>('coordinates');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const { loading, error, result, lookup, clear } = useBroadbandLookup();
   const { sites: registrySites, loading: sitesLoading } = useSiteRegistry();
   const { logActivity, getToolHistory, loading: historyLoading } = useUserHistory();
   const recentEntries = getToolHistory('broadband-lookup');
 
-  const canAnalyze = inputMode === 'coordinates'
-    ? coordinates.trim().length > 0
-    : address.trim().length > 0;
+  const canAnalyze = coordinates.trim().length > 0;
 
   const handleAnalyze = async () => {
     if (!canAnalyze) return;
-    const res = await lookup(
-      inputMode === 'coordinates'
-        ? { coordinates: coordinates.trim() }
-        : { address: address.trim() },
-    );
+    const res = await lookup({ coordinates: coordinates.trim() });
 
     // Log to history
     if (res) {
-      const coords = inputMode === 'coordinates' ? coordinates.trim() : address.trim();
-      logActivity('broadband-lookup', '', coords, 'Broadband lookup', selectedSiteId ?? undefined, {
-        coordinates: inputMode === 'coordinates' ? coordinates.trim() : undefined,
-        address: inputMode === 'address' ? address.trim() : undefined,
+      logActivity('broadband-lookup', '', coordinates.trim(), 'Broadband lookup', selectedSiteId ?? undefined, {
+        coordinates: coordinates.trim(),
       });
     }
 
@@ -50,7 +40,6 @@ export default function BroadbandLookupTool() {
   };
 
   const handleClear = () => {
-    setAddress('');
     setCoordinates('');
     clear();
   };
@@ -59,7 +48,6 @@ export default function BroadbandLookupTool() {
     setSelectedSiteId(site.id);
     if (site.coordinates) {
       setCoordinates(`${site.coordinates.lat}, ${site.coordinates.lng}`);
-      setInputMode('coordinates');
     }
   };
 
@@ -73,15 +61,9 @@ export default function BroadbandLookupTool() {
 
   const handleReplay = (inputs: Record<string, unknown>) => {
     const coords = inputs.coordinates as string | undefined;
-    const addr = inputs.address as string | undefined;
     if (coords) {
       setCoordinates(coords);
-      setInputMode('coordinates');
       lookup({ coordinates: coords });
-    } else if (addr) {
-      setAddress(addr);
-      setInputMode('address');
-      lookup({ address: addr });
     }
   };
 
@@ -103,64 +85,25 @@ export default function BroadbandLookupTool() {
             Broadband Data Lookup
           </h2>
           <p className="text-sm text-[#7A756E] mt-0.5">
-            Enter site coordinates or address to generate a broadband due diligence report.
+            Enter site coordinates to generate a broadband due diligence report.
           </p>
         </div>
 
         {/* Input Card */}
         <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-heading text-base font-semibold text-[#201F1E]">
-              Site Location
-            </h3>
-
-            {/* Toggle */}
-            <div className="flex rounded-lg border border-[#D8D5D0] overflow-hidden text-xs">
-              <button
-                type="button"
-                onClick={() => setInputMode('coordinates')}
-                className={`px-3 py-1.5 transition ${
-                  inputMode === 'coordinates'
-                    ? 'bg-[#ED202B] text-white'
-                    : 'bg-white text-[#7A756E] hover:bg-[#F5F4F2]'
-                }`}
-              >
-                Coordinates
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode('address')}
-                className={`px-3 py-1.5 transition ${
-                  inputMode === 'address'
-                    ? 'bg-[#ED202B] text-white'
-                    : 'bg-white text-[#7A756E] hover:bg-[#F5F4F2]'
-                }`}
-              >
-                Address
-              </button>
-            </div>
-          </div>
+          <h3 className="font-heading text-base font-semibold text-[#201F1E] mb-4">
+            Site Location
+          </h3>
 
           <div className="flex gap-3">
-            {inputMode === 'coordinates' ? (
-              <input
-                type="text"
-                value={coordinates}
-                onChange={(e) => setCoordinates(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="e.g. 28.444667, -99.750833"
-                className="flex-1 rounded-lg border border-[#D8D5D0] bg-white px-3 py-2.5 text-sm text-[#201F1E] placeholder:text-[#7A756E]/50 focus:border-[#ED202B] focus:ring-2 focus:ring-[#ED202B]/20 focus:outline-none transition"
-              />
-            ) : (
-              <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="e.g. 123 Main St, Laredo, TX 78040"
-                className="flex-1 rounded-lg border border-[#D8D5D0] bg-white px-3 py-2.5 text-sm text-[#201F1E] placeholder:text-[#7A756E]/50 focus:border-[#ED202B] focus:ring-2 focus:ring-[#ED202B]/20 focus:outline-none transition"
-              />
-            )}
+            <input
+              type="text"
+              value={coordinates}
+              onChange={(e) => setCoordinates(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={'Decimal (28.44, -99.75) or DMS (28\u00B039\'22.0"N 98\u00B050\'38.3"W)'}
+              className="flex-1 rounded-lg border border-[#D8D5D0] bg-white px-3 py-2.5 text-sm text-[#201F1E] placeholder:text-[#7A756E]/50 focus:border-[#ED202B] focus:ring-2 focus:ring-[#ED202B]/20 focus:outline-none transition"
+            />
 
             <button
               type="button"
@@ -213,7 +156,7 @@ export default function BroadbandLookupTool() {
               </svg>
             }
             emptyMessage={
-              <p>Enter coordinates or an address above and click <strong>Analyze</strong> to generate a broadband due diligence report.</p>
+              <p>Enter coordinates above and click <strong>Analyze</strong> to generate a broadband due diligence report.</p>
             }
             onReplay={handleReplay}
           />
