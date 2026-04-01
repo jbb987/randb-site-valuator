@@ -5,6 +5,8 @@
  * To refresh: update the numbers from NREL's published state summaries.
  */
 
+import { reverseGeocode } from './reverseGeocode';
+
 export interface SolarAverage {
   ghi: number;     // Global Horizontal Irradiance (kWh/m²/day)
   latTilt: number; // Latitude-tilt Irradiance (kWh/m²/day)
@@ -114,7 +116,7 @@ const STATE_BOUNDS: StateBounds[] = [
   { abbr: 'IA', latMin: 40.37, latMax: 43.50, lngMin: -96.64, lngMax: -90.14 },
   { abbr: 'MO', latMin: 35.99, latMax: 40.61, lngMin: -95.77, lngMax: -89.10 },
   { abbr: 'MN', latMin: 43.50, latMax: 49.38, lngMin: -97.24, lngMax: -89.49 },
-  { abbr: 'OK', latMin: 33.62, latMax: 37.00, lngMin: -103.00, lngMax: -94.43 },
+  { abbr: 'OK', latMin: 33.84, latMax: 37.00, lngMin: -103.00, lngMax: -94.43 },
   { abbr: 'KS', latMin: 37.00, latMax: 40.00, lngMin: -102.05, lngMax: -94.59 },
   { abbr: 'NE', latMin: 40.00, latMax: 43.00, lngMin: -104.05, lngMax: -95.31 },
   { abbr: 'SD', latMin: 42.48, latMax: 45.94, lngMin: -104.06, lngMax: -96.44 },
@@ -142,6 +144,20 @@ export function detectState(lat: number, lng: number): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Async state detection — uses reverse geocoding for accuracy, with bounding-box fallback.
+ * Preferred over `detectState` for all data-pipeline calls (infra, gas, etc.).
+ */
+export async function detectStateFromCoords(lat: number, lng: number): Promise<string | null> {
+  try {
+    const geo = await reverseGeocode(lat, lng);
+    if (geo.stateAbbr) return geo.stateAbbr;
+  } catch {
+    // API unavailable — fall through to bounding box
+  }
+  return detectState(lat, lng);
 }
 
 export function getStateAverage(state: string | null): SolarAverage | null {

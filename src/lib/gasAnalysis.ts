@@ -14,7 +14,7 @@
  *   Shape__Length - geometry length (meters)
  */
 
-import { detectState } from './solarAverages';
+import { detectStateFromCoords } from './solarAverages';
 import { geocodeAddress } from './infraLookup';
 import { fetchHenryHubPrice, fetchStateGasPrice } from './eiaApi';
 import { cachedFetch, TTL_LOCATION } from './requestCache';
@@ -772,7 +772,7 @@ export async function analyzeGasInfrastructure(opts: GasAnalysisOptions): Promis
     ({ lat, lng } = await geocodeAddress(opts.address));
   }
 
-  const detectedState = detectState(lat, lng);
+  const detectedState = await detectStateFromCoords(lat, lng);
 
   const settled = await Promise.allSettled([
     queryPipelines(lat, lng),

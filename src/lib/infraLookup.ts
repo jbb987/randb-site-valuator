@@ -17,7 +17,7 @@ import type {
   SolarWindResource,
   ElectricityPrice,
 } from '../types';
-import { detectState } from './solarAverages';
+import { detectStateFromCoords } from './solarAverages';
 import { getStateElectricityAverage } from './electricityAverages';
 import { cachedFetch, TTL_LOCATION, TTL_INFRASTRUCTURE } from './requestCache';
 import { fetchElectricityPrices } from './eiaApi';
@@ -524,7 +524,7 @@ export async function lookupInfrastructure(opts: LookupOptions): Promise<InfraRe
     ({ lat, lng } = await geocodeAddress(opts.address));
   }
 
-  const detectedState = detectState(lat, lng);
+  const detectedState = await detectStateFromCoords(lat, lng);
 
   const results = await Promise.allSettled([
     queryLinesWithGeometry(lat, lng),
