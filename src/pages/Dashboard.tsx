@@ -12,92 +12,112 @@ interface Tool {
   adminOnly?: boolean;
 }
 
-const tools: Tool[] = [
+interface ToolSection {
+  title: string;
+  tools: Tool[];
+}
+
+const toolSections: ToolSection[] = [
   {
-    id: 'site-appraiser',
-    name: 'Site Appraiser',
-    description: 'Appraise site value based on power capacity and land comps',
-    path: '/site-appraiser',
-    icon: 'dollar',
+    title: 'Power Infrastructure Due Diligence Report',
+    tools: [
+      {
+        id: 'site-appraiser',
+        name: 'Site Appraiser',
+        description: 'Appraise site value based on power capacity and land comps',
+        path: '/site-appraiser',
+        icon: 'dollar',
+      },
+      {
+        id: 'piddr',
+        name: 'Infrastructure Report',
+        description: 'Comprehensive due diligence report: land valuation, power infrastructure, and broadband',
+        path: '/power-infrastructure-report',
+        icon: 'report',
+      },
+      {
+        id: 'water-analysis',
+        name: 'Water Analysis',
+        description: 'Flood zones, stream networks, and wetlands due diligence from site coordinates',
+        path: '/water-analysis',
+        icon: 'water',
+      },
+      {
+        id: 'gas-analysis',
+        name: 'Gas Infrastructure Analysis',
+        description: 'Identify nearby gas pipelines, calculate demand, and estimate lateral construction costs',
+        path: '/gas-analysis',
+        icon: 'flame',
+      },
+      {
+        id: 'broadband-lookup',
+        name: 'Broadband Lookup',
+        description: 'Broadband due diligence report from site coordinates',
+        path: '/broadband-lookup',
+        icon: 'wifi',
+      },
+      {
+        id: 'grid-power-analyzer',
+        name: 'Grid Power Analyzer',
+        description: 'Map power generators, transmission lines, and available capacity',
+        path: '/grid-power-analyzer',
+        icon: 'grid',
+      },
+      {
+        id: 'power-calculator',
+        name: 'Power Calculator',
+        description: 'Analyze power infrastructure, substations, and transmission lines for any location',
+        path: '/power-calculator',
+        icon: 'bolt',
+      },
+      {
+        id: 'site-pipeline',
+        name: 'Site Pipeline',
+        description: 'Track and manage site requests through the pipeline',
+        path: '/site-pipeline',
+        icon: 'pipeline',
+      },
+      {
+        id: 'site-request-form',
+        name: 'Submit Site Request',
+        description: 'Submit new site requests with customer and address details',
+        path: '/site-request/form',
+        icon: 'clipboard',
+      },
+    ],
   },
   {
-    id: 'site-pipeline',
-    name: 'Site Pipeline',
-    description: 'Track and manage site requests through the pipeline',
-    path: '/site-pipeline',
-    icon: 'pipeline',
+    title: 'Sales',
+    tools: [
+      {
+        id: 'sales-crm',
+        name: 'Leads',
+        description: 'Manage and track sales leads through the outreach pipeline',
+        path: '/sales-crm',
+        icon: 'crm',
+      },
+      {
+        id: 'sales-admin',
+        name: 'Sales Dashboard',
+        description: 'View sales performance and leaderboard across all salespeople',
+        path: '/sales-admin',
+        icon: 'chart',
+        adminOnly: true,
+      },
+    ],
   },
   {
-    id: 'site-request-form',
-    name: 'Submit Site Request',
-    description: 'Submit new site requests with customer and address details',
-    path: '/site-request/form',
-    icon: 'clipboard',
-  },
-  {
-    id: 'broadband-lookup',
-    name: 'Broadband Lookup',
-    description: 'Broadband due diligence report from site coordinates',
-    path: '/broadband-lookup',
-    icon: 'wifi',
-  },
-  {
-    id: 'grid-power-analyzer',
-    name: 'Grid Power Analyzer',
-    description: 'Map power generators, transmission lines, and available capacity',
-    path: '/grid-power-analyzer',
-    icon: 'grid',
-  },
-  {
-    id: 'power-calculator',
-    name: 'Power Calculator',
-    description: 'Analyze power infrastructure, substations, and transmission lines for any location',
-    path: '/power-calculator',
-    icon: 'bolt',
-  },
-  {
-    id: 'piddr',
-    name: 'Infrastructure Report',
-    description: 'Comprehensive due diligence report: land valuation, power infrastructure, and broadband',
-    path: '/power-infrastructure-report',
-    icon: 'report',
-  },
-  {
-    id: 'water-analysis',
-    name: 'Water Analysis',
-    description: 'Flood zones, stream networks, and wetlands due diligence from site coordinates',
-    path: '/water-analysis',
-    icon: 'water',
-  },
-  {
-    id: 'gas-analysis',
-    name: 'Gas Infrastructure Analysis',
-    description: 'Identify nearby gas pipelines, calculate demand, and estimate lateral construction costs',
-    path: '/gas-analysis',
-    icon: 'flame',
-  },
-  {
-    id: 'sales-crm',
-    name: 'Leads',
-    description: 'Manage and track sales leads through the outreach pipeline',
-    path: '/sales-crm',
-    icon: 'crm',
-  },
-  {
-    id: 'sales-admin',
-    name: 'Sales Dashboard',
-    description: 'View sales performance and leaderboard across all salespeople',
-    path: '/sales-admin',
-    icon: 'chart',
-    adminOnly: true,
-  },
-  {
-    id: 'user-management',
-    name: 'User Management',
-    description: 'Manage platform users and their roles',
-    path: '/user-management',
-    icon: 'users',
-    adminOnly: true,
+    title: 'Settings',
+    tools: [
+      {
+        id: 'user-management',
+        name: 'User Management',
+        description: 'Manage platform users and their roles',
+        path: '/user-management',
+        icon: 'users',
+        adminOnly: true,
+      },
+    ],
   },
 ];
 
@@ -199,35 +219,43 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { role, allowedTools } = useAuth();
 
-  const visibleTools = tools.filter((t) => {
+  const isToolVisible = (tool: Tool) => {
     if (!role) return false;
     if (role === 'admin') return true;
-    if (t.adminOnly) return false;
-    return allowedTools.includes(t.id as ToolId);
-  });
+    if (tool.adminOnly) return false;
+    return allowedTools.includes(tool.id as ToolId);
+  };
 
   return (
     <Layout>
-      <main className="py-6">
-        <h2 className="font-heading text-2xl font-semibold text-[#201F1E] mb-6">Power Infrastructure Due Diligence Report</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {visibleTools.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={() => navigate(tool.path)}
-              className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-6 text-left hover:shadow-md hover:border-[#ED202B]/30 transition group"
-            >
-              <div className="h-10 w-10 rounded-lg bg-[#ED202B]/10 flex items-center justify-center mb-4">
-                <ToolIcon type={tool.icon} />
-              </div>
-              <h3 className="font-heading font-semibold text-[#201F1E] mb-1 group-hover:text-[#ED202B] transition">
-                {tool.name}
-              </h3>
-              <p className="text-sm text-[#7A756E]">{tool.description}</p>
-            </button>
-          ))}
+      <main className="py-6 space-y-10">
+        {toolSections.map((section) => {
+          const visibleTools = section.tools.filter(isToolVisible);
+          if (visibleTools.length === 0) return null;
 
-        </div>
+          return (
+            <section key={section.title}>
+              <h2 className="font-heading text-2xl font-semibold text-[#201F1E] mb-6">{section.title}</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {visibleTools.map((tool) => (
+                  <button
+                    key={tool.id}
+                    onClick={() => navigate(tool.path)}
+                    className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-6 text-left hover:shadow-md hover:border-[#ED202B]/30 transition group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-[#ED202B]/10 flex items-center justify-center mb-4">
+                      <ToolIcon type={tool.icon} />
+                    </div>
+                    <h3 className="font-heading font-semibold text-[#201F1E] mb-1 group-hover:text-[#ED202B] transition">
+                      {tool.name}
+                    </h3>
+                    <p className="text-sm text-[#7A756E]">{tool.description}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </main>
     </Layout>
   );
