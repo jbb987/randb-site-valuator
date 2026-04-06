@@ -1,10 +1,18 @@
+import { useMemo } from 'react';
 import type { AppraisalResult } from '../../types';
 import type { PiddrInputs, PiddrSectionState } from '../../hooks/usePiddrReport';
 import { formatCurrencyShort, formatMultiple } from '../../utils/format';
+import PowerSlider from '../PowerSlider';
+
+const VALUE_PER_MW = 3_000_000;
 
 interface Props {
   section: PiddrSectionState<AppraisalResult>;
   inputs: PiddrInputs;
+  mw: number;
+  mwMin: number;
+  mwMax: number;
+  onMwChange: (mw: number) => void;
 }
 
 function SectionSkeleton() {
@@ -38,8 +46,20 @@ function MetricCard({ label, value, accent }: { label: string; value: string; ac
   );
 }
 
-export default function LandValuationSection({ section, inputs }: Props) {
+export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax, onMwChange }: Props) {
   const { loading, error, data } = section;
+
+  // Live-recompute appraisal values using the current slider MW
+  const liveData = useMemo(() => {
+    if (!data) return null;
+    const currentValueLow = inputs.acreage * inputs.ppaLow;
+    const currentValueHigh = inputs.acreage * inputs.ppaHigh;
+    const currentValueMid = (currentValueLow + currentValueHigh) / 2;
+    const energizedValue = mw * VALUE_PER_MW;
+    const valueCreated = energizedValue - currentValueMid;
+    const returnMultiple = currentValueMid > 0 ? energizedValue / currentValueMid : 0;
+    return { currentValueLow, currentValueHigh, energizedValue, valueCreated, returnMultiple };
+  }, [data, inputs.acreage, inputs.ppaLow, inputs.ppaHigh, mw]);
 
   return (
     <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
@@ -57,26 +77,26 @@ export default function LandValuationSection({ section, inputs }: Props) {
       {loading && <SectionSkeleton />}
       {error && <SectionError message={error} />}
 
-      {data && (
+      {liveData && (
         <div className="space-y-5">
           {/* Metric cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MetricCard
               label="Current Value (Low)"
-              value={data.currentValueLow > 0 ? formatCurrencyShort(data.currentValueLow) : '--'}
+              value={liveData.currentValueLow > 0 ? formatCurrencyShort(liveData.currentValueLow) : '--'}
             />
             <MetricCard
               label="Current Value (High)"
-              value={data.currentValueHigh > 0 ? formatCurrencyShort(data.currentValueHigh) : '--'}
+              value={liveData.currentValueHigh > 0 ? formatCurrencyShort(liveData.currentValueHigh) : '--'}
             />
             <MetricCard
               label="Energized Value"
-              value={formatCurrencyShort(data.energizedValue)}
+              value={formatCurrencyShort(liveData.energizedValue)}
               accent
             />
             <MetricCard
               label="Return Multiple"
-              value={data.returnMultiple > 0 ? formatMultiple(data.returnMultiple) : '--'}
+              value={liveData.returnMultiple > 0 ? formatMultiple(liveData.returnMultiple) : '--'}
             />
           </div>
 
@@ -98,13 +118,30 @@ export default function LandValuationSection({ section, inputs }: Props) {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-[#7A756E]">MW Capacity</span>
-              <span className="text-[#201F1E] font-medium">{inputs.mw} MW</span>
+              <span className="text-[#201F1E] font-medium">{mw} MW</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-[#7A756E]">Value Created</span>
               <span className="text-[#ED202B] font-semibold">
-                {data.valueCreated > 0 ? `+${formatCurrencyShort(data.valueCreated)}` : formatCurrencyShort(data.valueCreated)}
+                {liveData.valueCreated > 0 ? `+${formatCurrencyShort(liveData.valueCreated)}` : formatCurrencyShort(liveData.valueCreated)}
               </span>
+            </div>
+          </div>
+
+          {/* MW Slider */}
+          <div className="border-t border-[#D8D5D0]/60 pt-4 max-w-md">
+            <PowerSlider
+              value={mw}
+              min={mwMin}
+              max={mwMax}
+              step={5}
+              label="MW Capacity"
+              onChange={onMwChange}
+            />
+            <div className="flex justify-between mt-1">
+              <span className="text-[10px] text-[#7A756E]">{mwMin} MW</span>
+              <span className="text-sm font-heading font-semibold text-[#ED202B]">{mw} MW</span>
+              <span className="text-[10px] text-[#7A756E]">{mwMax} MW</span>
             </div>
           </div>
         </div>

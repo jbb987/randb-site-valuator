@@ -65,6 +65,7 @@ export default function PowerInfraReportTool() {
   const [owner, setOwner] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [matchedExisting, setMatchedExisting] = useState(false);
+  const [newSiteProjectId, setNewSiteProjectId] = useState<string | null>(null);
 
   // Sidebar state
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export default function PowerInfraReportTool() {
 
   const writebackDoneRef = useRef<number | null>(null);
   const autoCreateDoneRef = useRef<number | null>(null);
+  const siteCreatingRef = useRef(false);
 
   const report = usePiddrReport();
   const pdfExport = usePdfExport();
@@ -156,7 +158,7 @@ export default function PowerInfraReportTool() {
   // Auto-create a new registry entry when report completes for a new site (no match found)
   useEffect(() => {
     if (!user || !report.inputs || report.isGenerating || !report.hasReport) return;
-    if (selectedSiteId) return; // Already linked to a registry entry
+    if (selectedSiteId || siteCreatingRef.current) return; // Already linked or creation in progress
     if (autoCreateDoneRef.current === report.generatedAt) return;
     autoCreateDoneRef.current = report.generatedAt;
 
@@ -174,6 +176,7 @@ export default function PowerInfraReportTool() {
       county: report.inputs.county || undefined,
       parcelId: report.inputs.parcelId || undefined,
       owner: report.inputs.owner || undefined,
+      projectId: newSiteProjectId || activeProjectId || undefined,
       createdBy: user.uid,
       memberIds: [user.uid],
       appraisalResult: report.appraisal.data ?? null,
@@ -185,15 +188,68 @@ export default function PowerInfraReportTool() {
     }).then(
       (newId) => {
         setSelectedSiteId(newId);
+        setNewSiteProjectId(null);
         console.log('[PIDDR] New site auto-saved to registry:', newId);
       },
       (err) => console.error('[PIDDR] Failed to auto-save site:', err),
     );
-  }, [user, selectedSiteId, report.inputs, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.water.data, report.gas.data]);
+  }, [user, selectedSiteId, newSiteProjectId, activeProjectId, report.inputs, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.water.data, report.gas.data]);
+
+  function handleAddSiteToProject(projectId: string) {
+    if (!user) return;
+
+    // Determine default name based on existing sites in the folder
+    const existingSites = registrySites.filter((s) => s.projectId === projectId);
+    const defaultName = `Site ${existingSites.length + 1}`;
+
+    // Guard against race condition with auto-create effect
+    siteCreatingRef.current = true;
+
+    // Create the site entry immediately in Firestore
+    void createSiteEntry({
+      name: defaultName,
+      address: '',
+      coordinates: { lat: 0, lng: 0 },
+      acreage: 0,
+      mwCapacity: 50,
+      dollarPerAcreLow: 0,
+      dollarPerAcreHigh: 0,
+      projectId,
+      createdBy: user.uid,
+      memberIds: [user.uid],
+    }).then(
+      (newId) => {
+        siteCreatingRef.current = false;
+        setSelectedSiteId(newId);
+        setMatchedExisting(false);
+        setNewSiteProjectId(null);
+        setActiveProjectId(projectId);
+        setSiteName(defaultName);
+        setAddress('');
+        setCoordinates('');
+        setAcreage(0);
+        setMw(50);
+        setPpaLow(0);
+        setPpaHigh(0);
+        setPriorUsage('');
+        setLegalDescription('');
+        setCounty('');
+        setParcelId('');
+        setOwner('');
+        report.reset();
+        console.log('[PIDDR] Created new site in folder:', newId, defaultName);
+      },
+      (err) => {
+        siteCreatingRef.current = false;
+        console.error('[PIDDR] Failed to create site:', err);
+      },
+    );
+  }
 
   function handleSidebarSiteSelect(site: SiteRegistryEntry) {
     setSelectedSiteId(site.id);
     setMatchedExisting(true);
+    setNewSiteProjectId(null);
     setSiteName(site.name);
     if (site.address) setAddress(site.address);
     if (site.coordinates) {
@@ -245,24 +301,6 @@ export default function PowerInfraReportTool() {
     }
   }
 
-  function handleNewReport() {
-    setSelectedSiteId(null);
-    setMatchedExisting(false);
-    setSiteName('');
-    setAddress('');
-    setCoordinates('');
-    setAcreage(0);
-    setMw(50);
-    setPpaLow(0);
-    setPpaHigh(0);
-    setPriorUsage('');
-    setLegalDescription('');
-    setCounty('');
-    setParcelId('');
-    setOwner('');
-    report.reset();
-  }
-
   function handleReplay(inputs: Record<string, unknown>) {
     const name = (inputs.siteName as string) || '';
     const coords = (inputs.coordinates as string) || '';
@@ -291,6 +329,12 @@ export default function PowerInfraReportTool() {
       const site = registrySites.find((rs) => rs.id === selectedSiteId);
       if (site?.projectId) {
         const project = projects.find((p) => p.id === site.projectId);
+        if (project) customerName = project.name;
+      }
+    } else {
+      const pid = newSiteProjectId || activeProjectId;
+      if (pid) {
+        const project = projects.find((p) => p.id === pid);
         if (project) customerName = project.name;
       }
     }
@@ -343,8 +387,8 @@ export default function PowerInfraReportTool() {
         }
         console.log('[PIDDR] Using selected site:', site.name, site.id);
       }
-    } else {
-      // Manual entry — try to match by coordinates
+    } else if (!newSiteProjectId) {
+      // Manual entry (not from "Add Site" in folder) — try to match by coordinates
       const coords = parseCoordinates(coordinates.trim());
       if (coords) {
         const match = findSiteByCoordinates(registrySites, coords.lat, coords.lng);
@@ -394,6 +438,7 @@ export default function PowerInfraReportTool() {
           onCreateProject={createProject}
           onDeleteProject={handleDeleteProject}
           onDeleteSite={handleDeleteSite}
+          onAddSite={handleAddSiteToProject}
         />
 
         {/* Mobile sidebar overlay */}
@@ -410,6 +455,9 @@ export default function PowerInfraReportTool() {
               onToggleCollapse={() => setMobileSidebarOpen(false)}
               isAdmin={isAdmin}
               onCreateProject={createProject}
+              onDeleteProject={handleDeleteProject}
+              onDeleteSite={handleDeleteSite}
+              onAddSite={handleAddSiteToProject}
               isMobile
             />
           )}
@@ -429,25 +477,10 @@ export default function PowerInfraReportTool() {
           </button>
 
           {/* Page Header */}
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h1 className="font-heading text-2xl font-semibold text-[#201F1E]">
-                Power Infrastructure Due Diligence Report
-              </h1>
-              <p className="text-sm text-[#7A756E] mt-1">
-                Generate a comprehensive site report combining land valuation, power infrastructure, and broadband connectivity analysis.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleNewReport}
-              className="hidden md:inline-flex items-center gap-2 rounded-lg border border-[#D8D5D0] bg-white px-4 py-2.5 text-sm font-medium text-[#201F1E] hover:bg-[#F5F4F2] transition shadow-sm"
-            >
-              <svg className="h-4 w-4 text-[#7A756E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              New Report
-            </button>
+          <div className="mb-6">
+            <h1 className="font-heading text-2xl font-semibold text-[#201F1E]">
+              Power Infrastructure Due Diligence Report
+            </h1>
           </div>
 
           {/* Input Section */}
@@ -729,6 +762,10 @@ export default function PowerInfraReportTool() {
               <LandValuationSection
                 section={report.appraisal}
                 inputs={report.inputs}
+                mw={mw}
+                mwMin={MW_MIN}
+                mwMax={MW_MAX}
+                onMwChange={setMw}
               />
 
               {/* Section 3: Power Infrastructure */}

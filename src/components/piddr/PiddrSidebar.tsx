@@ -15,6 +15,7 @@ interface Props {
   onCreateProject: (name: string) => void;
   onDeleteProject?: (projectId: string) => void;
   onDeleteSite?: (siteId: string) => void;
+  onAddSite?: (projectId: string) => void;
   isMobile?: boolean;
 }
 
@@ -31,6 +32,7 @@ export default function PiddrSidebar({
   onCreateProject,
   onDeleteProject,
   onDeleteSite,
+  onAddSite,
   isMobile,
 }: Props) {
   const [newProjectName, setNewProjectName] = useState('');
@@ -233,7 +235,7 @@ export default function PiddrSidebar({
 
               {/* Expanded site list */}
               <AnimatePresence>
-                {isExpanded && projectSites.length > 0 && (
+                {isExpanded && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
@@ -279,6 +281,23 @@ export default function PiddrSidebar({
                         )}
                       </div>
                     ))}
+
+                    {/* Add Site button */}
+                    {onAddSite && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddSite(project.id);
+                          if (isMobile) onToggleCollapse();
+                        }}
+                        className="flex items-center gap-1.5 pl-9 pr-3 py-1.5 mx-2 rounded-md text-[12px] text-[#7A756E] hover:text-[#ED202B] hover:bg-white/40 transition-all w-full text-left"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Site
+                      </button>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

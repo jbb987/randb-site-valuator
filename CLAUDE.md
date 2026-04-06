@@ -300,6 +300,16 @@ All protected pages must be wrapped in `<Layout>` which provides:
 
 - `src/components/navbar/navConfig.ts` holds the `navLinks` array for navbar items
 
+## Audit
+
+A living audit document lives at **`AUDIT.md`** in the project root. Every agent working on this codebase must follow these rules:
+
+- **Before fixing a bug or adding a feature**, check `AUDIT.md` for related open issues. If your work resolves one, update its status to `fixed` with the date and commit/PR reference.
+- **If you discover a new security, quality, or performance issue** while working, add it to `AUDIT.md` under the appropriate severity section. Assign the next available ID (e.g. `M-14`).
+- **If asked to run an audit**, review the codebase for new issues, verify that `fixed` items are actually resolved, and update `AUDIT.md` accordingly. Add a row to the Changelog table.
+- **Never remove issues** — mark them `fixed` or `wontfix` with justification.
+- Severity levels: **Critical** (security holes, data loss), **High** (reliability, performance), **Medium** (quality, maintainability), **Low** (style, minor improvements).
+
 ## Commands
 
 ```bash
