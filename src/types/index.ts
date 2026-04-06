@@ -188,10 +188,9 @@ export type MobileTechnology = '5G-NR' | '4G LTE' | '3G';
  * Codes per FCC Broadband Data Collection spec.
  */
 export const MOBILE_TECH_CODE_MAP: Record<number, MobileTechnology> = {
-  300: '5G-NR',     // 5G New Radio
-  400: '5G-NR',     // 5G NR — Non-Standalone
-  500: '4G LTE',    // 4G LTE
-  600: '3G',        // 3G (legacy)
+  300: '3G',        // 3G (CDMA/EVDO/GSM/UMTS/HSPA)
+  400: '4G LTE',    // 4G LTE
+  500: '5G-NR',     // 5G New Radio
 };
 
 /**

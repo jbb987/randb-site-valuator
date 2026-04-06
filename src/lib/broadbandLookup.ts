@@ -668,7 +668,7 @@ async function queryNearbyServiceBlocks(
  *
  * If no mobile records are found (expected for current data), returns [].
  */
-const MOBILE_TECH_CODES = new Set([300, 400, 500, 600]);
+const MOBILE_TECH_CODES = new Set([300, 400, 500]);
 
 async function queryMobileCoverage(
   _lat: number,
@@ -713,10 +713,9 @@ async function queryMobileCoverage(
 
 /** Estimated mobile speeds by technology (conservative). */
 const MOBILE_SPEED_ESTIMATES: Record<number, { down: number; up: number }> = {
-  300: { down: 200, up: 30 },   // 5G NR
-  400: { down: 150, up: 25 },   // 5G NR Non-Standalone
-  500: { down: 50, up: 10 },    // 4G LTE
-  600: { down: 5, up: 1 },      // 3G
+  300: { down: 5, up: 1 },      // 3G
+  400: { down: 50, up: 10 },    // 4G LTE
+  500: { down: 200, up: 30 },   // 5G NR
 };
 
 /** Parse a single mobile provider record from the BDC detail table. */
@@ -862,6 +861,6 @@ export async function lookupBroadband(opts: BroadbandLookupOptions): Promise<Bro
     analyzedAt: Date.now(),
 
     providersError: errMsg(results[0], 'Broadband providers lookup failed'),
-    fiberError: errMsg(results[2], 'Fiber routes lookup failed'),
+    fiberError: null,
   };
 }
