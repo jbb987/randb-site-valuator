@@ -17,6 +17,7 @@ export default defineConfig({
       '/api/nwi': {
         target: 'https://fwspublicservices.wim.usgs.gov',
         changeOrigin: true,
+        timeout: 30000,
         rewrite: (path) => path.replace(/^\/api\/nwi/, ''),
       },
     },
