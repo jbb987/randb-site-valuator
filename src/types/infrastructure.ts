@@ -68,6 +68,57 @@ export interface InfraRefreshLog {
   };
 }
 
+// ── Transport Infrastructure ──────────────────────────────────────────────
+
+export interface NearbyAirport {
+  name: string;
+  locId: string;         // FAA location ID
+  type: string;          // fac_type (e.g. "AIRPORT", "HELIPORT")
+  hub: string;           // hub classification
+  city: string;
+  state: string;
+  elevation: number;
+  commercialOps: number;
+  distanceMi: number;
+  lat: number;
+  lng: number;
+}
+
+export interface NearbyInterstate {
+  routeNumber: string;
+  routeName: string;
+  routeId: string;
+  distanceMi: number;
+}
+
+export interface NearbyPort {
+  name: string;
+  totalTonnage: number;
+  imports: number;
+  exports: number;
+  domestic: number;
+  distanceMi: number;
+  lat: number;
+  lng: number;
+}
+
+export interface NearbyRailroad {
+  owner: string;
+  subdivision: string;
+  tracks: number;
+  passenger: string;     // "Y" | "N" | etc.
+  stracnet: string;      // strategic rail corridor network
+  distanceMi: number;
+}
+
+export interface TransportResult {
+  airports: NearbyAirport[];
+  interstates: NearbyInterstate[];
+  ports: NearbyPort[];
+  railroads: NearbyRailroad[];
+  lastAnalyzedAt: number;
+}
+
 // ── Bounding box for geo queries ───────────────────────────────────────────
 
 export interface GeoBBox {

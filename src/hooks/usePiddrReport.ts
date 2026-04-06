@@ -5,8 +5,10 @@ import type { AppraisalResult, BroadbandResult } from '../types';
 import type { InfrastructureData } from '../components/power-calculator/InfrastructureResults';
 import { analyzeWater } from '../lib/waterAnalysis';
 import { analyzeGasInfrastructure } from '../lib/gasAnalysis';
+import { lookupTransport } from '../lib/transportLookup';
 import type { WaterAnalysisResult } from '../lib/waterAnalysis.types';
 import type { GasAnalysisResult } from '../lib/gasAnalysis';
+import type { TransportResult } from '../types/infrastructure';
 import { parseCoordinates } from '../utils/parseCoordinates';
 
 export interface PiddrInputs {
@@ -36,6 +38,7 @@ export interface PiddrSectionState<T> {
 export interface ExistingResults {
   infra?: Record<string, unknown> | null;
   broadband?: BroadbandResult | null;
+  transport?: Record<string, unknown> | null;
   water?: Record<string, unknown> | null;
   gas?: Record<string, unknown> | null;
 }
@@ -68,6 +71,9 @@ export function usePiddrReport() {
     loading: false, error: null, data: null,
   });
   const [broadband, setBroadband] = useState<PiddrSectionState<BroadbandResult>>({
+    loading: false, error: null, data: null,
+  });
+  const [transport, setTransport] = useState<PiddrSectionState<TransportResult>>({
     loading: false, error: null, data: null,
   });
   const [water, setWater] = useState<PiddrSectionState<WaterAnalysisResult>>({
@@ -162,7 +168,29 @@ export function usePiddrReport() {
           }
         })();
 
-    // Section 4: Water — skip if existing results provided (re-fetch if wetlands errored)
+    // Section 4: Transport — skip if existing results provided
+    const hasExistingTransport = existing?.transport && Object.keys(existing.transport).length > 0;
+    if (hasExistingTransport) {
+      setTransport({ loading: false, error: null, data: existing!.transport as unknown as TransportResult });
+    } else {
+      setTransport({ loading: true, error: null, data: null });
+    }
+
+    const transportPromise = hasExistingTransport
+      ? Promise.resolve()
+      : (async () => {
+          try {
+            const res = await lookupTransport({
+              coordinates: reportInputs.coordinates || undefined,
+              address: reportInputs.address || undefined,
+            });
+            setTransport({ loading: false, error: null, data: res });
+          } catch (err) {
+            setTransport({ loading: false, error: err instanceof Error ? err.message : 'Transport lookup failed', data: null });
+          }
+        })();
+
+    // Section 5: Water — skip if existing results provided (re-fetch if wetlands errored)
     const hasExistingWater = existing?.water && Object.keys(existing.water).length > 0
       && !((existing.water as Record<string, unknown>).wetlandsError);
     if (hasExistingWater) {
@@ -187,7 +215,7 @@ export function usePiddrReport() {
           }
         })();
 
-    // Section 5: Gas — skip if existing results provided
+    // Section 6: Gas — skip if existing results provided
     const hasExistingGas = existing?.gas && Object.keys(existing.gas).length > 0;
     if (hasExistingGas) {
       setGas({ loading: false, error: null, data: existing!.gas as unknown as GasAnalysisResult });
@@ -211,7 +239,7 @@ export function usePiddrReport() {
         })();
 
     // Run all sections in parallel
-    await Promise.allSettled([infraPromise, broadbandPromise, waterPromise, gasPromise]);
+    await Promise.allSettled([infraPromise, broadbandPromise, transportPromise, waterPromise, gasPromise]);
   }, [infraLookup, broadbandLookup]);
 
   const reset = useCallback(() => {
@@ -219,12 +247,13 @@ export function usePiddrReport() {
     setAppraisal({ loading: false, error: null, data: null });
     setInfra({ loading: false, error: null, data: null });
     setBroadband({ loading: false, error: null, data: null });
+    setTransport({ loading: false, error: null, data: null });
     setWater({ loading: false, error: null, data: null });
     setGas({ loading: false, error: null, data: null });
     setGeneratedAt(null);
   }, []);
 
-  const isGenerating = appraisal.loading || infra.loading || broadband.loading || water.loading || gas.loading;
+  const isGenerating = appraisal.loading || infra.loading || broadband.loading || transport.loading || water.loading || gas.loading;
   const hasReport = generatedAt !== null;
 
   return {
@@ -232,6 +261,7 @@ export function usePiddrReport() {
     appraisal,
     infra,
     broadband,
+    transport,
     water,
     gas,
     generatedAt,

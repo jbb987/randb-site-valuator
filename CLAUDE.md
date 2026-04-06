@@ -62,6 +62,7 @@ src/
       BroadbandSection.tsx    # Broadband results wrapper
       WaterSection.tsx        # Water analysis results wrapper
       GasSection.tsx          # Gas analysis results wrapper
+      TransportSection.tsx    # Transport infrastructure results (airports, interstates, ports, railroads)
       PiddrPdfDocument.tsx    # Full PDF document structure (react-pdf)
     broadband/                # Broadband Lookup components
       BroadbandReport.tsx     # Due diligence report display
@@ -127,7 +128,7 @@ src/
   hooks/
     useAuth.ts                # Firebase auth state + user role + allowed tools
     useAppraisal.ts           # Appraisal calculation logic
-    usePiddrReport.ts         # PIDDR report generation (all 5 sections in parallel)
+    usePiddrReport.ts         # PIDDR report generation (all 6 sections in parallel)
     usePdfExport.ts           # PDF generation via react-pdf
     useProjects.ts            # Project CRUD operations
     useSites.ts               # Site CRUD operations
@@ -156,6 +157,7 @@ src/
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions
     gasAnalysis.ts            # Gas analysis (pipelines, demand, lateral, LDC, pricing)
+    transportLookup.ts        # Transport infrastructure (airports, interstates, ports, railroads via geo.dot.gov)
     infraLookup.ts            # Infrastructure lookup (substations, lines, plants, geocode)
     infraIngestion.ts         # Admin data ingestion pipeline (ArcGIS → Firestore)
     powerMapData.ts           # Power map data fetching and availability calculations
@@ -245,7 +247,7 @@ public/
 
 ### PIDDR Report Generation
 
-- `usePiddrReport` hook manages 5 parallel sections: Appraisal (instant), Infrastructure, Broadband, Water, Gas
+- `usePiddrReport` hook manages 6 parallel sections: Appraisal (instant), Infrastructure, Broadband, Transport, Water, Gas
 - Each section has `PiddrSectionState<T>` with `loading`, `error`, `data`
 - `ExistingResults` allows skipping re-fetch for cached data from the registry
 - Results are auto-saved to the site registry on completion
@@ -256,7 +258,7 @@ public/
 - Sites stored in Firestore `sites-registry` collection as `SiteRegistryEntry`
 - Each entry has optional `projectId` linking to a `Project` (folder)
 - `PiddrSidebar` groups sites by project, with "Unsorted" for unlinked sites
-- Write-back helpers: `saveAppraisalToSite`, `saveInfraToSite`, `saveBroadbandToSite`, `saveWaterToSite`, `saveGasToSite`, `savePiddrTimestamp`
+- Write-back helpers: `saveAppraisalToSite`, `saveInfraToSite`, `saveBroadbandToSite`, `saveTransportToSite`, `saveWaterToSite`, `saveGasToSite`, `savePiddrTimestamp`
 - Dedup and migration utilities exist in `siteRegistry.ts` but are not auto-run
 
 ### Dashboard Organization

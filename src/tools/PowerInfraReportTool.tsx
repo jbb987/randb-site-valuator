@@ -6,6 +6,7 @@ import ReportHeader from '../components/piddr/ReportHeader';
 import SiteOverviewSection from '../components/piddr/SiteOverviewSection';
 import LandValuationSection from '../components/piddr/LandValuationSection';
 import BroadbandSection from '../components/piddr/BroadbandSection';
+import TransportSection from '../components/piddr/TransportSection';
 import WaterSection from '../components/piddr/WaterSection';
 import GasSection from '../components/piddr/GasSection';
 import PiddrSidebar from '../components/piddr/PiddrSidebar';
@@ -20,6 +21,7 @@ import {
   saveAppraisalToSite,
   saveInfraToSite,
   saveBroadbandToSite,
+  saveTransportToSite,
   saveWaterToSite,
   saveGasToSite,
   savePiddrTimestamp,
@@ -142,6 +144,9 @@ export default function PowerInfraReportTool() {
     if (report.broadband.data) {
       promises.push(saveBroadbandToSite(selectedSiteId, report.broadband.data));
     }
+    if (report.transport.data) {
+      promises.push(saveTransportToSite(selectedSiteId, report.transport.data as unknown as Record<string, unknown>));
+    }
     if (report.water.data) {
       promises.push(saveWaterToSite(selectedSiteId, report.water.data as unknown as Record<string, unknown>));
     }
@@ -154,7 +159,7 @@ export default function PowerInfraReportTool() {
       () => console.log('[PIDDR] Results saved to site registry'),
       (err) => console.error('[PIDDR] Failed to save results:', err),
     );
-  }, [selectedSiteId, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.water.data, report.gas.data]);
+  }, [selectedSiteId, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.transport.data, report.water.data, report.gas.data]);
 
   // Auto-create a new registry entry when report completes for a new site (no match found)
   useEffect(() => {
@@ -183,6 +188,7 @@ export default function PowerInfraReportTool() {
       appraisalResult: report.appraisal.data ?? null,
       infraResult: report.infra.data ? (report.infra.data as unknown as Record<string, unknown>) : null,
       broadbandResult: report.broadband.data ?? null,
+      transportResult: report.transport.data ? (report.transport.data as unknown as Record<string, unknown>) : null,
       waterResult: report.water.data ? (report.water.data as unknown as Record<string, unknown>) : null,
       gasResult: report.gas.data ? (report.gas.data as unknown as Record<string, unknown>) : null,
       piddrGeneratedAt: report.generatedAt ?? Date.now(),
@@ -194,7 +200,7 @@ export default function PowerInfraReportTool() {
       },
       (err) => console.error('[PIDDR] Failed to auto-save site:', err),
     );
-  }, [user, selectedSiteId, newSiteProjectId, activeProjectId, report.inputs, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.water.data, report.gas.data]);
+  }, [user, selectedSiteId, newSiteProjectId, activeProjectId, report.inputs, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.transport.data, report.water.data, report.gas.data]);
 
   function handleAddSiteToProject(projectId: string) {
     if (!user) return;
@@ -294,6 +300,7 @@ export default function PowerInfraReportTool() {
       report.generateReport(inputs, {
         infra: site.infraResult,
         broadband: site.broadbandResult,
+        transport: site.transportResult,
         water: site.waterResult,
         gas: site.gasResult,
       });
@@ -405,6 +412,7 @@ export default function PowerInfraReportTool() {
           existing = {
             infra: match.infraResult,
             broadband: match.broadbandResult,
+            transport: match.transportResult,
             water: match.waterResult,
             gas: match.gasResult,
           };
@@ -629,6 +637,7 @@ export default function PowerInfraReportTool() {
                         appraisal: report.appraisal.data,
                         infra: report.infra.data,
                         broadband: report.broadband.data,
+                        transport: report.transport.data,
                         water: report.water.data,
                         gas: report.gas.data,
                         generatedAt: report.generatedAt!,
@@ -759,6 +768,7 @@ export default function PowerInfraReportTool() {
                   { label: 'Valuation', state: getSectionState(report.appraisal) },
                   { label: 'Infrastructure', state: getSectionState(report.infra) },
                   { label: 'Broadband', state: getSectionState(report.broadband) },
+                  { label: 'Transport', state: getSectionState(report.transport) },
                   { label: 'Water', state: getSectionState(report.water) },
                   { label: 'Gas', state: getSectionState(report.gas) },
                 ]}
@@ -827,10 +837,13 @@ export default function PowerInfraReportTool() {
               {/* Section 4: Broadband */}
               <BroadbandSection section={report.broadband} />
 
-              {/* Section 5: Water Analysis */}
+              {/* Section 5: Transport Infrastructure */}
+              <TransportSection section={report.transport} />
+
+              {/* Section 6: Water Analysis */}
               <WaterSection section={report.water} />
 
-              {/* Section 6: Gas Infrastructure */}
+              {/* Section 7: Gas Infrastructure */}
               <GasSection section={report.gas} />
             </div>
           )}
