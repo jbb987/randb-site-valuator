@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import type { AppraisalResult } from '../../types';
+import type { AppraisalResult, LandComp } from '../../types';
 import type { PiddrInputs, PiddrSectionState } from '../../hooks/usePiddrReport';
 import { formatCurrencyShort, formatMultiple } from '../../utils/format';
 import PowerSlider from '../PowerSlider';
+import LandCompsPanel from './LandCompsPanel';
 
 const VALUE_PER_MW = 3_000_000;
 
@@ -13,6 +14,9 @@ interface Props {
   mwMin: number;
   mwMax: number;
   onMwChange: (mw: number) => void;
+  landComps: LandComp[];
+  onLandCompsChange: (comps: LandComp[]) => void;
+  onApplyCompStats: (ppaLow: number, ppaHigh: number) => void;
 }
 
 function SectionSkeleton() {
@@ -46,7 +50,7 @@ function MetricCard({ label, value, accent }: { label: string; value: string; ac
   );
 }
 
-export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax, onMwChange }: Props) {
+export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax, onMwChange, landComps, onLandCompsChange, onApplyCompStats }: Props) {
   const { loading, error, data } = section;
 
   // Live-recompute appraisal values using the current slider MW
@@ -143,6 +147,15 @@ export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax
               <span className="text-sm font-heading font-semibold text-[#ED202B]">{mw} MW</span>
               <span className="text-[10px] text-[#7A756E]">{mwMax} MW</span>
             </div>
+          </div>
+
+          {/* Land Comps — internal only, not in PDF */}
+          <div className="border-t border-[#D8D5D0]/60 pt-4">
+            <LandCompsPanel
+              comps={landComps}
+              onCompsChange={onLandCompsChange}
+              onApplyStats={onApplyCompStats}
+            />
           </div>
         </div>
       )}

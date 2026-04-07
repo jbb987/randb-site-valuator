@@ -59,6 +59,7 @@ src/
       ReportHeader.tsx        # Report header with section status indicators
       SiteOverviewSection.tsx # Site overview with map and property details
       LandValuationSection.tsx # Appraisal metrics and breakdown
+      LandCompsPanel.tsx    # Collapsible land comps table (CSV paste, stats, apply to valuation)
       BroadbandSection.tsx    # Broadband results wrapper
       WaterSection.tsx        # Water analysis results wrapper
       GasSection.tsx          # Gas analysis results wrapper
@@ -175,6 +176,7 @@ src/
     format.ts                 # Formatting helpers
     exportPdf.ts              # HTML-to-PDF fallback (html2canvas + jsPDF)
     parseCoordinates.ts       # Coordinate parsing (decimal + DMS formats)
+    landComps.ts              # Land comps CSV parser, stats calculator, Claude prompt
 public/
   fonts/                      # Local TTF fonts for PDF (Sora, IBM Plex Sans)
   favicon.svg
