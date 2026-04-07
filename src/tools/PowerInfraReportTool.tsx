@@ -530,6 +530,7 @@ export default function PowerInfraReportTool() {
                         broadband: report.broadband.data,
                         water: report.water.data,
                         gas: report.gas.data,
+                        siteMapImage: null,
                         generatedAt: report.generatedAt!,
                       });
                     }}

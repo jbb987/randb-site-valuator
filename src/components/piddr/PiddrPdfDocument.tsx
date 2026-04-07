@@ -3,6 +3,7 @@ import {
   Page,
   View,
   Text,
+  Image,
   StyleSheet,
   Font,
 } from '@react-pdf/renderer';
@@ -281,6 +282,7 @@ export interface PiddrPdfData {
   broadband: BroadbandResult | null;
   water: WaterAnalysisResult | null;
   gas: GasAnalysisResult | null;
+  siteMapImage: string | null;
   generatedAt: number;
 }
 
@@ -474,6 +476,12 @@ function SiteOverviewPage({ data }: { data: PiddrPdfData }) {
     <Page size="LETTER" style={s.page}>
       <PageHeader siteName={inputs.siteName} />
       <Text style={s.sectionTitle}>Site Overview</Text>
+
+      {data.siteMapImage && (
+        <View style={{ marginBottom: 14, borderRadius: 6, overflow: 'hidden', border: '1pt solid #D8D5D0' }}>
+          <Image src={data.siteMapImage} style={{ width: '100%', height: 200 }} />
+        </View>
+      )}
 
       <KvRow label="Site Name" value={inputs.siteName} />
       {inputs.address ? <KvRow label="Address" value={inputs.address} /> : null}
