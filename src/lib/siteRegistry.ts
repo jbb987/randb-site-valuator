@@ -12,7 +12,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppraisalResult, BroadbandResult, SiteInputs, SiteRegistryEntry, UserRole } from '../types';
+import type { AppraisalResult, BroadbandResult, LandComp, SiteInputs, SiteRegistryEntry, UserRole } from '../types';
 import { parseCoordinates } from '../utils/parseCoordinates';
 
 const COLLECTION = 'sites-registry';
@@ -234,6 +234,13 @@ export async function saveTransportToSite(
   result: Record<string, unknown>,
 ): Promise<void> {
   await updateSiteEntry(siteId, { transportResult: result });
+}
+
+export async function saveLandCompsToSite(
+  siteId: string,
+  comps: LandComp[],
+): Promise<void> {
+  await updateSiteEntry(siteId, { landComps: comps });
 }
 
 export async function savePiddrTimestamp(siteId: string): Promise<void> {

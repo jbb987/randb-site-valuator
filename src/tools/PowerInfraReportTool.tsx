@@ -24,6 +24,7 @@ import {
   saveTransportToSite,
   saveWaterToSite,
   saveGasToSite,
+  saveLandCompsToSite,
   savePiddrTimestamp,
   createSiteEntry,
   findSiteByCoordinates,
@@ -34,7 +35,7 @@ import { deleteProjectCascade } from '../lib/projects';
 import { parseCoordinates } from '../utils/parseCoordinates';
 import RecentHistory from '../components/RecentHistory';
 import type { PiddrInputs, ExistingResults } from '../hooks/usePiddrReport';
-import type { SiteRegistryEntry } from '../types';
+import type { LandComp, SiteRegistryEntry } from '../types';
 
 const inputClass =
   'w-full rounded-lg border border-[#D8D5D0] bg-white/80 px-3 py-2.5 text-sm text-[#201F1E] outline-none transition focus:border-[#ED202B] focus:ring-2 focus:ring-[#ED202B]/20 placeholder:text-[#7A756E]';
@@ -68,6 +69,7 @@ export default function PowerInfraReportTool() {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [, setMatchedExisting] = useState(false);
   const [newSiteProjectId, setNewSiteProjectId] = useState<string | null>(null);
+  const [landComps, setLandComps] = useState<LandComp[]>([]);
 
   // Sidebar state
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -141,7 +143,25 @@ export default function PowerInfraReportTool() {
 
   const isAdmin = role === 'admin';
 
-  // Migration has been completed — no longer needed
+  // Debounced save of land comps to Firestore
+  useEffect(() => {
+    if (!selectedSiteId || landComps.length === 0) return;
+    const timer = setTimeout(() => {
+      saveLandCompsToSite(selectedSiteId, landComps)
+        .then(() => flashSaveIndicator())
+        .catch((err) => console.error('[PIDDR] Failed to save land comps:', err));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [selectedSiteId, landComps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleApplyCompStats(low: number, high: number) {
+    setPpaLow(low);
+    setPpaHigh(high);
+    if (selectedSiteId) {
+      void updateSiteEntry(selectedSiteId, { dollarPerAcreLow: low, dollarPerAcreHigh: high })
+        .then(() => flashSaveIndicator());
+    }
+  }
 
   function handleDeleteProject(projectId: string) {
     void deleteProjectCascade(projectId).then(
@@ -240,6 +260,7 @@ export default function PowerInfraReportTool() {
       transportResult: report.transport.data ? (report.transport.data as unknown as Record<string, unknown>) : null,
       waterResult: report.water.data ? (report.water.data as unknown as Record<string, unknown>) : null,
       gasResult: report.gas.data ? (report.gas.data as unknown as Record<string, unknown>) : null,
+      ...(landComps.length > 0 ? { landComps } : {}),
       piddrGeneratedAt: report.generatedAt ?? Date.now(),
     }).then(
       (newId) => {
@@ -322,6 +343,7 @@ export default function PowerInfraReportTool() {
     if (site.parcelId) setParcelId(site.parcelId);
     if (site.owner) setOwner(site.owner);
     if (site.projectId) setActiveProjectId(site.projectId);
+    setLandComps(site.landComps ?? []);
 
     // If the site already has a report, re-generate using cached results
     if (site.piddrGeneratedAt && site.coordinates) {
@@ -895,6 +917,9 @@ export default function PowerInfraReportTool() {
                 mwMin={MW_MIN}
                 mwMax={MW_MAX}
                 onMwChange={setMw}
+                landComps={landComps}
+                onLandCompsChange={setLandComps}
+                onApplyCompStats={handleApplyCompStats}
               />
               </div>
 

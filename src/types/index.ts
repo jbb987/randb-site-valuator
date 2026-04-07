@@ -320,6 +320,20 @@ export interface Lead {
   updatedAt: number;
 }
 
+// ── Land Comps ───────────────────────────────────────────────────────────
+
+export interface LandComp {
+  id: string;
+  address: string;
+  county: string;
+  saleDate: string;
+  totalPrice: number;
+  acres: number;
+  pricePerAcre: number;
+  landUse: string;
+  parcelId: string;
+}
+
 // ── Site Registry ─────────────────────────────────────────────────────────
 
 export interface SiteRegistryEntry {
@@ -346,6 +360,7 @@ export interface SiteRegistryEntry {
   waterResult?: Record<string, unknown> | null;
   gasResult?: Record<string, unknown> | null;
   transportResult?: Record<string, unknown> | null;
+  landComps?: LandComp[];
   piddrGeneratedAt?: number | null;
 
   // Due diligence fields (transferred from Site Appraiser)
