@@ -229,6 +229,13 @@ export async function saveGasToSite(
   await updateSiteEntry(siteId, { gasResult: result });
 }
 
+export async function saveTransportToSite(
+  siteId: string,
+  result: Record<string, unknown>,
+): Promise<void> {
+  await updateSiteEntry(siteId, { transportResult: result });
+}
+
 export async function savePiddrTimestamp(siteId: string): Promise<void> {
   await updateSiteEntry(siteId, { piddrGeneratedAt: Date.now() });
 }

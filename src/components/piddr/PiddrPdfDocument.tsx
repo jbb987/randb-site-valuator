@@ -12,6 +12,7 @@ import type { InfrastructureData } from '../power-calculator/InfrastructureResul
 import type { PiddrInputs } from '../../hooks/usePiddrReport';
 import type { WaterAnalysisResult } from '../../lib/waterAnalysis.types';
 import type { GasAnalysisResult } from '../../lib/gasAnalysis';
+import type { TransportResult } from '../../types/infrastructure';
 
 // ── Font Registration ──────────────────────────────────────────────────────
 Font.register({
@@ -324,6 +325,7 @@ export interface PiddrPdfData {
   appraisal: AppraisalResult | null;
   infra: InfrastructureData | null;
   broadband: BroadbandResult | null;
+  transport: TransportResult | null;
   water: WaterAnalysisResult | null;
   gas: GasAnalysisResult | null;
   generatedAt: number;
@@ -447,7 +449,7 @@ function CoverPage({ data }: { data: PiddrPdfData }) {
 
 // ── Executive Summary ──────────────────────────────────────────────────────
 function ExecSummaryPage({ data }: { data: PiddrPdfData }) {
-  const { appraisal, infra, broadband, water, gas, inputs } = data;
+  const { appraisal, infra, broadband, transport, water, gas, inputs } = data;
   const solar = infra?.solarWind;
   const ghiInfo = solar ? ghiRating(solar.ghi) : null;
 
@@ -459,7 +461,7 @@ function ExecSummaryPage({ data }: { data: PiddrPdfData }) {
       <Text style={s.paragraph}>
         This report presents a comprehensive due diligence analysis for {inputs.siteName}, evaluating land valuation,
         power infrastructure availability, solar and wind resource potential, broadband connectivity,
-        water and environmental factors, and gas infrastructure. Key findings are summarized below.
+        transport logistics, water and environmental factors, and gas infrastructure. Key findings are summarized below.
       </Text>
 
       <View style={s.summaryBox}>
@@ -536,6 +538,27 @@ function ExecSummaryPage({ data }: { data: PiddrPdfData }) {
                       return nearbyMax > 0 ? `${fmtNum(nearbyMax, 0)} Mbps (on request)` : '0 Mbps';
                     })()
                 }
+              </Text>
+            </View>
+          </>
+        )}
+
+        {transport && (
+          <>
+            <View style={s.summaryRow}>
+              <Text style={s.summaryLabel}>Nearest Airport</Text>
+              <Text style={s.summaryValue}>
+                {transport.airports[0]
+                  ? `${transport.airports[0].name} (${fmtNum(transport.airports[0].distanceMi)} mi)`
+                  : 'None within 50 mi'}
+              </Text>
+            </View>
+            <View style={s.summaryRow}>
+              <Text style={s.summaryLabel}>Nearest Interstate</Text>
+              <Text style={s.summaryValue}>
+                {transport.interstates[0]
+                  ? `${transport.interstates[0].routeName} (${fmtNum(transport.interstates[0].distanceMi)} mi)`
+                  : 'None within 20 mi'}
               </Text>
             </View>
           </>
@@ -1017,6 +1040,147 @@ function BroadbandPage({ data }: { data: PiddrPdfData }) {
   );
 }
 
+// ── Transport Infrastructure ──────────────────────────────────────────────
+function TransportPage({ data }: { data: PiddrPdfData }) {
+  const { transport, inputs } = data;
+  if (!transport) return null;
+
+  const { airports, interstates, ports, railroads } = transport;
+
+  function fmtDist(mi: number): string {
+    return mi < 1 ? '< 1 mi' : `${fmtNum(mi)} mi`;
+  }
+
+  function hubLabel(hub: string): string {
+    switch (hub) {
+      case 'L': return 'Large Hub';
+      case 'M': return 'Medium Hub';
+      case 'S': return 'Small Hub';
+      case 'N': return 'Non-Hub';
+      default: return hub || 'N/A';
+    }
+  }
+
+  function fmtTonnage(t: number): string {
+    if (t >= 1_000_000) return `${fmtNum(t / 1_000_000)}M`;
+    if (t >= 1_000) return `${fmtNum(t / 1_000, 0)}K`;
+    return String(t);
+  }
+
+  return (
+    <Page size="LETTER" style={s.page}>
+      <PageHeader siteName={inputs.siteName} />
+      <Text style={s.sectionTitle}>Transport Infrastructure</Text>
+
+      {/* Summary */}
+      <KvRow label="Nearest Airport" value={airports[0] ? `${airports[0].name} (${fmtDist(airports[0].distanceMi)})` : 'None within 50 mi'} />
+      <KvRow label="Nearest Interstate" value={interstates[0] ? `${interstates[0].routeName} (${fmtDist(interstates[0].distanceMi)})` : 'None within 20 mi'} />
+      <KvRow label="Nearest Port" value={ports[0] ? `${ports[0].name} (${fmtDist(ports[0].distanceMi)})` : 'None within 100 mi'} />
+      <KvRow label="Nearest Railroad" value={railroads[0] ? `${railroads[0].owner} (${fmtDist(railroads[0].distanceMi)})` : 'None within 10 mi'} />
+
+      {/* Airports Table */}
+      <Text style={s.subsectionTitle}>Airports ({airports.length})</Text>
+      {airports.length > 0 ? (
+        <View style={s.table}>
+          <View style={s.tableHeaderRow}>
+            <Text style={[s.tableHeaderCell, { width: '30%' }]}>Name</Text>
+            <Text style={[s.tableHeaderCell, { width: '10%' }]}>FAA ID</Text>
+            <Text style={[s.tableHeaderCell, { width: '15%' }]}>Hub</Text>
+            <Text style={[s.tableHeaderCell, { width: '20%' }]}>City</Text>
+            <Text style={[s.tableHeaderCell, { width: '15%' }]}>Comm. Ops</Text>
+            <Text style={[s.tableHeaderCell, { width: '10%' }]}>Dist</Text>
+          </View>
+          {airports.slice(0, 10).map((a, i) => (
+            <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+              <Text style={[s.tableCell, { width: '30%' }]}>{a.name}</Text>
+              <Text style={[s.tableCell, { width: '10%' }]}>{a.locId}</Text>
+              <Text style={[s.tableCell, { width: '15%' }]}>{hubLabel(a.hub)}</Text>
+              <Text style={[s.tableCell, { width: '20%' }]}>{a.city}, {a.state}</Text>
+              <Text style={[s.tableCell, { width: '15%' }]}>{a.commercialOps.toLocaleString()}</Text>
+              <Text style={[s.tableCell, { width: '10%' }]}>{fmtDist(a.distanceMi)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={s.noData}>No airports found within 50 miles</Text>
+      )}
+
+      {/* Interstates Table */}
+      <Text style={s.subsectionTitle}>Interstates ({interstates.length})</Text>
+      {interstates.length > 0 ? (
+        <View style={s.table}>
+          <View style={s.tableHeaderRow}>
+            <Text style={[s.tableHeaderCell, { width: '25%' }]}>Route</Text>
+            <Text style={[s.tableHeaderCell, { width: '50%' }]}>Name</Text>
+            <Text style={[s.tableHeaderCell, { width: '25%' }]}>Distance</Text>
+          </View>
+          {interstates.map((r, i) => (
+            <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+              <Text style={[s.tableCell, { width: '25%' }]}>I-{r.routeNumber}</Text>
+              <Text style={[s.tableCell, { width: '50%' }]}>{r.routeName}</Text>
+              <Text style={[s.tableCell, { width: '25%' }]}>{fmtDist(r.distanceMi)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={s.noData}>No interstates found within 20 miles</Text>
+      )}
+
+      {/* Ports Table */}
+      {ports.length > 0 && (
+        <>
+          <Text style={s.subsectionTitle}>Major Ports ({ports.length})</Text>
+          <View style={s.table}>
+            <View style={s.tableHeaderRow}>
+              <Text style={[s.tableHeaderCell, { width: '35%' }]}>Port</Text>
+              <Text style={[s.tableHeaderCell, { width: '20%' }]}>Total Tonnage</Text>
+              <Text style={[s.tableHeaderCell, { width: '15%' }]}>Imports</Text>
+              <Text style={[s.tableHeaderCell, { width: '15%' }]}>Exports</Text>
+              <Text style={[s.tableHeaderCell, { width: '15%' }]}>Dist</Text>
+            </View>
+            {ports.map((p, i) => (
+              <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                <Text style={[s.tableCell, { width: '35%' }]}>{p.name}</Text>
+                <Text style={[s.tableCell, { width: '20%' }]}>{fmtTonnage(p.totalTonnage)}</Text>
+                <Text style={[s.tableCell, { width: '15%' }]}>{fmtTonnage(p.imports)}</Text>
+                <Text style={[s.tableCell, { width: '15%' }]}>{fmtTonnage(p.exports)}</Text>
+                <Text style={[s.tableCell, { width: '15%' }]}>{fmtDist(p.distanceMi)}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* Railroads Table */}
+      {railroads.length > 0 && (
+        <>
+          <Text style={s.subsectionTitle}>Class I Railroads ({railroads.length})</Text>
+          <View style={s.table}>
+            <View style={s.tableHeaderRow}>
+              <Text style={[s.tableHeaderCell, { width: '25%' }]}>Owner</Text>
+              <Text style={[s.tableHeaderCell, { width: '25%' }]}>Subdivision</Text>
+              <Text style={[s.tableHeaderCell, { width: '15%' }]}>Tracks</Text>
+              <Text style={[s.tableHeaderCell, { width: '15%' }]}>Passenger</Text>
+              <Text style={[s.tableHeaderCell, { width: '20%' }]}>Dist</Text>
+            </View>
+            {railroads.map((r, i) => (
+              <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                <Text style={[s.tableCell, { width: '25%' }]}>{r.owner}</Text>
+                <Text style={[s.tableCell, { width: '25%' }]}>{r.subdivision || '\u2014'}</Text>
+                <Text style={[s.tableCell, { width: '15%' }]}>{String(r.tracks)}</Text>
+                <Text style={[s.tableCell, { width: '15%' }]}>{r.passenger === 'Y' ? 'Yes' : 'No'}</Text>
+                <Text style={[s.tableCell, { width: '20%' }]}>{fmtDist(r.distanceMi)}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      <PageFooter />
+    </Page>
+  );
+}
+
 // ── Water & Environmental ─────────────────────────────────────────────────
 function WaterPage({ data }: { data: PiddrPdfData }) {
   const { water, inputs } = data;
@@ -1368,6 +1532,7 @@ export default function PiddrPdfDocument({ data }: { data: PiddrPdfData }) {
       <LandValuationPage data={data} />
       <InfrastructurePages data={data} />
       <BroadbandPage data={data} />
+      <TransportPage data={data} />
       <WaterPage data={data} />
       <GasPage data={data} />
       <ClosingPage data={data} />

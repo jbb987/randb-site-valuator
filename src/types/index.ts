@@ -345,6 +345,7 @@ export interface SiteRegistryEntry {
   broadbandResult?: BroadbandResult | null;
   waterResult?: Record<string, unknown> | null;
   gasResult?: Record<string, unknown> | null;
+  transportResult?: Record<string, unknown> | null;
   piddrGeneratedAt?: number | null;
 
   // Due diligence fields (transferred from Site Appraiser)
