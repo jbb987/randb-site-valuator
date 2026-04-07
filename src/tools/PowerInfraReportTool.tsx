@@ -328,6 +328,12 @@ export default function PowerInfraReportTool() {
   }
 
   function handleSidebarSiteSelect(site: SiteRegistryEntry) {
+    // Preserve scroll position — state updates collapse content momentarily
+    const scrollY = mainRef.current?.scrollTop ?? 0;
+    requestAnimationFrame(() => {
+      if (mainRef.current) mainRef.current.scrollTop = scrollY;
+    });
+
     setSelectedSiteId(site.id);
     setMatchedExisting(true);
     setNewSiteProjectId(null);
