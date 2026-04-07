@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import type { AppraisalResult, LandComp } from '../../types';
+import { useMemo, useCallback } from 'react';
+import type { AppraisalResult, LandComp, FilteredCompResult } from '../../types';
 import type { PiddrInputs, PiddrSectionState } from '../../hooks/usePiddrReport';
 import { formatCurrencyShort, formatMultiple } from '../../utils/format';
 import PowerSlider from '../PowerSlider';
@@ -16,7 +16,8 @@ interface Props {
   onMwChange: (mw: number) => void;
   landComps: LandComp[];
   onLandCompsChange: (comps: LandComp[]) => void;
-  onApplyCompStats: (ppaLow: number, ppaHigh: number) => void;
+  onFilteredCompsChange: (result: FilteredCompResult) => void;
+  activeCompCount: number;
 }
 
 function SectionSkeleton() {
@@ -39,31 +40,39 @@ function SectionError({ message }: { message: string }) {
   );
 }
 
-function MetricCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function MetricCard({ label, value, subtitle, accent }: { label: string; value: string; subtitle?: string; accent?: boolean }) {
   return (
     <div className="bg-[#FAFAF9] rounded-xl border border-[#D8D5D0]/60 px-4 py-3 text-center">
       <p className="text-[10px] uppercase tracking-wider text-[#7A756E] font-medium">{label}</p>
       <p className={`text-lg font-heading font-semibold mt-1 ${accent ? 'text-[#ED202B]' : 'text-[#201F1E]'}`}>
         {value}
       </p>
+      {subtitle && <p className="text-[10px] text-[#7A756E] mt-0.5">{subtitle}</p>}
     </div>
   );
 }
 
-export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax, onMwChange, landComps, onLandCompsChange, onApplyCompStats }: Props) {
+export default function LandValuationSection({
+  section, inputs, mw, mwMin, mwMax, onMwChange,
+  landComps, onLandCompsChange, onFilteredCompsChange, activeCompCount,
+}: Props) {
   const { loading, error, data } = section;
+  const compsPresent = landComps.length > 0;
 
-  // Live-recompute appraisal values using the current slider MW
+  // When comps are present, ppaLow === ppaHigh === median, so midpoint = that value
   const liveData = useMemo(() => {
     if (!data) return null;
-    const currentValueLow = inputs.acreage * inputs.ppaLow;
-    const currentValueHigh = inputs.acreage * inputs.ppaHigh;
-    const currentValueMid = (currentValueLow + currentValueHigh) / 2;
+    const currentValue = inputs.acreage * ((inputs.ppaLow + inputs.ppaHigh) / 2);
+    const ppa = (inputs.ppaLow + inputs.ppaHigh) / 2;
     const energizedValue = mw * VALUE_PER_MW;
-    const valueCreated = energizedValue - currentValueMid;
-    const returnMultiple = currentValueMid > 0 ? energizedValue / currentValueMid : 0;
-    return { currentValueLow, currentValueHigh, energizedValue, valueCreated, returnMultiple };
+    const valueCreated = energizedValue - currentValue;
+    const returnMultiple = currentValue > 0 ? energizedValue / currentValue : 0;
+    return { currentValue, ppa, energizedValue, valueCreated, returnMultiple };
   }, [data, inputs.acreage, inputs.ppaLow, inputs.ppaHigh, mw]);
+
+  const handleFilteredChange = useCallback((result: FilteredCompResult) => {
+    onFilteredCompsChange(result);
+  }, [onFilteredCompsChange]);
 
   return (
     <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
@@ -86,12 +95,13 @@ export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax
           {/* Metric cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MetricCard
-              label="Current Value (Low)"
-              value={liveData.currentValueLow > 0 ? formatCurrencyShort(liveData.currentValueLow) : '--'}
+              label="Estimated $/Acre"
+              value={liveData.ppa > 0 ? formatCurrencyShort(liveData.ppa) : '--'}
+              subtitle={compsPresent && activeCompCount > 0 ? `from ${activeCompCount} comps` : undefined}
             />
             <MetricCard
-              label="Current Value (High)"
-              value={liveData.currentValueHigh > 0 ? formatCurrencyShort(liveData.currentValueHigh) : '--'}
+              label="Current Land Value"
+              value={liveData.currentValue > 0 ? formatCurrencyShort(liveData.currentValue) : '--'}
             />
             <MetricCard
               label="Energized Value"
@@ -113,11 +123,12 @@ export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-[#7A756E]">Price Per Acre (Range)</span>
+              <span className="text-[#7A756E]">Estimated $/Acre</span>
               <span className="text-[#201F1E] font-medium">
-                {inputs.ppaLow > 0 || inputs.ppaHigh > 0
-                  ? `$${inputs.ppaLow.toLocaleString()} - $${inputs.ppaHigh.toLocaleString()}`
-                  : '--'}
+                {liveData.ppa > 0 ? `$${Math.round(liveData.ppa).toLocaleString()}` : '--'}
+                {compsPresent && activeCompCount > 0 && (
+                  <span className="text-[#7A756E] text-xs ml-1">(from {activeCompCount} comps)</span>
+                )}
               </span>
             </div>
             <div className="flex justify-between text-sm">
@@ -154,7 +165,8 @@ export default function LandValuationSection({ section, inputs, mw, mwMin, mwMax
             <LandCompsPanel
               comps={landComps}
               onCompsChange={onLandCompsChange}
-              onApplyStats={onApplyCompStats}
+              subjectAcres={inputs.acreage}
+              onFilteredChange={handleFilteredChange}
             />
           </div>
         </div>

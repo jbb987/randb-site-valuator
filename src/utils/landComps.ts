@@ -1,4 +1,4 @@
-import type { LandComp } from '../types';
+import type { LandComp, FilteredCompResult } from '../types';
 
 // ── Claude Prompt ────────────────────────────────────────────────────────
 
@@ -93,6 +93,7 @@ export interface CompStats {
   median: number;
   p25: number;
   p75: number;
+  cv: number;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -108,16 +109,140 @@ function percentile(sorted: number[], p: number): number {
 export function computeCompStats(comps: LandComp[]): CompStats {
   const values = comps.map((c) => c.pricePerAcre).filter((v) => v > 0).sort((a, b) => a - b);
   if (values.length === 0) {
-    return { count: 0, min: 0, max: 0, mean: 0, median: 0, p25: 0, p75: 0 };
+    return { count: 0, min: 0, max: 0, mean: 0, median: 0, p25: 0, p75: 0, cv: 0 };
   }
   const sum = values.reduce((a, b) => a + b, 0);
+  const mean = sum / values.length;
+  const variance = values.reduce((s, x) => s + (x - mean) ** 2, 0) / values.length;
+  const cv = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : 0;
   return {
     count: values.length,
     min: values[0],
     max: values[values.length - 1],
-    mean: sum / values.length,
+    mean,
     median: percentile(values, 50),
     p25: percentile(values, 25),
     p75: percentile(values, 75),
+    cv,
+  };
+}
+
+// ── Scoring & Smart Filtering ───────────────────────────────────────────
+
+const RAW_LAND_KEYWORDS = ['AGRI', 'VACANT', 'FARM', 'PASTURE', 'CROPLAND', 'RANCH'];
+const SEMI_RAW_KEYWORDS = ['MISC', 'UNDEVELOPED', 'UNIMPROVED'];
+
+export function scoreComp(comp: LandComp, subjectAcres: number): number {
+  let score = 0;
+  const use = (comp.landUse || '').toUpperCase();
+
+  // Land use (25 pts)
+  if (RAW_LAND_KEYWORDS.some((kw) => use.includes(kw))) score += 25;
+  else if (SEMI_RAW_KEYWORDS.some((kw) => use.includes(kw))) score += 20;
+  else if (use.includes('RESID') && comp.acres >= 5) score += 10;
+
+  // Acreage similarity (30 pts)
+  if (subjectAcres > 0 && comp.acres > 0) {
+    const ratio = Math.min(comp.acres, subjectAcres) / Math.max(comp.acres, subjectAcres);
+    score += ratio * 30;
+  }
+
+  // Recency (20 pts)
+  if (comp.saleDate) {
+    const days = (Date.now() - new Date(comp.saleDate).getTime()) / 86_400_000;
+    if (days <= 90) score += 20;
+    else if (days <= 180) score += 15;
+    else if (days <= 365) score += 10;
+    else if (days <= 730) score += 5;
+  }
+
+  // Price sanity (10 pts)
+  if (comp.pricePerAcre >= 1000 && comp.pricePerAcre <= 500000) score += 10;
+
+  // Data completeness (5 pts)
+  if (comp.address && comp.saleDate && comp.landUse) score += 5;
+
+  return score;
+}
+
+export function filterComps(comps: LandComp[], subjectAcres: number): FilteredCompResult {
+  if (comps.length === 0) {
+    return { active: [], excluded: [], medianPricePerAcre: 0, activeCount: 0, totalCount: 0, warnings: [] };
+  }
+
+  // Score all comps
+  const scored = comps.map((c) => ({ ...c, score: scoreComp(c, subjectAcres) }));
+  scored.sort((a, b) => b.score - a.score);
+
+  // Respect manual overrides: force-included stay in, force-excluded stay out
+  const forceIncluded: typeof scored = scored.filter((c) => c.manualOverride === true && c.excluded === false);
+  const forceExcluded: typeof scored = scored.filter((c) => c.manualOverride === true && c.excluded === true);
+  const autoPool = scored.filter((c) => !c.manualOverride);
+
+  // Take top 20 from auto pool
+  const topAuto = autoPool.slice(0, 20);
+  const autoExcluded = autoPool.slice(20);
+
+  // IQR trim on the auto candidates (if 5+)
+  let activeCandidates = [...forceIncluded, ...topAuto];
+  let trimmedOut: typeof activeCandidates = [];
+
+  if (activeCandidates.length >= 5) {
+    const prices = activeCandidates.map((c) => c.pricePerAcre).sort((a, b) => a - b);
+    const q1 = percentile(prices, 25);
+    const q3 = percentile(prices, 75);
+    const iqr = q3 - q1;
+    const lower = q1 - 1.5 * iqr;
+    const upper = q3 + 1.5 * iqr;
+
+    const kept: typeof activeCandidates = [];
+    for (const c of activeCandidates) {
+      // Never IQR-trim force-included comps
+      if (c.manualOverride === true && c.excluded === false) {
+        kept.push(c);
+      } else if (c.pricePerAcre >= lower && c.pricePerAcre <= upper) {
+        kept.push(c);
+      } else {
+        trimmedOut.push(c);
+      }
+    }
+    // Only use trimmed set if we still have enough
+    if (kept.length >= Math.min(3, comps.length)) {
+      activeCandidates = kept;
+    } else {
+      trimmedOut = [];
+    }
+  }
+
+  // Mark excluded
+  const activeIds = new Set(activeCandidates.map((c) => c.id));
+  const active = activeCandidates.map((c) => ({ ...c, excluded: false }));
+  const excluded = [...forceExcluded, ...autoExcluded, ...trimmedOut].map((c) => ({ ...c, excluded: true as const }));
+  // Also mark any remaining scored comps not in active/excluded
+  for (const c of scored) {
+    if (!activeIds.has(c.id) && !excluded.some((e) => e.id === c.id)) {
+      excluded.push({ ...c, excluded: true });
+    }
+  }
+
+  // Compute median from active
+  const activeValues = active.map((c) => c.pricePerAcre).filter((v) => v > 0).sort((a, b) => a - b);
+  const medianPricePerAcre = activeValues.length > 0 ? percentile(activeValues, 50) : 0;
+
+  // Warnings
+  const warnings: string[] = [];
+  if (active.length < 5) warnings.push('Fewer than 5 comparable sales — estimate may be less reliable');
+  if (active.length >= 2) {
+    const stats = computeCompStats(active);
+    if (stats.cv > 60) warnings.push('High variance in comparable sales (CV > 60%)');
+  }
+
+  return {
+    active,
+    excluded: excluded.sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+    medianPricePerAcre,
+    activeCount: active.length,
+    totalCount: comps.length,
+    warnings,
   };
 }

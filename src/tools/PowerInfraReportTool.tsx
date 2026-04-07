@@ -35,7 +35,7 @@ import { deleteProjectCascade } from '../lib/projects';
 import { parseCoordinates } from '../utils/parseCoordinates';
 import RecentHistory from '../components/RecentHistory';
 import type { PiddrInputs, ExistingResults } from '../hooks/usePiddrReport';
-import type { LandComp, SiteRegistryEntry } from '../types';
+import type { FilteredCompResult, LandComp, SiteRegistryEntry } from '../types';
 
 const inputClass =
   'w-full rounded-lg border border-[#D8D5D0] bg-white/80 px-3 py-2.5 text-sm text-[#201F1E] outline-none transition focus:border-[#ED202B] focus:ring-2 focus:ring-[#ED202B]/20 placeholder:text-[#7A756E]';
@@ -70,6 +70,7 @@ export default function PowerInfraReportTool() {
   const [, setMatchedExisting] = useState(false);
   const [newSiteProjectId, setNewSiteProjectId] = useState<string | null>(null);
   const [landComps, setLandComps] = useState<LandComp[]>([]);
+  const [activeCompCount, setActiveCompCount] = useState(0);
 
   // Sidebar state
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -154,11 +155,13 @@ export default function PowerInfraReportTool() {
     return () => clearTimeout(timer);
   }, [selectedSiteId, landComps]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleApplyCompStats(low: number, high: number) {
-    setPpaLow(low);
-    setPpaHigh(high);
-    if (selectedSiteId) {
-      void updateSiteEntry(selectedSiteId, { dollarPerAcreLow: low, dollarPerAcreHigh: high })
+  function handleFilteredCompsChange(result: FilteredCompResult) {
+    const median = Math.round(result.medianPricePerAcre);
+    setActiveCompCount(result.activeCount);
+    setPpaLow(median);
+    setPpaHigh(median);
+    if (selectedSiteId && median > 0) {
+      void updateSiteEntry(selectedSiteId, { dollarPerAcreLow: median, dollarPerAcreHigh: median })
         .then(() => flashSaveIndicator());
     }
   }
@@ -681,33 +684,47 @@ export default function PowerInfraReportTool() {
                 />
               </Field>
 
-              <Field label="$/Acre Low">
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={ppaLow || ''}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    setPpaLow(isNaN(v) ? 0 : v);
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="5000"
-                />
-              </Field>
+              {landComps.length > 0 ? (
+                <Field label="$/Acre (from comps)">
+                  <input
+                    type="number"
+                    className={`${inputClass} bg-stone-100 cursor-not-allowed`}
+                    value={ppaLow || ''}
+                    readOnly
+                    tabIndex={-1}
+                  />
+                </Field>
+              ) : (
+                <>
+                  <Field label="$/Acre Low">
+                    <input
+                      type="number"
+                      className={inputClass}
+                      value={ppaLow || ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setPpaLow(isNaN(v) ? 0 : v);
+                      }}
+                      onKeyDown={handleKeyDown}
+                      placeholder="5000"
+                    />
+                  </Field>
 
-              <Field label="$/Acre High">
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={ppaHigh || ''}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    setPpaHigh(isNaN(v) ? 0 : v);
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="8000"
-                />
-              </Field>
+                  <Field label="$/Acre High">
+                    <input
+                      type="number"
+                      className={inputClass}
+                      value={ppaHigh || ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setPpaHigh(isNaN(v) ? 0 : v);
+                      }}
+                      onKeyDown={handleKeyDown}
+                      placeholder="8000"
+                    />
+                  </Field>
+                </>
+              )}
             </div>
 
             {/* MW Slider */}
@@ -919,7 +936,8 @@ export default function PowerInfraReportTool() {
                 onMwChange={setMw}
                 landComps={landComps}
                 onLandCompsChange={setLandComps}
-                onApplyCompStats={handleApplyCompStats}
+                onFilteredCompsChange={handleFilteredCompsChange}
+                activeCompCount={activeCompCount}
               />
               </div>
 

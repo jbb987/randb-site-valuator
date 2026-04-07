@@ -332,6 +332,18 @@ export interface LandComp {
   pricePerAcre: number;
   landUse: string;
   parcelId: string;
+  score?: number;
+  excluded?: boolean;
+  manualOverride?: boolean;
+}
+
+export interface FilteredCompResult {
+  active: LandComp[];
+  excluded: LandComp[];
+  medianPricePerAcre: number;
+  activeCount: number;
+  totalCount: number;
+  warnings: string[];
 }
 
 // ── Site Registry ─────────────────────────────────────────────────────────
