@@ -64,7 +64,7 @@ export default function PowerInfraReportTool() {
   const [parcelId, setParcelId] = useState('');
   const [owner, setOwner] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  const [matchedExisting, setMatchedExisting] = useState(false);
+  const [, setMatchedExisting] = useState(false);
   const [newSiteProjectId, setNewSiteProjectId] = useState<string | null>(null);
 
   // Sidebar state
@@ -92,6 +92,8 @@ export default function PowerInfraReportTool() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => setSaveVisible(false), 2500);
   }, []);
+
+  const report = usePiddrReport();
 
   // Intersection Observer for active section tracking
   useEffect(() => {
@@ -123,7 +125,6 @@ export default function PowerInfraReportTool() {
   const autoCreateDoneRef = useRef<number | null>(null);
   const siteCreatingRef = useRef(false);
 
-  const report = usePiddrReport();
   const pdfExport = usePdfExport();
   const { sites: registrySites } = useSiteRegistry();
   const { logActivity, getToolHistory, loading: historyLoading } = useUserHistory();
