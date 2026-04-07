@@ -633,7 +633,7 @@ function LandValuationPage({ data }: { data: PiddrPdfData }) {
   const { appraisal, inputs } = data;
   if (!appraisal) return null;
 
-  const mid = (appraisal.currentValueLow + appraisal.currentValueHigh) / 2;
+  const currentValue = (appraisal.currentValueLow + appraisal.currentValueHigh) / 2;
 
   return (
     <Page size="LETTER" style={s.page}>
@@ -641,11 +641,12 @@ function LandValuationPage({ data }: { data: PiddrPdfData }) {
       <Text style={s.sectionTitle}>Land Valuation</Text>
 
       <Text style={s.subsectionTitle}>Current Land Value</Text>
-      <KvRow label="Low Estimate" value={fmt$(appraisal.currentValueLow)} />
-      <KvRow label="High Estimate" value={fmt$(appraisal.currentValueHigh)} />
-      <KvRow label="Midpoint" value={fmt$(mid)} />
+      <KvRow label="Current Land Value" value={fmt$(currentValue)} />
+      {inputs.acreage > 0 && currentValue > 0 && (
+        <KvRow label="Estimated $/Acre" value={fmt$(currentValue / inputs.acreage)} />
+      )}
       {inputs.acreage > 0 && (
-        <KvRow label="Per Acre (Mid)" value={fmt$(mid / inputs.acreage)} />
+        <KvRow label="Acreage" value={`${inputs.acreage.toLocaleString()} acres`} />
       )}
 
       <Text style={s.subsectionTitle}>Energized Value</Text>
