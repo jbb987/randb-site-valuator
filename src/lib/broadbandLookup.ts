@@ -18,9 +18,7 @@ import type {
   TechnologyType,
 } from '../types';
 import { TECH_CODE_MAP } from '../types';
-import { httpsCallable } from 'firebase/functions';
 import { geocodeAddress } from './infraLookup';
-import { functions } from './firebase';
 import { cachedFetch, TTL_LOCATION, TTL_INFRASTRUCTURE } from './requestCache';
 
 // ── Endpoints ───────────────────────────────────────────────────────────────
@@ -699,64 +697,17 @@ interface ScrapedProvider {
 
 /**
  * Query mobile broadband coverage via Firebase Cloud Function.
- * The function scrapes the FCC broadband map and caches results in Firestore.
+ *
+ * DISABLED: The Cloud Function scraper is blocked by Google Cloud org policy
+ * (prevents unauthenticated CORS preflight requests). Will be migrated to
+ * Cloudflare Workers. See: fix/disable-mobile-bb-scraper branch.
  */
 async function queryMobileCoverage(
-  lat: number,
-  lng: number,
+  _lat: number,
+  _lng: number,
   _fips: string,
 ): Promise<MobileBroadbandProvider[]> {
-  const key = `mobile:scrape:${lat.toFixed(4)},${lng.toFixed(4)}`;
-  return cachedFetch(key, async () => {
-    try {
-      const scrapeFn = httpsCallable<
-        { lat: number; lng: number },
-        { providers: ScrapedProvider[]; dataAsOf: string }
-      >(functions, 'scrapeMobileBroadband');
-
-      const result = await scrapeFn({ lat, lng });
-      const { providers } = result.data;
-
-      // Flatten each scraped provider into MobileBroadbandProvider entries (one per technology)
-      const flat: MobileBroadbandProvider[] = [];
-      for (const p of providers) {
-        if (p.has3G) {
-          flat.push({
-            providerName: p.providerName,
-            technology: '3G',
-            techCode: 300,
-            maxDown: 5,
-            maxUp: 1,
-          });
-        }
-        if (p.has4G) {
-          const speed = parseSpeedTier(p.speed4G);
-          flat.push({
-            providerName: p.providerName,
-            technology: '4G LTE',
-            techCode: 400,
-            maxDown: speed.down || 50,
-            maxUp: speed.up || 10,
-          });
-        }
-        if (p.has5G) {
-          const speed = parseSpeedTier(p.speed5G);
-          flat.push({
-            providerName: p.providerName,
-            technology: '5G-NR',
-            techCode: 500,
-            maxDown: speed.down || 200,
-            maxUp: speed.up || 30,
-          });
-        }
-      }
-
-      return flat;
-    } catch (err) {
-      console.warn('[Mobile BB] Cloud Function scrape failed:', err);
-      return [];
-    }
-  }, TTL_INFRASTRUCTURE);
+  return [];
 }
 
 /** Build the FCC broadband map mobile coverage URL for a location. */
