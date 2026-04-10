@@ -77,6 +77,7 @@ async function queryArcGIS(
     geometry: envelope,
     geometryType: 'esriGeometryEnvelope',
     inSR: '4326',
+    outSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
     outFields,
     returnGeometry: 'true',
