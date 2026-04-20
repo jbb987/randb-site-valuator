@@ -1,7 +1,4 @@
-import { useState, useCallback } from 'react';
-import { pdf } from '@react-pdf/renderer';
-import { createElement } from 'react';
-import PiddrPdfDocument from '../components/piddr/PiddrPdfDocument';
+import { useState, useCallback, createElement } from 'react';
 import type { PiddrPdfData } from '../components/piddr/PiddrPdfDocument';
 import { buildStaticMap } from '../utils/buildStaticMap';
 import { parseCoordinates } from '../utils/parseCoordinates';
@@ -15,6 +12,14 @@ export function usePdfExport() {
     setError(null);
 
     try {
+      // Lazy-load @react-pdf/renderer and the PDF document component so the
+      // library (which references Node's Buffer at module load) doesn't ship
+      // in the initial bundle or log "Buffer is not defined" on every page.
+      const [{ pdf }, { default: PiddrPdfDocument }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../components/piddr/PiddrPdfDocument'),
+      ]);
+
       // Generate satellite map image before PDF render (needs DOM canvas)
       let siteMapImage: string | null = null;
       const coords = parseCoordinates(data.inputs.coordinates);
