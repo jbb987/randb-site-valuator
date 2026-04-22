@@ -63,6 +63,12 @@ function fmtDate(ts: number): string {
   });
 }
 
+// Some interstate segments come back from HPMS without a descriptive route_name.
+// Fall back to "I-{number}" so summary lines never read "(2.0 mi)" with no label.
+function interstateLabel(r: { routeName: string; routeNumber: string }): string {
+  return r.routeName?.trim() || `I-${r.routeNumber}`;
+}
+
 // ── Styles ─────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   page: {
@@ -558,7 +564,7 @@ function ExecSummaryPage({ data }: { data: PiddrPdfData }) {
               <Text style={s.summaryLabel}>Nearest Interstate</Text>
               <Text style={s.summaryValue}>
                 {transport.interstates[0]
-                  ? `${transport.interstates[0].routeName} (${fmtNum(transport.interstates[0].distanceMi)} mi)`
+                  ? `${interstateLabel(transport.interstates[0])} (${fmtNum(transport.interstates[0].distanceMi)} mi)`
                   : 'None within 20 mi'}
               </Text>
             </View>
@@ -1081,7 +1087,7 @@ function TransportPage({ data }: { data: PiddrPdfData }) {
 
       {/* Summary */}
       <KvRow label="Nearest Airport" value={airports[0] ? `${airports[0].name} (${fmtDist(airports[0].distanceMi)})` : 'None within 50 mi'} />
-      <KvRow label="Nearest Interstate" value={interstates[0] ? `${interstates[0].routeName} (${fmtDist(interstates[0].distanceMi)})` : 'None within 20 mi'} />
+      <KvRow label="Nearest Interstate" value={interstates[0] ? `${interstateLabel(interstates[0])} (${fmtDist(interstates[0].distanceMi)})` : 'None within 20 mi'} />
       <KvRow label="Nearest Port" value={ports[0] ? `${ports[0].name} (${fmtDist(ports[0].distanceMi)})` : 'None within 100 mi'} />
       <KvRow label="Nearest Railroad" value={railroads[0] ? `${railroads[0].owner} (${fmtDist(railroads[0].distanceMi)})` : 'None within 10 mi'} />
 
@@ -1124,7 +1130,7 @@ function TransportPage({ data }: { data: PiddrPdfData }) {
           {interstates.map((r, i) => (
             <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
               <Text style={[s.tableCell, { width: '25%' }]}>I-{r.routeNumber}</Text>
-              <Text style={[s.tableCell, { width: '50%' }]}>{r.routeName}</Text>
+              <Text style={[s.tableCell, { width: '50%' }]}>{r.routeName?.trim() || '—'}</Text>
               <Text style={[s.tableCell, { width: '25%' }]}>{fmtDist(r.distanceMi)}</Text>
             </View>
           ))}
