@@ -45,6 +45,30 @@ export interface ExistingResults {
 
 const VALUE_PER_MW = 3_000_000;
 
+/**
+ * A previous Infrastructure result is only worth reusing if it has at least
+ * one piece of meaningful data. An all-empty / "Not Available" payload means
+ * the original lookup failed silently, so we should re-fetch instead of
+ * caching the broken state forever.
+ */
+function isInfraResultMeaningful(infra: Record<string, unknown> | null | undefined): boolean {
+  if (!infra) return false;
+  const data = infra as Partial<InfrastructureData>;
+
+  const hasIso = !!data.iso && data.iso !== 'Not Available';
+  const hasUtility = !!data.utilityTerritory && data.utilityTerritory !== 'Not Available';
+  const hasTsp = !!data.tsp && data.tsp !== 'Not Available';
+  const hasSubs = Array.isArray(data.nearbySubstations) && data.nearbySubstations.length > 0;
+  const hasLines = Array.isArray(data.nearbyLines) && data.nearbyLines.length > 0;
+  const hasPlants = Array.isArray(data.nearbyPowerPlants) && data.nearbyPowerPlants.length > 0;
+  const hasSolar =
+    !!data.solarWind &&
+    ((typeof data.solarWind.ghi === 'number' && data.solarWind.ghi > 0) ||
+      (typeof data.solarWind.windSpeed === 'number' && data.solarWind.windSpeed > 0));
+
+  return hasIso || hasUtility || hasTsp || hasSubs || hasLines || hasPlants || hasSolar;
+}
+
 function computeAppraisal(inputs: PiddrInputs): AppraisalResult {
   const currentValueLow = inputs.acreage * inputs.ppaLow;
   const currentValueHigh = inputs.acreage * inputs.ppaHigh;
@@ -100,8 +124,10 @@ export function usePiddrReport() {
       setAppraisal({ loading: false, error: 'Failed to compute appraisal', data: null });
     }
 
-    // Section 2: Infrastructure — skip if existing results provided
-    const hasExistingInfra = existing?.infra && Object.keys(existing.infra).length > 0;
+    // Section 2: Infrastructure — reuse only if the cached payload actually has
+    // useful data. An all-empty / "Not Available" result from a prior failed
+    // lookup must NOT short-circuit the re-fetch.
+    const hasExistingInfra = isInfraResultMeaningful(existing?.infra);
     if (hasExistingInfra) {
       // Cast back from Record<string, unknown> — the stored format is InfrastructureData
       setInfra({ loading: false, error: null, data: existing!.infra as unknown as InfrastructureData });

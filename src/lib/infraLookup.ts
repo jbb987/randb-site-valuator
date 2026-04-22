@@ -221,9 +221,15 @@ async function queryLinesWithGeometry(lat: number, lng: number): Promise<LineFea
 
     try {
       const res = await fetch(url);
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.warn(`[infra] Transmission lines query HTTP ${res.status} for ${lat},${lng}`);
+        return [];
+      }
       const data = await res.json();
-      if (data.error) return [];
+      if (data.error) {
+        console.warn('[infra] Transmission lines query returned error:', data.error);
+        return [];
+      }
       return (data.features ?? [])
         .map((f: { attributes: Record<string, unknown>; geometry?: { paths?: number[][][] } }) => {
           const a = f.attributes;
@@ -246,7 +252,8 @@ async function queryLinesWithGeometry(lat: number, lng: number): Promise<LineFea
           } satisfies LineFeature;
         })
         .sort((a: LineFeature, b: LineFeature) => b.line.voltage - a.line.voltage);
-    } catch {
+    } catch (err) {
+      console.warn('[infra] Transmission lines fetch failed:', err);
       return [];
     }
   }, TTL_LOCATION);
@@ -269,9 +276,15 @@ async function queryPowerPlants(lat: number, lng: number): Promise<NearbyPowerPl
 
     try {
       const res = await fetch(url);
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.warn(`[infra] Power plants query HTTP ${res.status} for ${lat},${lng}`);
+        return [];
+      }
       const data = await res.json();
-      if (data.error) return [];
+      if (data.error) {
+        console.warn('[infra] Power plants query returned error:', data.error);
+        return [];
+      }
       return (data.features ?? [])
         .map((f: { attributes: Record<string, unknown> }) => {
           const a = f.attributes;
@@ -287,7 +300,8 @@ async function queryPowerPlants(lat: number, lng: number): Promise<NearbyPowerPl
           } satisfies NearbyPowerPlant;
         })
         .sort((a: NearbyPowerPlant, b: NearbyPowerPlant) => a.distanceMi - b.distanceMi);
-    } catch {
+    } catch (err) {
+      console.warn('[infra] Power plants fetch failed:', err);
       return [];
     }
   }, TTL_LOCATION);
@@ -413,8 +427,12 @@ async function querySubstationsHIFLD(
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data?.features) && data.features.length > 0) return data.features;
+      } else {
+        console.warn(`[infra] HIFLD substations WHERE query HTTP ${res.status}`);
       }
-    } catch { /* fall through to strategy 2 */ }
+    } catch (err) {
+      console.warn('[infra] HIFLD substations WHERE query failed, falling back to envelope:', err);
+    }
 
     // Strategy 2: Geometry envelope
     const envUrl =
@@ -424,10 +442,18 @@ async function querySubstationsHIFLD(
       `&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects` +
       `&inSR=4326&outSR=4326&outFields=*&returnGeometry=true&resultRecordCount=200&f=json`;
 
-    const res2 = await fetch(envUrl);
-    if (!res2.ok) return [];
-    const data2 = await res2.json();
-    return Array.isArray(data2?.features) ? data2.features : [];
+    try {
+      const res2 = await fetch(envUrl);
+      if (!res2.ok) {
+        console.warn(`[infra] HIFLD substations envelope query HTTP ${res2.status} for ${siteLat},${siteLng}`);
+        return [];
+      }
+      const data2 = await res2.json();
+      return Array.isArray(data2?.features) ? data2.features : [];
+    } catch (err) {
+      console.warn('[infra] HIFLD substations envelope fetch failed:', err);
+      return [];
+    }
   }, TTL_LOCATION);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
