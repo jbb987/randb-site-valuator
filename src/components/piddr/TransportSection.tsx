@@ -70,6 +70,10 @@ function hubAccent(hub: string): string {
   }
 }
 
+function interstateLabel(r: { routeName: string; routeNumber: string }): string {
+  return r.routeName?.trim() || `I-${r.routeNumber}`;
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 
 function TransportReport({ result }: { result: TransportResult }) {
@@ -92,7 +96,7 @@ function TransportReport({ result }: { result: TransportResult }) {
         <StatCard
           label="Nearest Interstate"
           value={nearestInterstate ? fmtDist(nearestInterstate.distanceMi) : 'None found'}
-          sub={nearestInterstate?.routeName}
+          sub={nearestInterstate ? interstateLabel(nearestInterstate) : undefined}
         />
         <StatCard
           label="Nearest Port"
@@ -164,7 +168,7 @@ function TransportReport({ result }: { result: TransportResult }) {
                 {interstates.map((r, i) => (
                   <tr key={i} className={i % 2 === 1 ? 'bg-[#FAFAF9]' : ''}>
                     <td className={`${tdClass} font-medium`}>I-{r.routeNumber}</td>
-                    <td className={tdClass}>{r.routeName}</td>
+                    <td className={tdClass}>{r.routeName?.trim() || '—'}</td>
                     <td className={tdClass}>{fmtDist(r.distanceMi)}</td>
                   </tr>
                 ))}

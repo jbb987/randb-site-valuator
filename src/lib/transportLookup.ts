@@ -164,9 +164,12 @@ async function queryInterstates(lat: number, lng: number): Promise<NearbyInterst
 
     const existing = byRoute.get(routeNum);
     if (!existing || minDist < existing.distanceMi) {
+      // ArcGIS returns "" (not null) when a segment has no descriptive name,
+      // so `??` alone won't trigger the fallback — treat empty/whitespace as missing.
+      const rawName = String(a.route_name ?? '').trim();
       byRoute.set(routeNum, {
         routeNumber: routeNum,
-        routeName: String(a.route_name ?? `I-${routeNum}`),
+        routeName: rawName || `I-${routeNum}`,
         routeId: String(a.route_id ?? ''),
         distanceMi: Math.round(minDist * 10) / 10,
       });
