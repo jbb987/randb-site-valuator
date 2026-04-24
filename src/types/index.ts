@@ -136,6 +136,9 @@ export interface SiteInputs {
   solarWind: SolarWindResource | null;
   electricityPrice: ElectricityPrice | null;
   detectedState: string | null;
+  // CRM linkage (replaces the legacy free-text owner field going forward;
+  // owner is retained above for backward compat with pre-link sites).
+  companyId?: string;
 }
 
 export interface AppraisalResult {
@@ -384,6 +387,9 @@ export interface SiteRegistryEntry {
   county?: string;
   parcelId?: string;
   owner?: string;
+
+  // CRM linkage (supersedes `owner` going forward; owner kept for legacy data).
+  companyId?: string;
 
   // Metadata
   createdAt: number;
