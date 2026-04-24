@@ -1,89 +1,99 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Fragment } from 'react';
+import { useLocation, useMatch, useNavigate } from 'react-router-dom';
+import { useCompany, useCompanies } from '../hooks/useCompanies';
+import { useContact } from '../hooks/useContacts';
 
-interface BackState {
-  backTo: string;
-  backLabel: string;
-}
-
-function hasBackState(state: unknown): state is BackState {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    'backTo' in state &&
-    'backLabel' in state &&
-    typeof (state as BackState).backTo === 'string' &&
-    typeof (state as BackState).backLabel === 'string'
-  );
+interface Segment {
+  label: string;
+  path?: string; // undefined = current page (not clickable)
 }
 
 /**
- * Returns the appropriate "back" destination for a given path. Tool sub-pages
- * (e.g. /crm/companies/:id) go back to their tool root (/crm) rather than all
- * the way to the dashboard.
+ * Hierarchy-based breadcrumb. Builds the ancestor trail from the current
+ * pathname and the linked data (company for a contact, etc.) rather than
+ * from how the user arrived. The breadcrumb is the same for a given page
+ * regardless of navigation history.
+ *
+ * The last segment is always the current page, rendered muted and not
+ * clickable. Every preceding segment is a link.
  */
-function resolveBack(pathname: string): { path: string; label: string } | null {
-  if (pathname === '/') return null;
-  if (pathname.startsWith('/crm/')) return { path: '/crm', label: 'Directory' };
-  return { path: '/', label: 'Dashboard' };
-}
-
 export default function Breadcrumb() {
-  const { pathname, state } = useLocation();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
 
-  // A caller can override the default breadcrumb by passing
-  // `state: { backTo, backLabel }` to navigate(). Used to make
-  // /crm/people/:id navigated from a company page return to that company.
-  const back = hasBackState(state)
-    ? { path: state.backTo, label: state.backLabel }
-    : resolveBack(pathname);
-  if (!back) return null;
+  const companyMatch = useMatch('/crm/companies/:id');
+  const contactMatch = useMatch('/crm/people/:id');
 
-  // Build the ancestor trail (everything above the current page). We only
-  // render the trail when it has two or more ancestors — one-ancestor pages
-  // already have that info in the pill, so a trail would just repeat it.
-  const trail: Array<{ path: string; label: string }> = [];
-  if (pathname.startsWith('/crm/') && hasBackState(state)) {
-    // e.g. Directory › Acme Corp (when we came from a company page)
-    trail.push({ path: '/crm', label: 'Directory' });
-    if (state.backTo !== '/crm') {
-      trail.push({ path: state.backTo, label: state.backLabel });
+  const companyParamId =
+    companyMatch && companyMatch.params.id !== 'new' ? companyMatch.params.id : undefined;
+  const contactParamId =
+    contactMatch && contactMatch.params.id !== 'new' ? contactMatch.params.id : undefined;
+
+  const { company: companyOnPage } = useCompany(companyParamId);
+  const { contact } = useContact(contactParamId);
+  const { companies } = useCompanies();
+  const contactCompany = contact ? companies.find((c) => c.id === contact.companyId) : undefined;
+
+  if (pathname === '/') return null;
+
+  const segments: Segment[] = [];
+
+  if (pathname.startsWith('/crm')) {
+    segments.push({ label: 'Directory', path: '/crm' });
+
+    if (companyMatch) {
+      const label =
+        companyMatch.params.id === 'new'
+          ? 'New Company'
+          : companyOnPage?.name ?? '…';
+      segments.push({ label });
+    } else if (contactMatch) {
+      if (contactCompany) {
+        segments.push({ label: contactCompany.name, path: `/crm/companies/${contactCompany.id}` });
+      }
+      const label =
+        contactMatch.params.id === 'new'
+          ? 'New Person'
+          : contact
+            ? `${contact.firstName} ${contact.lastName}`
+            : '…';
+      segments.push({ label });
     }
+  } else {
+    segments.push({ label: 'Dashboard', path: '/' });
   }
 
-  return (
-    <nav aria-label="Navigation" className="mb-4">
-      <button
-        onClick={() => navigate(back.path)}
-        className="inline-flex items-center gap-1.5 bg-white rounded-full border border-[#D8D5D0] shadow-sm px-3 py-1.5 text-sm font-medium text-[#7A756E] hover:text-[#ED202B] hover:border-[#ED202B]/30 hover:shadow transition group"
-      >
-        <svg
-          className="h-4 w-4 flex-shrink-0 transition-transform group-hover:-translate-x-0.5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        {back.label}
-      </button>
+  // Drop the trail entirely if it's only the root anchor with no current page.
+  if (segments.length === 0) return null;
 
-      {trail.length >= 2 && (
-        <ol className="mt-1.5 ml-1 flex items-center flex-wrap gap-x-1 text-xs text-[#7A756E]">
-          {trail.map((seg, i) => (
-            <li key={seg.path + i} className="flex items-center gap-x-1">
-              {i > 0 && <span className="text-[#D8D5D0]">›</span>}
-              <button
-                onClick={() => navigate(seg.path)}
-                className="hover:text-[#ED202B] transition truncate max-w-[200px]"
-              >
-                {seg.label}
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
+  // If we only have a single root segment (e.g. /crm), the trail would just
+  // repeat the page heading. Hide it for cleanliness.
+  if (segments.length === 1 && segments[0].path === pathname) return null;
+
+  return (
+    <nav aria-label="Breadcrumb" className="mb-4">
+      <ol className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-sm">
+        {segments.map((seg, i) => {
+          const isLast = i === segments.length - 1;
+          return (
+            <Fragment key={i}>
+              {i > 0 && <li aria-hidden="true" className="text-[#D8D5D0] select-none">›</li>}
+              <li className="truncate max-w-[180px] sm:max-w-[240px]">
+                {seg.path && !isLast ? (
+                  <button
+                    onClick={() => navigate(seg.path!)}
+                    className="text-[#7A756E] hover:text-[#ED202B] transition font-medium"
+                  >
+                    {seg.label}
+                  </button>
+                ) : (
+                  <span className="text-[#7A756E] font-medium">{seg.label}</span>
+                )}
+              </li>
+            </Fragment>
+          );
+        })}
+      </ol>
     </nav>
   );
 }
