@@ -39,6 +39,18 @@ export default function Breadcrumb() {
     : resolveBack(pathname);
   if (!back) return null;
 
+  // Build the ancestor trail (everything above the current page). We only
+  // render the trail when it has two or more ancestors — one-ancestor pages
+  // already have that info in the pill, so a trail would just repeat it.
+  const trail: Array<{ path: string; label: string }> = [];
+  if (pathname.startsWith('/crm/') && hasBackState(state)) {
+    // e.g. Directory › Acme Corp (when we came from a company page)
+    trail.push({ path: '/crm', label: 'Directory' });
+    if (state.backTo !== '/crm') {
+      trail.push({ path: state.backTo, label: state.backLabel });
+    }
+  }
+
   return (
     <nav aria-label="Navigation" className="mb-4">
       <button
@@ -56,6 +68,22 @@ export default function Breadcrumb() {
         </svg>
         {back.label}
       </button>
+
+      {trail.length >= 2 && (
+        <ol className="mt-1.5 ml-1 flex items-center flex-wrap gap-x-1 text-xs text-[#7A756E]">
+          {trail.map((seg, i) => (
+            <li key={seg.path + i} className="flex items-center gap-x-1">
+              {i > 0 && <span className="text-[#D8D5D0]">›</span>}
+              <button
+                onClick={() => navigate(seg.path)}
+                className="hover:text-[#ED202B] transition truncate max-w-[200px]"
+              >
+                {seg.label}
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
     </nav>
   );
 }
