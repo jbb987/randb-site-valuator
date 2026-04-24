@@ -41,7 +41,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   'gas-analysis': 'Gas Infrastructure Analysis',
   'sales-crm': 'Leads',
   'sales-admin': 'Sales Dashboard',
-  'crm': 'CRM',
+  'crm': 'Directory',
 };
 
 export interface Project {

@@ -63,7 +63,7 @@ export default function CrmTool() {
       <main className="py-2">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="font-heading text-2xl font-semibold text-[#201F1E]">CRM</h2>
+            <h2 className="font-heading text-2xl font-semibold text-[#201F1E]">Directory</h2>
             <p className="text-sm text-[#7A756E] mt-0.5">
               {view === 'companies' ? `${companies.length} companies` : `${contacts.length} people`}
             </p>

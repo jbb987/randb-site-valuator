@@ -19,11 +19,11 @@ interface ToolSection {
 
 const toolSections: ToolSection[] = [
   {
-    title: 'CRM',
+    title: 'Directory',
     tools: [
       {
         id: 'crm',
-        name: 'CRM',
+        name: 'Directory',
         description: 'Manage companies and people across every dimension',
         path: '/crm',
         icon: 'directory',

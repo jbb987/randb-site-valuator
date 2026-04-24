@@ -23,7 +23,7 @@ function hasBackState(state: unknown): state is BackState {
  */
 function resolveBack(pathname: string): { path: string; label: string } | null {
   if (pathname === '/') return null;
-  if (pathname.startsWith('/crm/')) return { path: '/crm', label: 'CRM' };
+  if (pathname.startsWith('/crm/')) return { path: '/crm', label: 'Directory' };
   return { path: '/', label: 'Dashboard' };
 }
 
