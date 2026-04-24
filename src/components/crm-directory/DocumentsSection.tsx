@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ACCEPTED_DOCUMENT_MIME,
   ALL_DOCUMENT_CATEGORIES,
@@ -47,12 +47,11 @@ function compressorFor(file: File): { name: string; url: string } {
 }
 
 export default function DocumentsSection({ companyId, defaultCategory = 'legal' }: Props) {
-  const { documents, loading, upload, remove, openUrl } = useCompanyDocuments(companyId);
+  const { documents, loading, upload, remove, openUrl, downloadBlob } = useCompanyDocuments(companyId);
   const [activeCategory, setActiveCategory] = useState<DocumentCategory>(defaultCategory);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tooLargeFile, setTooLargeFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<{ doc: CrmDocument; url: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(
@@ -73,8 +72,6 @@ export default function DocumentsSection({ companyId, defaultCategory = 'legal' 
     setError(null);
     setTooLargeFile(null);
 
-    // Pre-validate size so the user sees a helpful compression prompt
-    // instead of a generic "too large" string from the hook.
     for (const file of Array.from(fileList)) {
       if (file.size > MAX_DOCUMENT_BYTES) {
         setTooLargeFile(file);
@@ -96,7 +93,7 @@ export default function DocumentsSection({ companyId, defaultCategory = 'legal' 
     }
   }
 
-  async function handleOpenInNewTab(doc: CrmDocument) {
+  async function handleOpen(doc: CrmDocument) {
     try {
       const url = await openUrl(doc);
       window.open(url, '_blank', 'noopener');
@@ -105,30 +102,14 @@ export default function DocumentsSection({ companyId, defaultCategory = 'legal' 
     }
   }
 
-  async function handleOpen(doc: CrmDocument) {
-    try {
-      const url = await openUrl(doc);
-      if (isPdf(doc) || isImage(doc)) {
-        setPreview({ doc, url });
-      } else {
-        window.open(url, '_blank');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open file');
-    }
-  }
-
   async function handleDownload(doc: CrmDocument) {
     try {
-      const url = await openUrl(doc);
-      // Fetch as a Blob so the download attribute is honored — Firebase
-      // Storage URLs are cross-origin and serve with Content-Disposition:
-      // inline, so <a download> against the raw URL opens in-browser
-      // instead of downloading. Blob-backed object URLs are same-origin
-      // and always trigger the native download UI.
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Download failed (${res.status})`);
-      const blob = await res.blob();
+      // Use the Firebase SDK's getBlob (via the hook's downloadBlob) instead
+      // of fetch(signedUrl) — fetch against the raw Storage URL is blocked
+      // by CORS unless the bucket is configured, and we want this to work
+      // without any bucket-level setup. The SDK goes through its own
+      // authenticated transport.
+      const blob = await downloadBlob(doc);
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
@@ -248,15 +229,12 @@ export default function DocumentsSection({ companyId, defaultCategory = 'legal' 
               key={doc.id}
               doc={doc}
               onOpen={() => handleOpen(doc)}
-              onOpenInNewTab={() => handleOpenInNewTab(doc)}
               onDownload={() => handleDownload(doc)}
               onDelete={() => handleDelete(doc)}
             />
           ))}
         </ul>
       )}
-
-      {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
     </section>
   );
 }
@@ -264,41 +242,14 @@ export default function DocumentsSection({ companyId, defaultCategory = 'legal' 
 function DocumentRow({
   doc,
   onOpen,
-  onOpenInNewTab,
   onDownload,
   onDelete,
 }: {
   doc: CrmDocument;
   onOpen: () => void;
-  onOpenInNewTab: () => void;
   onDownload: () => void;
   onDelete: () => void;
 }) {
-  // Debounce the click so a double-click doesn't also trigger a single-click.
-  // On first click we wait DOUBLE_CLICK_MS to see if a second click arrives;
-  // if it does, fire the double-click action instead of the single.
-  const DOUBLE_CLICK_MS = 250;
-  const clickTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
-    };
-  }, []);
-
-  function handleClick() {
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      onOpenInNewTab();
-      return;
-    }
-    clickTimerRef.current = window.setTimeout(() => {
-      clickTimerRef.current = null;
-      onOpen();
-    }, DOUBLE_CLICK_MS);
-  }
-
   return (
     <li className="py-3 flex items-center gap-3">
       <div className="h-9 w-9 rounded-lg bg-[#ED202B]/10 flex items-center justify-center shrink-0">
@@ -318,8 +269,8 @@ function DocumentRow({
       </div>
 
       <button
-        onClick={handleClick}
-        title="Click to preview · Double-click to open in new tab"
+        onClick={onOpen}
+        title="Open in new tab"
         className="flex-1 min-w-0 text-left hover:text-[#ED202B] transition"
       >
         <div className="font-medium text-[#201F1E] truncate">{doc.name}</div>
@@ -349,43 +300,5 @@ function DocumentRow({
         </button>
       </div>
     </li>
-  );
-}
-
-function PreviewModal({
-  preview,
-  onClose,
-}: {
-  preview: { doc: CrmDocument; url: string };
-  onClose: () => void;
-}) {
-  const { doc, url } = preview;
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/70 flex flex-col items-stretch"
-      onClick={onClose}
-    >
-      <div className="flex items-center justify-between gap-3 px-4 py-3 bg-[#201F1E] text-white">
-        <div className="truncate font-medium text-sm">{doc.name}</div>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="h-8 w-8 rounded-lg hover:bg-white/10 flex items-center justify-center shrink-0"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-      <div className="flex-1 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {isImage(doc) ? (
-          <div className="h-full w-full flex items-center justify-center p-4">
-            <img src={url} alt={doc.name} className="max-h-full max-w-full object-contain" />
-          </div>
-        ) : (
-          <iframe src={url} title={doc.name} className="h-full w-full bg-white" />
-        )}
-      </div>
-    </div>
   );
 }

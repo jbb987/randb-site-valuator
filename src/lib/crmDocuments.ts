@@ -12,6 +12,7 @@ import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
+  getBlob,
   deleteObject,
 } from 'firebase/storage';
 import { db, storage } from './firebase';
@@ -90,9 +91,18 @@ export async function deleteDocument(document: CrmDocument): Promise<void> {
   }
 }
 
-/** Get a short-lived download URL for viewing or downloading the file. */
+/** Get a short-lived download URL for viewing or opening the file. */
 export async function getDocumentUrl(document: CrmDocument): Promise<string> {
   return getDownloadURL(storageRef(storage, document.storagePath));
+}
+
+/**
+ * Fetch the file as a Blob via the Firebase SDK. This avoids the CORS
+ * issue that `fetch(signedUrl)` hits against the Storage bucket — the SDK
+ * uses its own authenticated transport.
+ */
+export async function getDocumentBlob(document: CrmDocument): Promise<Blob> {
+  return getBlob(storageRef(storage, document.storagePath));
 }
 
 export function subscribeDocumentsByCompany(

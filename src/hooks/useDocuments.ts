@@ -7,6 +7,7 @@ import {
   deleteDocument as deleteDocumentFromBackend,
   subscribeDocumentsByCompany,
   getDocumentUrl,
+  getDocumentBlob,
 } from '../lib/crmDocuments';
 
 export function useCompanyDocuments(companyId: string | undefined) {
@@ -69,5 +70,12 @@ export function useCompanyDocuments(companyId: string | undefined) {
     [],
   );
 
-  return { documents, loading, upload, remove, openUrl };
+  const downloadBlob = useCallback(
+    async (document: CrmDocument) => {
+      return getDocumentBlob(document);
+    },
+    [],
+  );
+
+  return { documents, loading, upload, remove, openUrl, downloadBlob };
 }
