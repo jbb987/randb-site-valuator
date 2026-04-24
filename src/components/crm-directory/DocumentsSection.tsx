@@ -282,12 +282,25 @@ function DocumentRow({
       <button
         onClick={onOpen}
         title="Open in new tab"
-        className="flex-1 min-w-0 text-left hover:text-[#ED202B] transition"
+        className="group flex-1 min-w-0 text-left py-1.5 px-2 -mx-2 rounded-lg flex items-center justify-between gap-2 hover:bg-stone-50 transition"
       >
-        <div className="font-medium text-[#201F1E] truncate">{doc.name}</div>
-        <div className="text-xs text-[#7A756E] mt-0.5 truncate">
-          {formatDate(doc.uploadedAt)} · {doc.uploadedByName}
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-[#201F1E] truncate group-hover:text-[#ED202B] transition-colors">
+            {doc.name}
+          </div>
+          <div className="text-xs text-[#7A756E] mt-0.5 truncate">
+            {formatDate(doc.uploadedAt)} · {doc.uploadedByName}
+          </div>
         </div>
+        <svg
+          className="h-4 w-4 text-[#7A756E] opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[#ED202B] transition-all shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
       </button>
 
       <div className="flex items-center gap-1 shrink-0">
