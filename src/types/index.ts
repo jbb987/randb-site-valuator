@@ -11,7 +11,8 @@ export type ToolId =
   | 'water-analysis'
   | 'gas-analysis'
   | 'sales-crm'
-  | 'sales-admin';
+  | 'sales-admin'
+  | 'crm';
 
 export const ALL_TOOL_IDS: ToolId[] = [
   'site-appraiser',
@@ -25,6 +26,7 @@ export const ALL_TOOL_IDS: ToolId[] = [
   'gas-analysis',
   'sales-crm',
   'sales-admin',
+  'crm',
 ];
 
 export const TOOL_LABELS: Record<ToolId, string> = {
@@ -39,6 +41,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   'gas-analysis': 'Gas Infrastructure Analysis',
   'sales-crm': 'Leads',
   'sales-admin': 'Sales Dashboard',
+  'crm': 'CRM',
 };
 
 export interface Project {
