@@ -444,6 +444,58 @@ export interface Contact {
   updatedAt: number;
 }
 
+// ── Documents ────────────────────────────────────────────────────────────
+
+export type DocumentCategory =
+  | 'legal'         // NDA, agreements, PFAA, MSA
+  | 'invoice'       // invoices, receipts
+  | 'deliverable'   // allocation letters, one-line diagrams, final outputs
+  | 'report'        // PIDDR, technical reports
+  | 'photo'         // site photos
+  | 'other';
+
+export const ALL_DOCUMENT_CATEGORIES: DocumentCategory[] = [
+  'legal',
+  'invoice',
+  'deliverable',
+  'report',
+  'photo',
+  'other',
+];
+
+export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
+  legal:       'Legal',
+  invoice:     'Invoices',
+  deliverable: 'Deliverables',
+  report:      'Reports',
+  photo:       'Photos',
+  other:       'Other',
+};
+
+/** Max upload size per file, in bytes. 10 MB for v1. */
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
+/** Accepted MIME types for v1. PDFs and common image formats. */
+export const ACCEPTED_DOCUMENT_MIME = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
+export interface CrmDocument {
+  id: string;
+  companyId: string;
+  category: DocumentCategory;
+  name: string;                // user-visible filename
+  contentType: string;         // MIME type
+  sizeBytes: number;
+  storagePath: string;         // "crm-documents/{companyId}/{documentId}-{sanitized-name}"
+  uploadedAt: number;
+  uploadedBy: string;          // userId
+  uploadedByName: string;      // cached display name
+}
+
 // Site Request types
 export interface SiteRequestSite {
   address: string;
