@@ -8,7 +8,7 @@ Internal tool suite for R&B Power. The **Infrastructure Report (PIDDR)** is the 
 
 ### Tools
 
-- **CRM** — Cross-cutting directory of Companies and Contacts, shared across Pre-Construction, Construction, and REP dimensions. Toggle between Companies and People, search, add/edit/delete. Fixed-enum tags (`REP` / `Construction` / `Pre Construction` / `Utility`) classify each company. Mobile-first UI.
+- **CRM** — Cross-cutting directory of Companies and Contacts, shared across Pre-Construction, Construction, and REP dimensions. Toggle between Companies and People, search, add/edit/delete. Fixed-enum tags (`REP` / `Construction` / `Pre Construction` / `Utility`) classify each company. Each company has a Documents section (PDFs + images) categorized as Legal / Invoices / Deliverables / Reports / Photos / Other. Mobile-first UI.
 - **Infrastructure Report (PIDDR)** — Central due diligence hub. Folder sidebar groups sites by project. Generates comprehensive reports covering land valuation, power infrastructure, broadband, water, and gas analysis. Auto-saves results to site registry. PDF export.
 - **Site Appraiser** — Standalone calculator for site valuation. Input coordinates, acreage, MW, $/acre to see current vs energized value. No sidebar, no data persistence — PIDDR owns the registry.
 - **Power Calculator** — Analyze nearby substations, transmission lines, power plants, and grid territory for any coordinates.
@@ -99,6 +99,7 @@ src/
       AdminStats.tsx          # Admin sales dashboard stats
     crm-directory/            # CRM (Companies + Contacts) components
       TagChip.tsx             # Colored pill for company tags
+      DocumentsSection.tsx    # Company documents panel (upload/view/download/delete, category chips)
     admin/                    # Admin-only components
       InfraRefreshPanel.tsx   # Infrastructure data cache refresh panel
     site-request/             # Site Request components
@@ -145,6 +146,7 @@ src/
     useLeads.ts               # Lead CRUD operations (Sales CRM)
     useCompanies.ts           # CRM company CRUD + single-company subscription
     useContacts.ts            # CRM contact CRUD, by-company, single-contact hooks
+    useDocuments.ts           # CRM document upload/delete/list per company (Firebase Storage + Firestore)
     useBroadbandLookup.ts     # Broadband data lookup
     useWaterAnalysis.ts       # Water analysis hook
     useGasAnalysis.ts         # Gas analysis hook
@@ -163,6 +165,7 @@ src/
     leads.ts                  # Lead Firestore operations
     crmCompanies.ts           # CRM company Firestore operations (collection: crm-companies)
     crmContacts.ts            # CRM contact Firestore operations (collection: crm-contacts)
+    crmDocuments.ts           # CRM document Firebase Storage + Firestore ops (collection: crm-documents)
     userHistory.ts            # User activity history operations
     broadbandLookup.ts        # FCC Census Block + ArcGIS BDC API
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
