@@ -254,10 +254,10 @@ export default function CompanyDetailTool() {
                       onClick={() => navigate(`/crm/people/${c.id}`, {
                         state: { backTo: `/crm/companies/${id}`, backLabel: company?.name ?? 'Company' },
                       })}
-                      className="w-full text-left py-3 flex items-baseline justify-between gap-3 hover:text-[#ED202B] transition"
+                      className="group w-full text-left py-3 px-2 -mx-2 rounded-lg flex items-center justify-between gap-3 hover:bg-stone-50 hover:text-[#ED202B] transition"
                     >
-                      <div className="min-w-0">
-                        <div className="font-medium text-[#201F1E] truncate">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-[#201F1E] truncate group-hover:text-[#ED202B] transition-colors">
                           {c.firstName} {c.lastName}
                         </div>
                         {(c.email || c.phone) && (
@@ -266,7 +266,18 @@ export default function CompanyDetailTool() {
                           </div>
                         )}
                       </div>
-                      {c.title && <div className="text-xs text-[#7A756E] shrink-0">{c.title}</div>}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {c.title && <div className="text-xs text-[#7A756E]">{c.title}</div>}
+                        <svg
+                          className="h-4 w-4 text-[#7A756E] opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[#ED202B] transition-all"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.5}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
                     </button>
                   </li>
                 ))}
@@ -326,10 +337,10 @@ function SitesSection({ sites }: { sites: SiteRegistryEntry[] }) {
               <li key={s.id}>
                 <button
                   onClick={() => navigate(`/power-infrastructure-report?siteId=${s.id}`)}
-                  className="w-full text-left py-3 flex items-baseline justify-between gap-3 hover:text-[#ED202B] transition"
+                  className="group w-full text-left py-3 px-2 -mx-2 rounded-lg flex items-center justify-between gap-3 hover:bg-stone-50 hover:text-[#ED202B] transition"
                 >
-                  <div className="min-w-0">
-                    <div className="font-medium text-[#201F1E] truncate">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-[#201F1E] truncate group-hover:text-[#ED202B] transition-colors">
                       {s.name || formatCoords(s)}
                     </div>
                     <div className="text-xs text-[#7A756E] mt-0.5 truncate">
@@ -338,9 +349,20 @@ function SitesSection({ sites }: { sites: SiteRegistryEntry[] }) {
                       {s.mwCapacity > 0 ? ` · ${s.mwCapacity} MW` : ''}
                     </div>
                   </div>
-                  {last && (
-                    <div className="text-xs text-[#7A756E] shrink-0">PIDDR · {last}</div>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {last && (
+                      <div className="text-xs text-[#7A756E]">PIDDR · {last}</div>
+                    )}
+                    <svg
+                      className="h-4 w-4 text-[#7A756E] opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[#ED202B] transition-all"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </button>
               </li>
             );
