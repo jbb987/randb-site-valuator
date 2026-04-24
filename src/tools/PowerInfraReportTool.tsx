@@ -380,6 +380,9 @@ export default function PowerInfraReportTool() {
         county: site.county,
         parcelId: site.parcelId,
         companyId: site.companyId,
+        companyName: site.companyId
+          ? companies.find((c) => c.id === site.companyId)?.name
+          : undefined,
       };
       report.loadReport(inputs, {
         infra: site.infraResult,
@@ -449,6 +452,7 @@ export default function PowerInfraReportTool() {
       county: county.trim() || undefined,
       parcelId: parcelId.trim() || undefined,
       companyId: companyId ?? undefined,
+      companyName: companyId ? companies.find((c) => c.id === companyId)?.name : undefined,
     };
 
     // If a site was already selected from the sidebar, use it directly
@@ -928,11 +932,7 @@ export default function PowerInfraReportTool() {
                 county={report.inputs.county}
                 parcelId={report.inputs.parcelId}
                 companyId={report.inputs.companyId}
-                companyName={
-                  report.inputs.companyId
-                    ? companies.find((c) => c.id === report.inputs.companyId)?.name
-                    : undefined
-                }
+                companyName={report.inputs.companyName}
               />
               </div>
 

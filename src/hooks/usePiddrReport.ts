@@ -27,6 +27,7 @@ export interface PiddrInputs {
   parcelId?: string;
   owner?: string;       // Legacy free-text owner (kept for backward compat)
   companyId?: string;   // CRM linkage — supersedes owner going forward
+  companyName?: string; // Resolved company name at generation time (for PDF + view)
 }
 
 export interface PiddrSectionState<T> {
