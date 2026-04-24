@@ -71,7 +71,10 @@ export default function Breadcrumb() {
     <nav aria-label="Breadcrumb" className="mb-4">
       <ol className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-sm">
         {segments.map((seg, i) => {
-          const isFirst = i === 0;
+          // The back arrow goes on the immediate parent of the current page
+          // — the last segment that has a path. That way "‹" always means
+          // "up one level" regardless of how deep we are.
+          const isBackParent = seg.path && !segments.slice(i + 1).some((s) => s.path);
           return (
             <Fragment key={i}>
               {i > 0 && <li aria-hidden="true" className="text-[#D8D5D0] select-none">›</li>}
@@ -81,7 +84,7 @@ export default function Breadcrumb() {
                     onClick={() => navigate(seg.path!)}
                     className="group inline-flex items-center gap-1 text-[#7A756E] hover:text-[#ED202B] transition font-medium"
                   >
-                    {isFirst && (
+                    {isBackParent && (
                       <svg
                         className="h-3.5 w-3.5 flex-shrink-0 transition-transform group-hover:-translate-x-0.5"
                         fill="none"
