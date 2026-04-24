@@ -36,9 +36,13 @@ export default function Breadcrumb() {
 
   if (pathname === '/') return null;
 
-  const segments: Segment[] = [];
+  // Always start the trail at Dashboard so there's a text path back to home
+  // from anywhere in the app — not just the navbar logo.
+  const segments: Segment[] = [{ label: 'Dashboard', path: '/' }];
 
-  if (pathname.startsWith('/crm')) {
+  if (pathname === '/crm') {
+    segments.push({ label: 'Directory' });
+  } else if (pathname.startsWith('/crm/')) {
     segments.push({ label: 'Directory', path: '/crm' });
 
     if (companyMatch) {
@@ -59,28 +63,20 @@ export default function Breadcrumb() {
             : '…';
       segments.push({ label });
     }
-  } else {
-    segments.push({ label: 'Dashboard', path: '/' });
   }
-
-  // Drop the trail entirely if it's only the root anchor with no current page.
-  if (segments.length === 0) return null;
-
-  // If we only have a single root segment (e.g. /crm), the trail would just
-  // repeat the page heading. Hide it for cleanliness.
-  if (segments.length === 1 && segments[0].path === pathname) return null;
+  // Non-CRM tool routes: breadcrumb stays as just "‹ Dashboard". The tool's
+  // own h2 already names the page, so we don't duplicate it here.
 
   return (
     <nav aria-label="Breadcrumb" className="mb-4">
       <ol className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-sm">
         {segments.map((seg, i) => {
-          const isLast = i === segments.length - 1;
           const isFirst = i === 0;
           return (
             <Fragment key={i}>
               {i > 0 && <li aria-hidden="true" className="text-[#D8D5D0] select-none">›</li>}
               <li className="truncate max-w-[180px] sm:max-w-[240px]">
-                {seg.path && !isLast ? (
+                {seg.path ? (
                   <button
                     onClick={() => navigate(seg.path!)}
                     className="group inline-flex items-center gap-1 text-[#7A756E] hover:text-[#ED202B] transition font-medium"
