@@ -422,7 +422,6 @@ export interface Company {
   website?: string;
   ein?: string;
   tags: CompanyTag[];
-  primaryContactId?: string;
   note?: string;
   createdAt: number;
   updatedAt: number;
