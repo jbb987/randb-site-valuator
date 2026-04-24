@@ -121,13 +121,22 @@ export default function DocumentsSection({ companyId, defaultCategory = 'legal' 
   async function handleDownload(doc: CrmDocument) {
     try {
       const url = await openUrl(doc);
+      // Fetch as a Blob so the download attribute is honored — Firebase
+      // Storage URLs are cross-origin and serve with Content-Disposition:
+      // inline, so <a download> against the raw URL opens in-browser
+      // instead of downloading. Blob-backed object URLs are same-origin
+      // and always trigger the native download UI.
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = objectUrl;
       a.download = doc.name;
-      a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Download failed');
     }
