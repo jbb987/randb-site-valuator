@@ -20,7 +20,7 @@ interface Props {
   isMobile?: boolean;
 }
 
-export default function PiddrSidebar({
+export default function SiteAnalyzerSidebar({
   projects,
   sites,
   activeProjectId,

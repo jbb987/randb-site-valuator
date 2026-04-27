@@ -3,16 +3,16 @@ import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Layout from '../components/Layout';
 import PowerSlider from '../components/PowerSlider';
-import ReportHeader from '../components/piddr/ReportHeader';
-import SiteOverviewSection from '../components/piddr/SiteOverviewSection';
-import LandValuationSection from '../components/piddr/LandValuationSection';
-import BroadbandSection from '../components/piddr/BroadbandSection';
-import TransportSection from '../components/piddr/TransportSection';
-import WaterSection from '../components/piddr/WaterSection';
-import GasSection from '../components/piddr/GasSection';
-import PiddrSidebar from '../components/piddr/PiddrSidebar';
+import ReportHeader from '../components/site-analyzer/ReportHeader';
+import SiteOverviewSection from '../components/site-analyzer/SiteOverviewSection';
+import LandValuationSection from '../components/site-analyzer/LandValuationSection';
+import BroadbandSection from '../components/site-analyzer/BroadbandSection';
+import TransportSection from '../components/site-analyzer/TransportSection';
+import WaterSection from '../components/site-analyzer/WaterSection';
+import GasSection from '../components/site-analyzer/GasSection';
+import SiteAnalyzerSidebar from '../components/site-analyzer/SiteAnalyzerSidebar';
 import InfrastructureResults from '../components/power-calculator/InfrastructureResults';
-import { usePiddrReport } from '../hooks/usePiddrReport';
+import { useSiteAnalysis } from '../hooks/useSiteAnalysis';
 import { usePdfExport } from '../hooks/usePdfExport';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
 import { useUserHistory } from '../hooks/useUserHistory';
@@ -26,7 +26,7 @@ import {
   saveWaterToSite,
   saveGasToSite,
   saveLandCompsToSite,
-  savePiddrTimestamp,
+  saveAnalysisTimestamp,
   createSiteEntry,
   findSiteByCoordinates,
   updateSiteEntry,
@@ -37,7 +37,7 @@ import { parseCoordinates } from '../utils/parseCoordinates';
 import RecentHistory from '../components/RecentHistory';
 import CompanyPicker from '../components/crm-directory/CompanyPicker';
 import { useCompanies } from '../hooks/useCompanies';
-import type { PiddrInputs, ExistingResults } from '../hooks/usePiddrReport';
+import type { AnalysisInputs, ExistingResults } from '../hooks/useSiteAnalysis';
 import type { FilteredCompResult, LandComp, SiteRegistryEntry } from '../types';
 
 const inputClass =
@@ -56,7 +56,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-export default function PowerInfraReportTool() {
+export default function SiteAnalyzerTool() {
   const [siteName, setSiteName] = useState('');
   const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState('');
@@ -103,7 +103,7 @@ export default function PowerInfraReportTool() {
     saveTimerRef.current = setTimeout(() => setSaveVisible(false), 2500);
   }, []);
 
-  const report = usePiddrReport();
+  const report = useSiteAnalysis();
 
   // Intersection Observer for active section tracking
   useEffect(() => {
@@ -139,7 +139,7 @@ export default function PowerInfraReportTool() {
   const pdfExport = usePdfExport();
   const { sites: registrySites } = useSiteRegistry();
   const { logActivity, getToolHistory, loading: historyLoading } = useUserHistory();
-  const recentEntries = getToolHistory('piddr');
+  const recentEntries = getToolHistory('site-analyzer');
   const { user, role } = useAuth();
   const {
     projects,
@@ -155,7 +155,7 @@ export default function PowerInfraReportTool() {
     const timer = setTimeout(() => {
       saveLandCompsToSite(selectedSiteId, landComps)
         .then(() => flashSaveIndicator())
-        .catch((err) => console.error('[PIDDR] Failed to save land comps:', err));
+        .catch((err) => console.error('[SiteAnalyzer] Failed to save land comps:', err));
     }, 1000);
     return () => clearTimeout(timer);
   }, [selectedSiteId, landComps]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -175,9 +175,9 @@ export default function PowerInfraReportTool() {
     void deleteProjectCascade(projectId).then(
       () => {
         if (activeProjectId === projectId) setActiveProjectId(null);
-        console.log('[PIDDR] Deleted project:', projectId);
+        console.log('[SiteAnalyzer] Deleted project:', projectId);
       },
-      (err) => console.error('[PIDDR] Failed to delete project:', err),
+      (err) => console.error('[SiteAnalyzer] Failed to delete project:', err),
     );
   }
 
@@ -188,9 +188,9 @@ export default function PowerInfraReportTool() {
           setSelectedSiteId(null);
           report.reset();
         }
-        console.log('[PIDDR] Deleted site:', siteId);
+        console.log('[SiteAnalyzer] Deleted site:', siteId);
       },
-      (err) => console.error('[PIDDR] Failed to delete site:', err),
+      (err) => console.error('[SiteAnalyzer] Failed to delete site:', err),
     );
   }
 
@@ -200,7 +200,7 @@ export default function PowerInfraReportTool() {
     if (report.isGenerating || !report.hasReport) return;
     if (historyLoggedRef.current === report.generatedAt) return;
     historyLoggedRef.current = report.generatedAt;
-    logActivity('piddr', siteName || 'Untitled Site', address, 'Generated PIDDR report', selectedSiteId ?? undefined, {
+    logActivity('site-analyzer', siteName || 'Untitled Site', address, 'Ran site analysis', selectedSiteId ?? undefined, {
       siteName, coordinates: coordinates.trim(), acreage, mw, ppaLow, ppaHigh,
     });
   }, [report.isGenerating, report.hasReport, report.generatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -230,11 +230,11 @@ export default function PowerInfraReportTool() {
     if (report.gas.data) {
       promises.push(saveGasToSite(selectedSiteId, report.gas.data as unknown as Record<string, unknown>));
     }
-    promises.push(savePiddrTimestamp(selectedSiteId));
+    promises.push(saveAnalysisTimestamp(selectedSiteId));
 
     void Promise.all(promises).then(
-      () => { console.log('[PIDDR] Results saved to site registry'); flashSaveIndicator(); },
-      (err) => console.error('[PIDDR] Failed to save results:', err),
+      () => { console.log('[SiteAnalyzer] Results saved to site registry'); flashSaveIndicator(); },
+      (err) => console.error('[SiteAnalyzer] Failed to save results:', err),
     );
   }, [selectedSiteId, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.transport.data, report.water.data, report.gas.data]);
 
@@ -274,10 +274,10 @@ export default function PowerInfraReportTool() {
       (newId) => {
         setSelectedSiteId(newId);
         setNewSiteProjectId(null);
-        console.log('[PIDDR] New site auto-saved to registry:', newId);
+        console.log('[SiteAnalyzer] New site auto-saved to registry:', newId);
         flashSaveIndicator();
       },
-      (err) => console.error('[PIDDR] Failed to auto-save site:', err),
+      (err) => console.error('[SiteAnalyzer] Failed to auto-save site:', err),
     );
   }, [user, selectedSiteId, newSiteProjectId, activeProjectId, report.inputs, report.isGenerating, report.hasReport, report.generatedAt, report.appraisal.data, report.infra.data, report.broadband.data, report.transport.data, report.water.data, report.gas.data]);
 
@@ -323,11 +323,11 @@ export default function PowerInfraReportTool() {
         setParcelId('');
         setCompanyId(null);
         report.reset();
-        console.log('[PIDDR] Created new site in folder:', newId, defaultName);
+        console.log('[SiteAnalyzer] Created new site in folder:', newId, defaultName);
       },
       (err) => {
         siteCreatingRef.current = false;
-        console.error('[PIDDR] Failed to create site:', err);
+        console.error('[SiteAnalyzer] Failed to create site:', err);
       },
     );
   }
@@ -368,7 +368,7 @@ export default function PowerInfraReportTool() {
         if (proj) folderName = proj.name;
       }
 
-      const inputs: PiddrInputs = {
+      const inputs: AnalysisInputs = {
         siteName: site.name || 'Untitled Site',
         customerName: folderName,
         address: site.address || '',
@@ -462,7 +462,7 @@ export default function PowerInfraReportTool() {
       }
     }
 
-    const inputs: PiddrInputs = {
+    const inputs: AnalysisInputs = {
       siteName: siteName.trim() || 'Untitled Site',
       customerName,
       address: address.trim(),
@@ -511,7 +511,7 @@ export default function PowerInfraReportTool() {
         if (Object.keys(updates).length > 0) {
           void updateSiteEntry(selectedSiteId, updates).then(() => flashSaveIndicator());
         }
-        console.log('[PIDDR] Using selected site:', site.name, site.id);
+        console.log('[SiteAnalyzer] Using selected site:', site.name, site.id);
       }
     } else if (!newSiteProjectId) {
       // Manual entry (not from "Add Site" in folder) — try to match by coordinates
@@ -527,7 +527,7 @@ export default function PowerInfraReportTool() {
             water: match.waterResult,
             gas: match.gasResult,
           };
-          console.log('[PIDDR] Matched existing site:', match.name, match.id);
+          console.log('[SiteAnalyzer] Matched existing site:', match.name, match.id);
         }
         // If no match, selectedSiteId stays null → auto-create after generation
       }
@@ -551,7 +551,7 @@ export default function PowerInfraReportTool() {
     <Layout fullWidth>
       <div className="flex" style={{ minHeight: 'calc(100vh - 120px)' }}>
         {/* Desktop sidebar */}
-        <PiddrSidebar
+        <SiteAnalyzerSidebar
           projects={projects}
           sites={registrySites}
           activeProjectId={activeProjectId}
@@ -571,7 +571,7 @@ export default function PowerInfraReportTool() {
         {/* Mobile sidebar overlay */}
         <AnimatePresence>
           {mobileSidebarOpen && (
-            <PiddrSidebar
+            <SiteAnalyzerSidebar
               projects={projects}
               sites={registrySites}
               activeProjectId={activeProjectId}

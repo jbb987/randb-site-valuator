@@ -305,7 +305,7 @@ function SitesSection({ sites }: { sites: SiteRegistryEntry[] }) {
     return `${site.coordinates.lat.toFixed(5)}, ${site.coordinates.lng.toFixed(5)}`;
   }
 
-  function formatLastPiddr(ts?: number | null): string | null {
+  function formatLastAnalyzed(ts?: number | null): string | null {
     if (!ts) return null;
     return new Date(ts).toLocaleDateString(undefined, {
       year: 'numeric',
@@ -323,16 +323,16 @@ function SitesSection({ sites }: { sites: SiteRegistryEntry[] }) {
       </div>
       {sites.length === 0 ? (
         <p className="text-sm text-[#7A756E]">
-          No sites linked yet. Open PIDDR and set this company in a site's details to link it.
+          No sites linked yet. Open the Site Analyzer and set this company in a site's details to link it.
         </p>
       ) : (
         <ul className="divide-y divide-[#D8D5D0]">
           {sites.map((s) => {
-            const last = formatLastPiddr(s.piddrGeneratedAt);
+            const last = formatLastAnalyzed(s.piddrGeneratedAt);
             return (
               <li key={s.id}>
                 <button
-                  onClick={() => navigate(`/power-infrastructure-report?siteId=${s.id}`)}
+                  onClick={() => navigate(`/site-analyzer?siteId=${s.id}`)}
                   className="group w-full text-left py-3 px-2 -mx-2 rounded-lg flex items-center justify-between gap-3 hover:bg-stone-50 hover:text-[#ED202B] transition"
                 >
                   <div className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ function SitesSection({ sites }: { sites: SiteRegistryEntry[] }) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {last && (
-                      <div className="text-xs text-[#7A756E]">PIDDR · {last}</div>
+                      <div className="text-xs text-[#7A756E]">Analyzed · {last}</div>
                     )}
                     <svg
                       className="h-4 w-4 text-[#7A756E] opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[#ED202B] transition-all"

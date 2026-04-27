@@ -37,7 +37,7 @@ export default function ReportHeader({ siteName, generatedAt, sections }: Props)
             </div>
             <div>
               <h1 className="font-heading text-xl font-semibold text-[#201F1E]">
-                {siteName || 'Infrastructure Report'}
+                {siteName || 'Site Analysis'}
               </h1>
               {generatedAt && (
                 <p className="text-xs text-[#7A756E] mt-0.5">

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
@@ -12,12 +12,17 @@ import GridPowerAnalyzer from './tools/GridPowerAnalyzer';
 import SalesCrmTool from './tools/SalesCrmTool';
 import SalesAdminDashboard from './tools/SalesAdminDashboard';
 import PowerCalculatorTool from './tools/PowerCalculatorTool';
-import PowerInfraReportTool from './tools/PowerInfraReportTool';
+import SiteAnalyzerTool from './tools/SiteAnalyzerTool';
 import WaterAnalysisTool from './tools/WaterAnalysisTool';
 import GasAnalysisTool from './tools/GasAnalysisTool';
 import CrmTool from './tools/CrmTool';
 import CompanyDetailTool from './tools/CompanyDetailTool';
 import ContactDetailTool from './tools/ContactDetailTool';
+
+function LegacyAnalyzerRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/site-analyzer${search}`} replace />;
+}
 
 export default function App() {
   return (
@@ -75,11 +80,13 @@ export default function App() {
               <PowerCalculatorTool />
             </ProtectedRoute>
           } />
-          <Route path="/power-infrastructure-report" element={
-            <ProtectedRoute toolId="piddr">
-              <PowerInfraReportTool />
+          <Route path="/site-analyzer" element={
+            <ProtectedRoute toolId="site-analyzer">
+              <SiteAnalyzerTool />
             </ProtectedRoute>
           } />
+          {/* Legacy redirect: /power-infrastructure-report → /site-analyzer (preserves query string) */}
+          <Route path="/power-infrastructure-report" element={<LegacyAnalyzerRedirect />} />
           <Route path="/water-analysis" element={
             <ProtectedRoute toolId="water-analysis">
               <WaterAnalysisTool />
