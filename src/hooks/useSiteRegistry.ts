@@ -22,8 +22,6 @@ export function useSiteRegistry() {
     }
     setLoading(true);
     const unsub = subscribeSiteRegistry(
-      user.uid,
-      role,
       (s) => {
         setSites(s);
         setLoading(false);

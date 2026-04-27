@@ -7,12 +7,10 @@ import {
   getDocs,
   getDoc,
   onSnapshot,
-  query,
-  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppraisalResult, BroadbandResult, LandComp, SiteInputs, SiteRegistryEntry, UserRole } from '../types';
+import type { AppraisalResult, BroadbandResult, LandComp, SiteInputs, SiteRegistryEntry } from '../types';
 import { parseCoordinates } from '../utils/parseCoordinates';
 
 const COLLECTION = 'sites-registry';
@@ -51,32 +49,10 @@ export async function getSiteEntry(id: string): Promise<SiteRegistryEntry | null
   return snap.exists() ? (snap.data() as SiteRegistryEntry) : null;
 }
 
-/**
- * Fetch all sites visible to a user.
- * Admins see everything; employees see only sites they created or are members of.
- */
-export async function getUserSites(
-  userId: string,
-  role: UserRole,
-): Promise<SiteRegistryEntry[]> {
-  if (role === 'admin') {
-    const snap = await getDocs(registryRef());
-    return snap.docs.map((d) => d.data() as SiteRegistryEntry);
-  }
-  // Employees: fetch where createdBy === userId
-  const ownSnap = await getDocs(
-    query(registryRef(), where('createdBy', '==', userId)),
-  );
-  const own = ownSnap.docs.map((d) => d.data() as SiteRegistryEntry);
-  // Also fetch where memberIds contains userId
-  const memberSnap = await getDocs(
-    query(registryRef(), where('memberIds', 'array-contains', userId)),
-  );
-  const member = memberSnap.docs.map((d) => d.data() as SiteRegistryEntry);
-  // Deduplicate by id
-  const map = new Map<string, SiteRegistryEntry>();
-  for (const s of [...own, ...member]) map.set(s.id, s);
-  return Array.from(map.values());
+/** Fetch all sites in the registry. */
+export async function getAllSites(): Promise<SiteRegistryEntry[]> {
+  const snap = await getDocs(registryRef());
+  return snap.docs.map((d) => d.data() as SiteRegistryEntry);
 }
 
 /** Find a registry site matching the given coordinates (within ~1m precision). */
@@ -110,30 +86,13 @@ export function searchSitesLocal(
   );
 }
 
-/** Subscribe to real-time updates for a user's visible sites. */
+/** Subscribe to real-time updates for the full site registry. */
 export function subscribeSiteRegistry(
-  userId: string,
-  role: UserRole,
   callback: (sites: SiteRegistryEntry[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  if (role === 'admin') {
-    return onSnapshot(
-      registryRef(),
-      (snap) => {
-        const sites = snap.docs.map((d) => d.data() as SiteRegistryEntry);
-        sites.sort((a, b) => a.name.localeCompare(b.name));
-        callback(sites);
-      },
-      (err) => {
-        console.error('[SiteRegistry] Subscription error:', err);
-        onError?.(err);
-      },
-    );
-  }
-  // For employees, listen to sites they created
   return onSnapshot(
-    query(registryRef(), where('createdBy', '==', userId)),
+    registryRef(),
     (snap) => {
       const sites = snap.docs.map((d) => d.data() as SiteRegistryEntry);
       sites.sort((a, b) => a.name.localeCompare(b.name));
