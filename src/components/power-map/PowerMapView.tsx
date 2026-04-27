@@ -645,7 +645,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
                 </span>
               </div>
               <a
-                href={`/site-analyzer?siteId=${selectedSite.id}`}
+                href={`/site-analyzer/${selectedSite.id}`}
                 className="block text-center text-xs font-medium text-white bg-[#ED202B] hover:bg-[#9B0E18] rounded-lg px-3 py-1.5 transition"
               >
                 Open in Site Analyzer
@@ -792,7 +792,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
               )}
 
               <a
-                href={`/site-analyzer?lat=${searchPin.lat}&lng=${searchPin.lng}`}
+                href={`/site-analyzer/new?lat=${searchPin.lat}&lng=${searchPin.lng}`}
                 className="block text-center text-xs font-medium text-white bg-[#ED202B] hover:bg-[#9B0E18] rounded-lg px-3 py-1.5 mt-2.5 transition"
               >
                 Run Site Analysis
