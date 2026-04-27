@@ -30,7 +30,8 @@ export function useLeads() {
     return () => unsub();
   }, []);
 
-  // Employees only see their assigned leads; admins see all
+  // Sales-CRM exception to the platform-wide "tool access = full dataset" model:
+  // sales reps only see leads assigned to them, admins see all. Intentional.
   const visibleLeads = role === 'admin'
     ? leads
     : leads.filter((l) => l.assignedTo === user?.uid);

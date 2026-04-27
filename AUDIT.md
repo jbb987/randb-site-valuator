@@ -27,8 +27,15 @@ _None recorded._
 
 _None recorded._
 
+## Design Decisions
+
+- **Data access model (2026-04-27):** Tool access (`allowedTools` per user) is the only data-access gate. Once a user has a tool, they see the full dataset for that tool — no per-user, per-project, or per-creator scoping. Companies, Contacts, Documents, Sites, and Site Requests all follow this model.
+- **Sales CRM exception (2026-04-27):** `useLeads.ts` filters leads by `assignedTo === user.uid` for non-admins. Intentional — sales reps need "my leads" segregation. Admins still see all.
+- **Legacy fields preserved:** `SiteRegistryEntry.createdBy`, `memberIds`, `projectId`, `owner` are written but not read for filtering. Kept for data integrity on existing documents; do not rely on them in new code.
+
 ## Changelog
 
 | Date       | Author | Notes                                                                 |
 |------------|--------|-----------------------------------------------------------------------|
 | 2026-04-27 | Claude | Initial audit file. Logged H-1 (incomplete user removal).             |
+| 2026-04-27 | Claude | Audit pass on role/data-access simplification. Removed createdBy filter from site registry (v1.15.2). Documented sales-CRM exception. No further conflicts found. |
