@@ -12,7 +12,9 @@ import GridPowerAnalyzer from './tools/GridPowerAnalyzer';
 import SalesCrmTool from './tools/SalesCrmTool';
 import SalesAdminDashboard from './tools/SalesAdminDashboard';
 import PowerCalculatorTool from './tools/PowerCalculatorTool';
-import SiteAnalyzerTool from './tools/SiteAnalyzerTool';
+import SiteAnalyzerIndex from './tools/SiteAnalyzerIndex';
+import SiteAnalyzerNew from './tools/SiteAnalyzerNew';
+import SiteAnalyzerDetail from './tools/SiteAnalyzerDetail';
 import WaterAnalysisTool from './tools/WaterAnalysisTool';
 import GasAnalysisTool from './tools/GasAnalysisTool';
 import CrmTool from './tools/CrmTool';
@@ -82,7 +84,17 @@ export default function App() {
           } />
           <Route path="/site-analyzer" element={
             <ProtectedRoute toolId="site-analyzer">
-              <SiteAnalyzerTool />
+              <SiteAnalyzerIndex />
+            </ProtectedRoute>
+          } />
+          <Route path="/site-analyzer/new" element={
+            <ProtectedRoute toolId="site-analyzer">
+              <SiteAnalyzerNew />
+            </ProtectedRoute>
+          } />
+          <Route path="/site-analyzer/:siteId" element={
+            <ProtectedRoute toolId="site-analyzer">
+              <SiteAnalyzerDetail />
             </ProtectedRoute>
           } />
           {/* Legacy redirect: /power-infrastructure-report → /site-analyzer (preserves query string) */}
