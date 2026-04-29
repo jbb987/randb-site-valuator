@@ -31,7 +31,7 @@ export const scrapeMobileBroadband = onCall(
     timeoutSeconds: 120,
     memory: '2GiB',
     region: 'us-central1',
-    cors: [/randbpowerinc\.us$/, 'https://platform.randbpowerinc.us'],
+    cors: [/randbpowerinc\.us$/, 'https://platform.randbpowerinc.us', /localhost/],
   },
   async (request) => {
     // Auth check — only authenticated users
