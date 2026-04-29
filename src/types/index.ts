@@ -259,6 +259,9 @@ export interface BroadbandResult {
   // Nearby service blocks (populated when fiber/cable unavailable and adjacent blocks have them)
   nearbyServiceBlocks?: NearbyServiceBlock[];
 
+  // Distance to nearest fiber in county (wider search, populated when fiber not on site or nearby)
+  nearestCountyFiberMi?: number | null;
+
   // Classification
   tier: ConnectivityTier;
 
