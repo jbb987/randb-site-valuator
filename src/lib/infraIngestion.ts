@@ -232,8 +232,11 @@ export async function ingestSubstations(
         const lng = f.geometry?.x || Number(getAttr(a, 'LONGITUDE', 'Longitude', 'LONG', 'LON') ?? 0);
         if (!lat || !lng || lat === -999999 || lng === -999999) continue;
 
+        const hifldRaw = getAttr(a, 'ID', 'Id', 'id');
+        const hifldNum = hifldRaw != null ? Number(hifldRaw) : NaN;
         allSubs.push({
           id: `sub-${allSubs.length}`,
+          ...(Number.isFinite(hifldNum) && hifldNum > 0 ? { hifldId: hifldNum } : {}),
           name,
           owner: String(getAttr(a, 'OWNER', 'Owner', 'owner') ?? ''),
           maxVoltKV: Math.max(0, Number(getAttr(a, 'MAX_VOLT', 'Max_Volt') ?? 0)),

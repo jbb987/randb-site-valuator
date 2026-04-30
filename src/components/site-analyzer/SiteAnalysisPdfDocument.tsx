@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Font,
 } from '@react-pdf/renderer';
-import type { AppraisalResult, BroadbandResult } from '../../types';
+import type { AppraisalResult, BroadbandResult, CountyQueueLoad, QueueFuel } from '../../types';
 import type { InfrastructureData } from '../power-calculator/InfrastructureResults';
 import type { AnalysisInputs } from '../../hooks/useSiteAnalysis';
 import type { WaterAnalysisResult } from '../../lib/waterAnalysis.types';
@@ -336,6 +336,7 @@ export interface SiteAnalysisPdfData {
   water: WaterAnalysisResult | null;
   gas: GasAnalysisResult | null;
   labor: LaborAnalysisResult | null;
+  countyQueue: CountyQueueLoad | null;
   siteMapImage: string | null;
   generatedAt: number;
 }
@@ -877,7 +878,108 @@ function InfrastructurePages({ data }: { data: SiteAnalysisPdfData }) {
 
         <PageFooter />
       </Page>
+
+      {data.countyQueue && <CountyQueuePage data={data} />}
     </>
+  );
+}
+
+// ── County Power Queue (PDF) ─────────────────────────────────────────────
+const FUEL_LABEL_PDF: Record<QueueFuel, string> = {
+  SOLAR: 'Solar', WIND: 'Wind', STORAGE: 'Storage', HYBRID: 'Hybrid',
+  GAS: 'Gas', NUCLEAR: 'Nuclear', HYDRO: 'Hydro', COAL: 'Coal',
+  BIOMASS: 'Biomass', OIL: 'Oil', GEOTHERMAL: 'Geothermal', OTHER: 'Other',
+};
+
+function fmtPower(mw: number): string {
+  if (mw >= 1000) return `${(mw / 1000).toFixed(1)} GW`;
+  return `${Math.round(mw).toLocaleString()} MW`;
+}
+
+function CountyQueuePage({ data }: { data: SiteAnalysisPdfData }) {
+  const cq = data.countyQueue;
+  if (!cq) return null;
+
+  const fuelEntries = (Object.entries(cq.fuel_mix) as [QueueFuel, number][])
+    .filter(([, v]) => v > 0.001)
+    .sort(([, a], [, b]) => b - a);
+  const voltageEntries = Object.entries(cq.voltage_mix)
+    .filter(([, v]) => v > 0.001)
+    .sort(([a], [b]) => Number(b) - Number(a));
+  const wd = cq.withdrawal_rate_5y;
+  const median = cq.median_time_to_cod_days != null
+    ? `${(cq.median_time_to_cod_days / 365).toFixed(1)} yrs (n=${cq.completed_sample_size})`
+    : null;
+
+  return (
+    <Page size="LETTER" style={s.page}>
+      <PageHeader siteName={data.inputs.siteName} />
+      <Text style={s.sectionTitle}>County Power Queue</Text>
+
+      <Text style={s.subsectionTitle}>Snapshot</Text>
+      <KvRow label="Active" value={`${cq.active_count.toLocaleString()} · ${fmtPower(cq.active_mw)}`} />
+      {cq.withdrawn_count_5y > 0 && (
+        <KvRow label="Withdrawn (5y)" value={`${cq.withdrawn_count_5y.toLocaleString()} · ${fmtPower(cq.withdrawn_mw_5y)}`} />
+      )}
+      {cq.in_service_count > 0 && (
+        <KvRow label="In service" value={`${cq.in_service_count.toLocaleString()} · ${fmtPower(cq.in_service_mw)}`} />
+      )}
+      {wd != null && (
+        <KvRow label="Withdrawal rate (5y)" value={`${Math.round(wd * 100)}%`} />
+      )}
+      {median && <KvRow label="Median time to COD" value={median} />}
+      {cq.earliest_active_cod && (
+        <KvRow label="Earliest active COD" value={cq.earliest_active_cod.slice(0, 4)} />
+      )}
+
+      {fuelEntries.length > 0 && (
+        <>
+          <Text style={s.subsectionTitle}>Active queue fuel mix</Text>
+          {fuelEntries.map(([fuel, share]) => (
+            <KvRow
+              key={fuel}
+              label={FUEL_LABEL_PDF[fuel]}
+              value={`${Math.round(share * 100)}% · ${fmtPower(share * cq.active_mw)}`}
+            />
+          ))}
+        </>
+      )}
+
+      {voltageEntries.length > 0 && (
+        <>
+          <Text style={s.subsectionTitle}>Voltage class breakdown</Text>
+          {voltageEntries.map(([v, share]) => (
+            <KvRow key={v} label={`${v} kV`} value={`${Math.round(share * 100)}%`} />
+          ))}
+        </>
+      )}
+
+      {cq.top_active.length > 0 && (
+        <>
+          <Text style={s.subsectionTitle}>Top 10 active projects</Text>
+          <View style={s.table}>
+            <View style={s.tableHeaderRow}>
+              <Text style={[s.tableHeaderCell, { width: '44%' }]}>Project</Text>
+              <Text style={[s.tableHeaderCell, { width: '14%' }]}>MW</Text>
+              <Text style={[s.tableHeaderCell, { width: '16%' }]}>Fuel</Text>
+              <Text style={[s.tableHeaderCell, { width: '12%' }]}>kV</Text>
+              <Text style={[s.tableHeaderCell, { width: '14%' }]}>COD</Text>
+            </View>
+            {cq.top_active.slice(0, 10).map((p, i) => (
+              <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                <Text style={[s.tableCell, { width: '44%' }]}>{p.name || 'Unnamed'}</Text>
+                <Text style={[s.tableCell, { width: '14%' }]}>{fmtPower(p.mw)}</Text>
+                <Text style={[s.tableCell, { width: '16%' }]}>{FUEL_LABEL_PDF[p.fuel]}</Text>
+                <Text style={[s.tableCell, { width: '12%' }]}>{p.voltage_kv ? `${p.voltage_kv}` : '—'}</Text>
+                <Text style={[s.tableCell, { width: '14%' }]}>{p.cod ? p.cod.slice(0, 4) : '—'}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      <PageFooter />
+    </Page>
   );
 }
 

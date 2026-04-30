@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AVAILABILITY_BINS } from '../../lib/powerMapData';
 import type { MapSubstation } from '../../lib/powerMapData';
 
@@ -12,23 +12,48 @@ for (const { bin, color } of AVAILABILITY_BINS) {
   BIN_COLOR[bin] = color;
 }
 
+const PLACEHOLDER_RX = /^UNKNOWN\d+$|^TAP\d+$|^SUB\s*T?\d*$/i;
+
 export default function SubstationList({ substations, onFlyTo }: SubstationListProps) {
-  // Sort active substations by availableMW descending
-  const sorted = useMemo(() => {
+  const [query, setQuery] = useState('');
+
+  // Sort active substations by availableMW descending. Hide placeholder names
+  // (UNKNOWN######, TAP######, SUB T###) unless the search matches them.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
     return substations
       .filter((s) => s.status === 'active')
+      .filter((s) => {
+        const isPlaceholder = PLACEHOLDER_RX.test(s.name);
+        if (q) {
+          return s.name.toLowerCase().includes(q);
+        }
+        return !isPlaceholder;
+      })
       .sort((a, b) => b.availableMW - a.availableMW);
-  }, [substations]);
+  }, [substations, query]);
 
-  if (sorted.length === 0) return null;
+  if (substations.filter((s) => s.status === 'active').length === 0) return null;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-[#D8D5D0] p-3">
       <h3 className="font-heading font-semibold text-xs text-[#201F1E] mb-2">
-        Substations ({sorted.length})
+        Substations ({filtered.length.toLocaleString()})
       </h3>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by name…"
+        className="w-full mb-2 px-2 py-1 text-xs rounded border border-[#D8D5D0] bg-white outline-none focus:border-[#ED202B] focus:ring-1 focus:ring-[#ED202B]/20 placeholder:text-[#7A756E]"
+      />
       <div className="space-y-0.5 max-h-60 overflow-y-auto -mx-1 px-1">
-        {sorted.map((sub, i) => {
+        {filtered.length === 0 && (
+          <div className="text-[10px] text-[#7A756E] py-2 text-center">
+            {query ? 'No matches in this state.' : 'No named substations.'}
+          </div>
+        )}
+        {filtered.map((sub, i) => {
           const color = BIN_COLOR[sub.availabilityBin] ?? '#201F1E';
           const label = sub.availableMW <= 0
             ? '0 MW'

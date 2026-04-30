@@ -80,6 +80,7 @@ export interface MapTransmissionLine {
 }
 
 export interface MapSubstation {
+  hifldId?: number;        // HIFLD substation ID — joins to substation_queue_load
   name: string;
   owner: string;
   status: string; // 'active' | 'planned' | 'retired'
@@ -292,7 +293,10 @@ function parseSubstationFeature(f: {
   const lng = f.geometry?.x || Number(getAttr(a, 'LONGITUDE', 'Longitude', 'LONG', 'LON') ?? 0);
   if (!lat || !lng || lat === -999999 || lng === -999999) return null;
 
+  const hifldRaw = getAttr(a, 'ID', 'Id', 'id');
+  const hifldNum = hifldRaw != null ? Number(hifldRaw) : NaN;
   return {
+    ...(Number.isFinite(hifldNum) && hifldNum > 0 ? { hifldId: hifldNum } : {}),
     name,
     owner: '',
     status: normalizeStatus(String(getAttr(a, 'STATUS', 'Status') ?? '')),

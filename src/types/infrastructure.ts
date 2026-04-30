@@ -24,6 +24,7 @@ export interface CachedPowerPlant {
 
 export interface CachedSubstation {
   id: string;
+  hifldId?: number;          // HIFLD substation ID — joins to substation_queue_load Firestore docs
   name: string;
   owner: string;
   maxVoltKV: number;

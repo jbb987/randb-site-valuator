@@ -65,6 +65,7 @@ src/
       GasSection.tsx          # Gas analysis results wrapper
       TransportSection.tsx    # Transport infrastructure results (airports, interstates, ports, railroads)
       LaborSection.tsx        # Labor pool results wrapper
+      CountyQueueSection.tsx  # County-level interconnection queue summary inside the Power Infrastructure section (read-only, fed by useCountyQueueLoad)
       SiteAnalysisPdfDocument.tsx # Full PDF document structure (react-pdf)
     broadband/                # Broadband Lookup components
       BroadbandReport.tsx     # Due diligence report display
@@ -82,6 +83,7 @@ src/
       CoordinateSearch.tsx    # Coordinate/address search with geocoding
       SubstationList.tsx      # Substation data table
       Methodology.tsx         # Map methodology docs
+      QueueCard.tsx           # Interconnection-queue summary in substation popup (active/withdrawn/in-service MW, withdrawal rate, top competitors)
     power-calculator/         # Power Calculator components
       InfrastructureResults.tsx # Main results display
       PowerPlantsTable.tsx    # Power plants table
@@ -154,6 +156,8 @@ src/
     useInfraLookup.ts         # Infrastructure lookup for Power Calculator
     useUserHistory.ts         # Per-user activity history
     useUserQuota.ts           # Reactive monthly Site Analyzer quota for the signed-in user (admins unlimited)
+    useQueueLoad.ts           # One-shot fetch of substation_queue_load doc by HIFLD ID, with session in-memory cache (no live subscription)
+    useCountyQueueLoad.ts     # One-shot fetch of county_queue_load doc by (state, county), session-cached
     useAnimatedNumber.ts      # Number animation utility
   lib/
     firebase.ts               # Firebase config + legacy site CRUD
@@ -166,6 +170,7 @@ src/
     crmDocuments.ts           # CRM document Firebase Storage + Firestore ops (collection: crm-documents)
     userHistory.ts            # User activity history operations
     userQuotas.ts             # Monthly Site Analyzer generation quotas (5/month default, per-user override, atomic Firestore increment)
+    queueLoad.ts              # Read substation_queue_load doc by HIFLD ID (one-shot getDoc; refreshed weekly by scripts/queue-ingestion)
     broadbandLookup.ts        # FCC Census Block + ArcGIS BDC API
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions

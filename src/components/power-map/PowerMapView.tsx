@@ -15,6 +15,7 @@ import MapStats from './MapStats';
 import PlantPopup from './PlantPopup';
 import SubstationList from './SubstationList';
 import CoordinateSearch from './CoordinateSearch';
+import QueueCard from './QueueCard';
 import { reverseGeocode, type GeoLocation } from '../../lib/reverseGeocode';
 import { detectStateFromCoords } from '../../lib/solarAverages';
 import { lookupInfrastructure } from '../../lib/infraLookup';
@@ -30,6 +31,7 @@ interface LinePopupData {
 }
 
 interface SubstationPopupData {
+  hifldId?: number;
   name: string;
   owner: string;
   status: string;
@@ -237,6 +239,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
     setSelectedPlant(null);
     setSelectedLine(null);
     setSelectedSubstation({
+      hifldId: sub?.hifldId,
       name,
       owner: sub?.owner ?? '',
       status: sub?.status ?? 'active',
@@ -345,6 +348,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
       type: 'Feature' as const,
       id: i,
       properties: {
+        hifldId: s.hifldId ?? null,
         name: s.name,
         owner: s.owner,
         status: s.status,
@@ -543,7 +547,10 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
         lat: e.lngLat.lat,
       });
     } else if (layer === 'substations' || layer === 'substations-inactive') {
+      const hifldIdRaw = props.hifldId;
+      const hifldId = hifldIdRaw != null && Number.isFinite(Number(hifldIdRaw)) ? Number(hifldIdRaw) : undefined;
       setSelectedSubstation({
+        hifldId,
         name: (!props.name || props.name === 'NOT AVAILABLE') ? 'Unknown' : props.name,
         owner: (!props.owner || props.owner === 'NOT AVAILABLE') ? '' : props.owner,
         status: props.status ?? 'active',
@@ -1058,7 +1065,9 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
               >
                 <div className="p-2 min-w-[220px]">
                   <h4 className="font-heading font-semibold text-sm text-[#201F1E] mb-2">
-                    {selectedSubstation.name}
+                    {selectedSubstation.name && /^UNKNOWN\d+$/.test(selectedSubstation.name)
+                      ? `Unnamed ${selectedSubstation.maxVolt ? `${selectedSubstation.maxVolt} kV ` : ''}substation`
+                      : selectedSubstation.name}
                   </h4>
                   <div className="space-y-1">
                     {substationGeo?.county && (
@@ -1098,7 +1107,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
                       const label = avail <= 0 ? 'No capacity' : `${avail.toLocaleString()} MW`;
                       return (
                         <div className="flex justify-between text-xs">
-                          <span className="text-[#7A756E]">Available</span>
+                          <span className="text-[#7A756E]" title="Existing capacity headroom from current generation/demand. Excludes queued projects.">Available today</span>
                           <span className="font-semibold" style={{ color }}>{label}</span>
                         </div>
                       );
@@ -1132,6 +1141,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
                         </a>
                       </div>
                     </div>
+                    <QueueCard hifldId={selectedSubstation.hifldId} />
                   </div>
                 </div>
               </Popup>

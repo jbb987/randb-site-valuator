@@ -5,6 +5,97 @@ export interface MonthlyUsage {
   count: number;
 }
 
+// ── ISO interconnection queue load per substation ─────────────────────
+// Document shape in Firestore collection `substation_queue_load`, keyed by HIFLD ID.
+// Written by scripts/queue-ingestion/write_to_firestore.py.
+
+export type QueueIso = 'PJM' | 'MISO' | 'ERCOT' | 'SPP' | 'CAISO' | 'NYISO' | 'ISONE';
+
+export type QueueFuel =
+  | 'SOLAR' | 'WIND' | 'STORAGE' | 'HYBRID' | 'GAS' | 'NUCLEAR'
+  | 'HYDRO' | 'COAL' | 'BIOMASS' | 'OIL' | 'GEOTHERMAL' | 'OTHER';
+
+export interface QueueTopActive {
+  name: string | null;
+  mw: number;
+  fuel: QueueFuel;
+  cod: string | null;
+}
+
+/** Confirmed bucket — projects matched specifically to this substation
+ *  (named match, voltage match, or line tap endpoint). Includes derived
+ *  metrics (withdrawal rate, median time to COD). */
+export interface QueueConfirmedBucket {
+  active_count: number;
+  active_mw: number;
+  in_service_count: number;
+  in_service_mw: number;
+  withdrawn_count_5y: number;
+  withdrawn_mw_5y: number;
+  withdrawal_rate_5y: number | null;     // 0–1, null if denominator <3
+  median_time_to_cod_days: number | null;// null if <3 completed projects
+  completed_sample_size: number;
+  earliest_active_cod: string | null;
+  top_active: QueueTopActive[];
+}
+
+/** Area bucket — projects we could only narrow to a county+voltage
+ *  cluster of substations. Same data appears on every cluster member. */
+export interface QueueAreaBucket {
+  active_count: number;
+  active_mw: number;
+  in_service_count: number;
+  in_service_mw: number;
+  withdrawn_count_5y: number;
+  withdrawn_mw_5y: number;
+  earliest_active_cod: string | null;
+  top_active: QueueTopActive[];
+}
+
+/** Cluster context — describes the county+voltage scope of the area bucket. */
+export interface QueueAreaCluster {
+  size: number | null;            // # of substations sharing this area data
+  county: string | null;
+  voltage_kv: number | null;
+}
+
+export interface SubstationQueueLoad {
+  hifld_id: number;
+  iso: QueueIso;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+  confirmed: QueueConfirmedBucket | null;
+  area: QueueAreaBucket | null;
+  area_cluster?: QueueAreaCluster;
+  updated_at: string;
+}
+
+/** County-level queue aggregate. One doc per (state, county) with activity.
+ *  Read by the Site Analyzer's County Power Queue section. */
+export interface CountyQueueLoad {
+  doc_id: string;
+  state: string;
+  county: string;
+  iso: QueueIso | null;
+  active_count: number;
+  active_mw: number;
+  in_service_count: number;
+  in_service_mw: number;
+  withdrawn_count_5y: number;
+  withdrawn_mw_5y: number;
+  withdrawal_rate_5y: number | null;
+  median_time_to_cod_days: number | null;
+  completed_sample_size: number;
+  earliest_active_cod: string | null;
+  /** % of active MW per fuel category (0–1). */
+  fuel_mix: Partial<Record<QueueFuel, number>>;
+  /** % of active MW per voltage class (key = voltage in kV as string). */
+  voltage_mix: Record<string, number>;
+  top_active: Array<QueueTopActive & { voltage_kv: number | null }>;
+  updated_at: string;
+}
+
 export type ToolId =
   | 'site-appraiser'
   | 'broadband-lookup'
