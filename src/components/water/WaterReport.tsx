@@ -48,13 +48,6 @@ function Badge({ label, style }: { label: string; style: string }) {
   );
 }
 
-function precipRiskLevel(inches: number): FloodRiskLevel {
-  if (inches > 60) return 'very-high';
-  if (inches > 40) return 'high';
-  if (inches > 20) return 'moderate';
-  return 'minimal';
-}
-
 // ── Shared components ────────────────────────────────────────────────────────
 
 function SummaryCard({ label, value, accent }: { label: string; value: string; accent?: string }) {

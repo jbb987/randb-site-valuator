@@ -462,42 +462,6 @@ function ProductionContextSection({ result }: { result: GasAnalysisResult }) {
   );
 }
 
-// ── Section: LDC Assessment ───────────────────────────────────────────────────
-
-function LDCAssessmentSection({ result }: { result: GasAnalysisResult }) {
-  const { ldcAssessment } = result;
-
-  return (
-    <SectionCard title="LDC Availability Assessment" badge={<StatusBadge variant="action" />}>
-      <p className="text-xs text-[#7A756E] mb-3">
-        Local Distribution Company (LDC) service availability for large industrial loads.
-      </p>
-
-      <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
-        <div className="flex items-start gap-2">
-          <svg className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="text-sm text-amber-900">{ldcAssessment.note}</p>
-        </div>
-      </div>
-
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {[
-          { label: 'LDC Availability', value: 'Manual Verification Required' },
-          { label: 'Typical Interconnect Size', value: '>10 MMscf/day → Industrial Transport' },
-          { label: 'Next Step', value: 'Contact State PUC for LDC map' },
-        ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-[#D8D5D0] bg-[#FAFAF9] p-3">
-            <p className="text-xs text-[#7A756E] mb-1">{item.label}</p>
-            <p className="text-xs font-semibold text-[#201F1E] leading-snug">{item.value}</p>
-          </div>
-        ))}
-      </div>
-    </SectionCard>
-  );
-}
-
 // ── Section: Gas Quality Assessment (Phase 2) ───────────────────────────────
 
 const qualityRatingStyle: Record<GasQualityRating, { bg: string; text: string; label: string }> = {

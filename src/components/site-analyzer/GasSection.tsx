@@ -4,8 +4,8 @@ import GasReport from '../gas/GasReport';
 
 interface Props {
   section: AnalysisSectionState<GasAnalysisResult>;
-  pipelineMarketers?: Record<string, string>;
-  onMarketerChange?: (operator: string, marketer: string) => void;
+  pipelineSuppliers?: Record<string, string>;
+  onSupplierChange?: (operator: string, supplier: string) => void;
 }
 
 function SectionSkeleton() {
@@ -29,7 +29,7 @@ function SectionError({ message }: { message: string }) {
   );
 }
 
-export default function GasSection({ section, pipelineMarketers, onMarketerChange }: Props) {
+export default function GasSection({ section, pipelineSuppliers, onSupplierChange }: Props) {
   const { loading, error, data } = section;
 
   return (
@@ -59,7 +59,7 @@ export default function GasSection({ section, pipelineMarketers, onMarketerChang
         </div>
       )}
 
-      {data && <GasReport result={data} pipelineMarketers={pipelineMarketers} onMarketerChange={onMarketerChange} />}
+      {data && <GasReport result={data} pipelineSuppliers={pipelineSuppliers} onSupplierChange={onSupplierChange} />}
     </div>
   );
 }

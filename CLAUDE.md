@@ -15,6 +15,7 @@ Internal tool suite for R&B Power. The **CRM** is the central database (companie
 - **Grid Power Analyzer** — Interactive MapLibre GL map showing power generators, transmission lines, substations, and available capacity with heat map overlay. Coordinate search with gold diamond pin.
 - **Water Analysis** — Flood zones, stream networks, wetlands, groundwater, drought, NPDES permits, precipitation analysis from coordinates.
 - **Gas Infrastructure Analysis** — Nearby gas pipelines, demand calculation, lateral cost estimate, LDC assessment, supply reliability, gas pricing, environmental compliance.
+- **Labor Pool (Site Analyzer section only)** — County-anchored workforce data: population, labor force, unemployment, education, commute, industry mix, occupational wages, with state/national benchmarks. Live: Census Geocoder + Census ACS 5yr. Stubbed (mock until BLS key wired): BLS QCEW (industries), BLS OEWS (wages), BLS LAUS (unemployment).
 - **Broadband Lookup** — Broadband due diligence report from site coordinates. Queries FCC Census Block API and ArcGIS FCC BDC.
 - **Leads (Sales CRM)** — Lead management for the sales team. Tracks leads through call/email outreach sequence (New → Call 1 → Email → Call 2 → Final Call → Won/Lost).
 - **Sales Dashboard** — Admin-only aggregated view of sales performance. Leaderboard, pipeline breakdown, conversion rates.
@@ -63,6 +64,7 @@ src/
       WaterSection.tsx        # Water analysis results wrapper
       GasSection.tsx          # Gas analysis results wrapper
       TransportSection.tsx    # Transport infrastructure results (airports, interstates, ports, railroads)
+      LaborSection.tsx        # Labor pool results wrapper
       SiteAnalysisPdfDocument.tsx # Full PDF document structure (react-pdf)
     broadband/                # Broadband Lookup components
       BroadbandReport.tsx     # Due diligence report display
@@ -70,6 +72,8 @@ src/
       WaterReport.tsx         # Water analysis report display
     gas/                      # Gas Analysis components
       GasReport.tsx           # Gas analysis report display
+    labor/                    # Labor Pool components
+      LaborReport.tsx         # Labor pool report display (used by Site Analyzer Labor section)
     power-map/                # Grid Power Analyzer components
       PowerMapView.tsx        # Main map container (MapLibre GL)
       MapLegend.tsx           # Layer toggles and source legend
@@ -144,6 +148,7 @@ src/
     useBroadbandLookup.ts     # Broadband data lookup
     useWaterAnalysis.ts       # Water analysis hook
     useGasAnalysis.ts         # Gas analysis hook
+    useLaborAnalysis.ts       # Labor pool analysis hook
     usePowerMap.ts            # Power map data fetching and state
     useInfraData.ts           # Cached infrastructure data (plants, substations, EIA, solar)
     useInfraLookup.ts         # Infrastructure lookup for Power Calculator
@@ -163,6 +168,7 @@ src/
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions
     gasAnalysis.ts            # Gas analysis (pipelines, demand, lateral, LDC, pricing)
+    laborAnalysis.ts          # Labor pool analysis (Census Geocoder + ACS live; BLS QCEW/OEWS/LAUS stubbed pending key)
     transportLookup.ts        # Transport infrastructure (airports, interstates, ports, railroads via geo.dot.gov)
     infraLookup.ts            # Infrastructure lookup (substations, lines, plants, geocode)
     infraIngestion.ts         # Admin data ingestion pipeline (ArcGIS → Firestore)
@@ -260,7 +266,7 @@ public/
 
 ### Site Analysis Generation
 
-- `useSiteAnalysis` hook manages 6 parallel sections: Appraisal (instant), Infrastructure, Broadband, Transport, Water, Gas
+- `useSiteAnalysis` hook manages 7 parallel sections: Appraisal (instant), Infrastructure, Broadband, Transport, Water, Gas, Labor
 - Each section has `AnalysisSectionState<T>` with `loading`, `error`, `data`
 - `ExistingResults` allows skipping re-fetch for cached data from the registry
 - Results are auto-saved to the site registry on completion
@@ -271,7 +277,7 @@ public/
 - Sites stored in Firestore `sites-registry` collection as `SiteRegistryEntry`
 - Each entry has an optional `projectId` field — **legacy** from the old folder system; preserved on documents but no UI reads it. Existing folders in the `projects` Firestore collection are also preserved as data; only the UI was removed.
 - Sites are grouped by **company** instead (via `companyId`). The Company detail page lists all sites for a company; the Site Analyzer index lists all sites with a search.
-- Write-back helpers: `saveAppraisalToSite`, `saveInfraToSite`, `saveBroadbandToSite`, `saveTransportToSite`, `saveWaterToSite`, `saveGasToSite`, `saveAnalysisTimestamp`
+- Write-back helpers: `saveAppraisalToSite`, `saveInfraToSite`, `saveBroadbandToSite`, `saveTransportToSite`, `saveWaterToSite`, `saveGasToSite`, `saveLaborToSite`, `saveAnalysisTimestamp`
 - Dedup and migration utilities exist in `siteRegistry.ts` but are not auto-run
 
 ### Dashboard Organization
