@@ -12,7 +12,6 @@ import {
   ALL_COMPANY_TAGS,
   LICENSE_STATES,
   LICENSE_STATE_LABELS,
-  LINKED_COMPANY_ROLE_LABELS,
   type Company,
   type CompanyTag,
   type ConstructionJob,
@@ -614,8 +613,10 @@ function ConstructionJobsSection({ jobs, companyId }: { jobs: ConstructionJob[];
   const navigate = useNavigate();
 
   function roleForCompany(job: ConstructionJob): string {
-    const link = job.linkedCompanies.find((l) => l.companyId === companyId);
-    return link ? LINKED_COMPANY_ROLE_LABELS[link.role] : '';
+    if (job.companyIds.includes(companyId)) return 'Client';
+    if (job.generalContractorId === companyId) return 'General Contractor';
+    if (job.subcontractorIds.includes(companyId)) return 'Subcontractor';
+    return '';
   }
 
   function formatDate(ts?: number): string | null {

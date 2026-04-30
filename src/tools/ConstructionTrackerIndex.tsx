@@ -13,9 +13,8 @@ import {
   type ConstructionJobStatus,
 } from '../types';
 
-function primaryCompanyId(job: ConstructionJob): string | undefined {
-  return job.linkedCompanies.find((l) => l.isPrimary)?.companyId
-    ?? job.linkedCompanies[0]?.companyId;
+function headlineCompanyId(job: ConstructionJob): string | undefined {
+  return job.companyIds[0] ?? job.generalContractorId ?? job.subcontractorIds[0];
 }
 
 function formatDateRange(start?: number, end?: number): string {
@@ -55,7 +54,7 @@ export default function ConstructionTrackerIndex() {
     return visibleJobs.filter((j) => {
       if (statusFilter !== 'all' && j.status !== statusFilter) return false;
       if (!q) return true;
-      const primary = companyById.get(primaryCompanyId(j) ?? '');
+      const primary = companyById.get(headlineCompanyId(j) ?? '');
       const haystack = [
         j.name,
         j.address ?? '',
@@ -149,7 +148,7 @@ export default function ConstructionTrackerIndex() {
         ) : (
           <ul className="space-y-3">
             {filtered.map((j) => {
-              const primary = companyById.get(primaryCompanyId(j) ?? '');
+              const primary = companyById.get(headlineCompanyId(j) ?? '');
               const pm = userById.get(j.projectManagerId);
               const range = formatDateRange(j.startDate, j.expectedEndDate);
               return (
@@ -165,7 +164,7 @@ export default function ConstructionTrackerIndex() {
                       <JobStatusBadge status={j.status} />
                     </div>
                     <div className="text-xs text-[#7A756E]">
-                      {primary?.name ?? 'No primary company'}
+                      {primary?.name ?? 'No company linked'}
                       {pm && <> · PM {pm.email}</>}
                       {j.workerIds.length > 0 && <> · {j.workerIds.length} worker{j.workerIds.length === 1 ? '' : 's'}</>}
                     </div>

@@ -4,24 +4,22 @@ import { useCompanies } from '../../hooks/useCompanies';
 import { useUsers } from '../../hooks/useUsers';
 import {
   ALL_CONSTRUCTION_JOB_STATUSES,
-  ALL_LINKED_COMPANY_ROLES,
   CONSTRUCTION_JOB_STATUS_LABELS,
-  LINKED_COMPANY_ROLE_LABELS,
   type ConstructionJob,
   type ConstructionJobStatus,
-  type LinkedCompany,
-  type LinkedCompanyRole,
 } from '../../types';
 
 export interface JobFormValues {
   name: string;
-  linkedCompanies: LinkedCompany[];
+  companyIds: string[];
+  generalContractorId: string;     // '' = none
+  subcontractorIds: string[];
   projectManagerId: string;
   workerIds: string[];
   status: ConstructionJobStatus;
   startDate: string;          // YYYY-MM-DD or ''
-  expectedEndDate: string;    // YYYY-MM-DD or ''
-  actualEndDate: string;      // YYYY-MM-DD or ''
+  expectedEndDate: string;
+  actualEndDate: string;
   address: string;
   budget: string;             // raw string for typing; parse on submit
   description: string;
@@ -29,7 +27,9 @@ export interface JobFormValues {
 
 export const EMPTY_JOB_FORM: JobFormValues = {
   name: '',
-  linkedCompanies: [],
+  companyIds: [],
+  generalContractorId: '',
+  subcontractorIds: [],
   projectManagerId: '',
   workerIds: [],
   status: 'planning',
@@ -44,7 +44,9 @@ export const EMPTY_JOB_FORM: JobFormValues = {
 export function jobToForm(job: ConstructionJob): JobFormValues {
   return {
     name: job.name,
-    linkedCompanies: job.linkedCompanies,
+    companyIds: job.companyIds ?? [],
+    generalContractorId: job.generalContractorId ?? '',
+    subcontractorIds: job.subcontractorIds ?? [],
     projectManagerId: job.projectManagerId,
     workerIds: job.workerIds,
     status: job.status,
@@ -97,11 +99,10 @@ export default function JobForm({ values, onChange, onSubmit, onCancel, saving, 
 
   const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
 
-  // Validation
+  // Validation: needs a name, ≥1 company, and a PM. GC + subs are optional.
   const valid = useMemo(() => {
     if (values.name.trim().length === 0) return false;
-    if (values.linkedCompanies.length === 0) return false;
-    if (values.linkedCompanies.filter((l) => l.isPrimary).length !== 1) return false;
+    if (values.companyIds.length === 0) return false;
     if (!values.projectManagerId) return false;
     return true;
   }, [values]);
@@ -110,43 +111,24 @@ export default function JobForm({ values, onChange, onSubmit, onCancel, saving, 
     onChange({ ...values, ...p });
   }
 
-  // Companies
+  // Companies (clients) — multi
   function addCompany(companyId: string | null) {
     if (!companyId) return;
-    if (values.linkedCompanies.some((l) => l.companyId === companyId)) return;
-    const isFirst = values.linkedCompanies.length === 0;
-    patch({
-      linkedCompanies: [
-        ...values.linkedCompanies,
-        { companyId, role: 'client', isPrimary: isFirst },
-      ],
-    });
+    if (values.companyIds.includes(companyId)) return;
+    patch({ companyIds: [...values.companyIds, companyId] });
   }
-
   function removeCompany(companyId: string) {
-    const next = values.linkedCompanies.filter((l) => l.companyId !== companyId);
-    // If we removed the primary, promote the first remaining (if any)
-    if (next.length > 0 && !next.some((l) => l.isPrimary)) {
-      next[0] = { ...next[0], isPrimary: true };
-    }
-    patch({ linkedCompanies: next });
+    patch({ companyIds: values.companyIds.filter((id) => id !== companyId) });
   }
 
-  function updateCompanyRole(companyId: string, role: LinkedCompanyRole) {
-    patch({
-      linkedCompanies: values.linkedCompanies.map((l) =>
-        l.companyId === companyId ? { ...l, role } : l,
-      ),
-    });
+  // Subcontractors — multi
+  function addSubcontractor(companyId: string | null) {
+    if (!companyId) return;
+    if (values.subcontractorIds.includes(companyId)) return;
+    patch({ subcontractorIds: [...values.subcontractorIds, companyId] });
   }
-
-  function setPrimary(companyId: string) {
-    patch({
-      linkedCompanies: values.linkedCompanies.map((l) => ({
-        ...l,
-        isPrimary: l.companyId === companyId,
-      })),
-    });
+  function removeSubcontractor(companyId: string) {
+    patch({ subcontractorIds: values.subcontractorIds.filter((id) => id !== companyId) });
   }
 
   // Workers
@@ -161,9 +143,27 @@ export default function JobForm({ values, onChange, onSubmit, onCancel, saving, 
     patch({ workerIds: [...values.workerIds, uid] });
     setWorkerPickerOpen(false);
   }
-
   function removeWorker(uid: string) {
     patch({ workerIds: values.workerIds.filter((w) => w !== uid) });
+  }
+
+  function CompanyChip({ companyId, onRemove }: { companyId: string; onRemove: () => void }) {
+    const c = companyById.get(companyId);
+    return (
+      <li className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#ED202B]/10 text-xs text-[#201F1E]">
+        <span className="font-medium">{c?.name ?? '(missing company)'}</span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-[#7A756E] hover:text-[#ED202B]"
+          aria-label="Remove"
+        >
+          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </li>
+    );
   }
 
   return (
@@ -196,60 +196,61 @@ export default function JobForm({ values, onChange, onSubmit, onCancel, saving, 
         </Field>
       </div>
 
-      {/* Linked companies */}
-      <div>
-        <div className="text-xs font-medium uppercase tracking-wide text-[#7A756E] mb-1">
-          Companies <span className="text-[#ED202B]">*</span>
-          <span className="ml-2 normal-case text-[10px] text-[#7A756E]/80">
-            One client, plus any GCs/subs. Mark exactly one as primary.
-          </span>
-        </div>
-        {values.linkedCompanies.length > 0 && (
-          <ul className="space-y-2 mb-2">
-            {values.linkedCompanies.map((l) => {
-              const c = companyById.get(l.companyId);
-              return (
-                <li key={l.companyId} className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-[#D8D5D0] bg-stone-50">
-                  <span className="font-medium text-sm text-[#201F1E] mr-1 min-w-0 truncate">
-                    {c?.name ?? '(missing company)'}
-                  </span>
-                  <select
-                    className="text-xs border border-[#D8D5D0] rounded-md px-2 py-1 bg-white focus:outline-none focus:border-[#ED202B]"
-                    value={l.role}
-                    onChange={(e) => updateCompanyRole(l.companyId, e.target.value as LinkedCompanyRole)}
-                  >
-                    {ALL_LINKED_COMPANY_ROLES.map((r) => (
-                      <option key={r} value={r}>{LINKED_COMPANY_ROLE_LABELS[r]}</option>
-                    ))}
-                  </select>
-                  <label className="text-xs flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="primary-company"
-                      checked={l.isPrimary}
-                      onChange={() => setPrimary(l.companyId)}
-                      className="accent-[#ED202B]"
-                    />
-                    Primary
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removeCompany(l.companyId)}
-                    className="ml-auto text-xs text-[#7A756E] hover:text-[#ED202B]"
-                  >
-                    Remove
-                  </button>
-                </li>
-              );
-            })}
+      {/* Companies (clients) — multi */}
+      <Field label="Company" hint="Add one or more client companies linked to this job." required>
+        {values.companyIds.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5 mb-2">
+            {values.companyIds.map((id) => (
+              <CompanyChip key={id} companyId={id} onRemove={() => removeCompany(id)} />
+            ))}
           </ul>
         )}
         <CompanyPicker
           value={null}
           onChange={addCompany}
-          placeholder="+ Add company"
+          placeholder={values.companyIds.length === 0 ? 'Select company' : '+ Add another company'}
         />
-      </div>
+      </Field>
+
+      {/* General Contractor — single, optional */}
+      <Field label="General Contractor" hint="Optional. One GC per job.">
+        {values.generalContractorId ? (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D8D5D0] bg-stone-50 text-sm text-[#201F1E] flex-1">
+              {companyById.get(values.generalContractorId)?.name ?? '(missing company)'}
+            </span>
+            <button
+              type="button"
+              onClick={() => patch({ generalContractorId: '' })}
+              className="text-xs text-[#7A756E] hover:text-[#ED202B] px-2"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <CompanyPicker
+            value={null}
+            onChange={(id) => patch({ generalContractorId: id ?? '' })}
+            placeholder="Select GC (optional)"
+          />
+        )}
+      </Field>
+
+      {/* Subcontractors — multi, optional */}
+      <Field label="Subcontractors" hint="Optional. Add any subs working under the GC.">
+        {values.subcontractorIds.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5 mb-2">
+            {values.subcontractorIds.map((id) => (
+              <CompanyChip key={id} companyId={id} onRemove={() => removeSubcontractor(id)} />
+            ))}
+          </ul>
+        )}
+        <CompanyPicker
+          value={null}
+          onChange={addSubcontractor}
+          placeholder={values.subcontractorIds.length === 0 ? 'Add subcontractor' : '+ Add another sub'}
+        />
+      </Field>
 
       {/* Team */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -426,7 +427,9 @@ export default function JobForm({ values, onChange, onSubmit, onCancel, saving, 
 }
 
 /** Convert form values into a Firestore-shaped partial. Caller adds id/createdAt/updatedAt/createdBy. */
-export function formToPartialJob(values: JobFormValues): Omit<ConstructionJob, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'linkedCompanyIds'> {
+export function formToPartialJob(
+  values: JobFormValues,
+): Omit<ConstructionJob, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'linkedCompanyIds'> {
   const dateMs = (s: string): number | undefined => {
     if (!s) return undefined;
     const ms = Date.parse(s);
@@ -435,7 +438,9 @@ export function formToPartialJob(values: JobFormValues): Omit<ConstructionJob, '
   const budget = values.budget.trim() ? Number(values.budget) : undefined;
   return {
     name: values.name.trim(),
-    linkedCompanies: values.linkedCompanies,
+    companyIds: values.companyIds,
+    ...(values.generalContractorId && { generalContractorId: values.generalContractorId }),
+    subcontractorIds: values.subcontractorIds,
     projectManagerId: values.projectManagerId,
     workerIds: values.workerIds,
     status: values.status,

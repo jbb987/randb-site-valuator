@@ -15,14 +15,11 @@ export default function ConstructionTrackerNew() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Pre-fill from ?companyId= (sets primary company)
+  // Pre-fill from ?companyId= (adds it to the Companies (clients) list)
   const initialCompanyId = searchParams.get('companyId');
   useEffect(() => {
-    if (initialCompanyId && values.linkedCompanies.length === 0) {
-      setValues((prev) => ({
-        ...prev,
-        linkedCompanies: [{ companyId: initialCompanyId, role: 'client', isPrimary: true }],
-      }));
+    if (initialCompanyId && values.companyIds.length === 0) {
+      setValues((prev) => ({ ...prev, companyIds: [initialCompanyId] }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCompanyId]);

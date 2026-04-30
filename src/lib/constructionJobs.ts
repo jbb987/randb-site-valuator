@@ -9,7 +9,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { ConstructionJob, LinkedCompany } from '../types';
+import type { ConstructionJob } from '../types';
 
 const COLLECTION = 'construction-jobs';
 
@@ -17,9 +17,16 @@ function jobsRef() {
   return collection(db, COLLECTION);
 }
 
-/** Derive the linkedCompanyIds mirror from linkedCompanies. */
-export function deriveLinkedCompanyIds(linked: LinkedCompany[]): string[] {
-  return Array.from(new Set(linked.map((l) => l.companyId)));
+/** Union of clients + GC + subs, used as the array-contains mirror so the
+ *  company-profile panel can surface jobs that link a company in any role. */
+export function deriveLinkedCompanyIds(
+  companyIds: string[],
+  generalContractorId: string | undefined,
+  subcontractorIds: string[],
+): string[] {
+  const all = [...companyIds, ...subcontractorIds];
+  if (generalContractorId) all.push(generalContractorId);
+  return Array.from(new Set(all));
 }
 
 /** Create a new construction job. Returns the generated ID. */
@@ -31,7 +38,11 @@ export async function createConstructionJob(
   const full: ConstructionJob = {
     ...entry,
     id,
-    linkedCompanyIds: deriveLinkedCompanyIds(entry.linkedCompanies),
+    linkedCompanyIds: deriveLinkedCompanyIds(
+      entry.companyIds,
+      entry.generalContractorId,
+      entry.subcontractorIds,
+    ),
     createdAt: now,
     updatedAt: now,
   };
@@ -39,14 +50,27 @@ export async function createConstructionJob(
   return id;
 }
 
-/** Partial update on an existing job. Re-derives linkedCompanyIds when linkedCompanies changes. */
+/** Partial update on an existing job. Re-derives linkedCompanyIds when any
+ *  of the three company fields changes. */
 export async function updateConstructionJob(
   id: string,
   updates: Partial<ConstructionJob>,
 ): Promise<void> {
   const patch: Partial<ConstructionJob> = { ...updates, updatedAt: Date.now() };
-  if (updates.linkedCompanies) {
-    patch.linkedCompanyIds = deriveLinkedCompanyIds(updates.linkedCompanies);
+  const companyFieldChanged =
+    'companyIds' in updates ||
+    'generalContractorId' in updates ||
+    'subcontractorIds' in updates;
+  if (companyFieldChanged) {
+    // Caller must have included whichever fields changed; pull current values
+    // from the patch first, then fall back to whatever the doc already has on
+    // the next read. For now we trust the caller passes a coherent set
+    // (the form always submits the full company triple together).
+    patch.linkedCompanyIds = deriveLinkedCompanyIds(
+      updates.companyIds ?? [],
+      updates.generalContractorId,
+      updates.subcontractorIds ?? [],
+    );
   }
   await updateDoc(doc(db, COLLECTION, id), patch as Record<string, unknown>);
 }

@@ -1,10 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useCompanies } from '../../hooks/useCompanies';
-import {
-  LINKED_COMPANY_ROLE_LABELS,
-  type ConstructionJob,
-} from '../../types';
+import type { ConstructionJob } from '../../types';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -27,48 +24,55 @@ function formatBudget(b?: number): string {
   return `$${b.toLocaleString()}`;
 }
 
+function CompanyLink({ name, companyId }: { name?: string; companyId: string }) {
+  return (
+    <Link
+      to={`/crm/companies/${companyId}`}
+      className="font-medium text-[#201F1E] hover:text-[#ED202B] hover:underline"
+    >
+      {name ?? <span className="italic text-[#7A756E]">missing company</span>}
+    </Link>
+  );
+}
+
 export default function JobOverviewSection({ job }: { job: ConstructionJob }) {
   const { companies } = useCompanies();
   const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
 
-  const ordered = useMemo(() => {
-    return [...job.linkedCompanies].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
-  }, [job.linkedCompanies]);
+  const gcCompany = job.generalContractorId ? companyById.get(job.generalContractorId) : undefined;
 
   return (
     <section className="bg-white rounded-xl border border-[#D8D5D0] shadow-sm p-4 sm:p-5">
       <h3 className="font-heading font-semibold text-[#201F1E] mb-3">Overview</h3>
       <div className="divide-y divide-[#F0EEEB]">
-        <Row label="Companies">
-          {ordered.length === 0 ? (
+        <Row label={job.companyIds.length === 1 ? 'Company' : 'Companies'}>
+          {job.companyIds.length === 0 ? (
             '—'
           ) : (
             <ul className="space-y-1">
-              {ordered.map((l) => {
-                const c = companyById.get(l.companyId);
-                return (
-                  <li key={l.companyId} className="flex flex-wrap items-center justify-end gap-1.5">
-                    {c ? (
-                      <Link
-                        to={`/crm/companies/${l.companyId}`}
-                        className="font-medium text-[#201F1E] hover:text-[#ED202B] hover:underline"
-                      >
-                        {c.name}
-                      </Link>
-                    ) : (
-                      <span className="italic text-[#7A756E]">missing company</span>
-                    )}
-                    <span className="text-xs text-[#7A756E]">
-                      · {LINKED_COMPANY_ROLE_LABELS[l.role]}
-                    </span>
-                    {l.isPrimary && (
-                      <span className="text-[10px] uppercase tracking-wide font-semibold text-[#ED202B]">
-                        Primary
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
+              {job.companyIds.map((id) => (
+                <li key={id} className="sm:text-right">
+                  <CompanyLink name={companyById.get(id)?.name} companyId={id} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Row>
+        <Row label="General Contractor">
+          {job.generalContractorId
+            ? <CompanyLink name={gcCompany?.name} companyId={job.generalContractorId} />
+            : '—'}
+        </Row>
+        <Row label={job.subcontractorIds.length === 1 ? 'Subcontractor' : 'Subcontractors'}>
+          {job.subcontractorIds.length === 0 ? (
+            '—'
+          ) : (
+            <ul className="space-y-1">
+              {job.subcontractorIds.map((id) => (
+                <li key={id} className="sm:text-right">
+                  <CompanyLink name={companyById.get(id)?.name} companyId={id} />
+                </li>
+              ))}
             </ul>
           )}
         </Row>

@@ -651,37 +651,18 @@ export const CONSTRUCTION_JOB_STATUS_COLORS: Record<ConstructionJobStatus, strin
   cancelled: '#EF4444',  // red
 };
 
-export type LinkedCompanyRole = 'client' | 'general-contractor' | 'subcontractor' | 'other';
-
-export const ALL_LINKED_COMPANY_ROLES: LinkedCompanyRole[] = [
-  'client',
-  'general-contractor',
-  'subcontractor',
-  'other',
-];
-
-export const LINKED_COMPANY_ROLE_LABELS: Record<LinkedCompanyRole, string> = {
-  'client':              'Client',
-  'general-contractor':  'General Contractor',
-  'subcontractor':       'Subcontractor',
-  'other':               'Other',
-};
-
-export interface LinkedCompany {
-  companyId: string;
-  role: LinkedCompanyRole;
-  isPrimary: boolean;             // exactly one entry must be primary
-}
-
 export interface ConstructionJob {
   id: string;
   name: string;                   // Project name
 
-  // Companies — one or more, exactly one isPrimary. linkedCompanyIds mirrors
-  // the IDs only so we can use Firestore array-contains queries (which can't
-  // match objects) when surfacing jobs on a company profile.
-  linkedCompanies: LinkedCompany[];
-  linkedCompanyIds: string[];
+  // Companies — three distinct fields. linkedCompanyIds is the union mirror
+  // (every id from companyIds + generalContractorId + subcontractorIds) so
+  // the company-profile panel can find jobs with a single Firestore
+  // array-contains query.
+  companyIds: string[];           // Clients linked to the job (≥1 required)
+  generalContractorId?: string;   // Single GC, optional
+  subcontractorIds: string[];     // Subcontractors, optional
+  linkedCompanyIds: string[];     // Mirror — derived; do not edit directly
 
   // Team (real platform users with logins)
   projectManagerId: string;       // Firebase UID — required

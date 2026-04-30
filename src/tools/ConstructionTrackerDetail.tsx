@@ -33,11 +33,10 @@ export default function ConstructionTrackerDetail() {
     if (job && !editing) setFormValues(jobToForm(job));
   }, [job, editing]);
 
-  const primaryCompany = useMemo(() => {
+  const headlineCompany = useMemo(() => {
     if (!job) return null;
-    const link = job.linkedCompanies.find((l) => l.isPrimary) ?? job.linkedCompanies[0];
-    if (!link) return null;
-    return companies.find((c) => c.id === link.companyId) ?? null;
+    const id = job.companyIds[0] ?? job.generalContractorId ?? job.subcontractorIds[0];
+    return id ? companies.find((c) => c.id === id) ?? null : null;
   }, [job, companies]);
 
   const pmEmail = useMemo(() => {
@@ -126,7 +125,7 @@ export default function ConstructionTrackerDetail() {
                 <JobStatusBadge status={job.status} />
               </div>
               <div className="text-xs sm:text-sm text-[#7A756E]">
-                {primaryCompany?.name ?? 'No primary company'}
+                {headlineCompany?.name ?? 'No company linked'}
                 {pmEmail && <> · PM {pmEmail}</>}
                 {job.address && <> · {job.address}</>}
               </div>
