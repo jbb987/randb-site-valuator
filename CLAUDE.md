@@ -153,6 +153,7 @@ src/
     useInfraData.ts           # Cached infrastructure data (plants, substations, EIA, solar)
     useInfraLookup.ts         # Infrastructure lookup for Power Calculator
     useUserHistory.ts         # Per-user activity history
+    useUserQuota.ts           # Reactive monthly Site Analyzer quota for the signed-in user (admins unlimited)
     useAnimatedNumber.ts      # Number animation utility
   lib/
     firebase.ts               # Firebase config + legacy site CRUD
@@ -164,6 +165,7 @@ src/
     crmContacts.ts            # CRM contact Firestore operations (collection: crm-contacts)
     crmDocuments.ts           # CRM document Firebase Storage + Firestore ops (collection: crm-documents)
     userHistory.ts            # User activity history operations
+    userQuotas.ts             # Monthly Site Analyzer generation quotas (5/month default, per-user override, atomic Firestore increment)
     broadbandLookup.ts        # FCC Census Block + ArcGIS BDC API
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions

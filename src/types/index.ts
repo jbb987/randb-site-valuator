@@ -1,5 +1,10 @@
 export type UserRole = 'admin' | 'employee';
 
+export interface MonthlyUsage {
+  month: string;   // "YYYY-MM" (UTC)
+  count: number;
+}
+
 export type ToolId =
   | 'site-appraiser'
   | 'broadband-lookup'

@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, createAuthUser, sendResetEmail } from '../lib/firebase';
-import type { UserRole, ToolId } from '../types';
+import type { UserRole, ToolId, MonthlyUsage } from '../types';
 
 export interface UserRecord {
   id: string;
   email: string;
   role: UserRole;
   allowedTools: ToolId[];
+  monthlyQuotaLimit?: number;
+  monthlyUsage?: MonthlyUsage;
 }
 
 export function useUsers() {
@@ -21,6 +23,8 @@ export function useUsers() {
         email: d.data().email as string,
         role: d.data().role as UserRole,
         allowedTools: (d.data().allowedTools as ToolId[] | undefined) ?? [],
+        monthlyQuotaLimit: d.data().monthlyQuotaLimit as number | undefined,
+        monthlyUsage: d.data().monthlyUsage as MonthlyUsage | undefined,
       }));
       list.sort((a, b) => a.email.localeCompare(b.email));
       setUsers(list);
