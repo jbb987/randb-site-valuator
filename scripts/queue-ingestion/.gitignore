@@ -1,0 +1,8 @@
+# Generated data — refreshed each run
+data/
+*.json
+!normalizers/*.json
+__pycache__/
+*.pyc
+.venv/
+venv/
