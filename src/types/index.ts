@@ -5,6 +5,45 @@ export interface MonthlyUsage {
   count: number;
 }
 
+// ── ISO interconnection queue load per substation ─────────────────────
+// Document shape in Firestore collection `substation_queue_load`, keyed by HIFLD ID.
+// Written by scripts/queue-ingestion/write_to_firestore.py.
+
+export type QueueIso = 'PJM' | 'MISO' | 'ERCOT' | 'SPP' | 'CAISO' | 'NYISO' | 'ISONE';
+
+export type QueueFuel =
+  | 'SOLAR' | 'WIND' | 'STORAGE' | 'HYBRID' | 'GAS' | 'NUCLEAR'
+  | 'HYDRO' | 'COAL' | 'BIOMASS' | 'OIL' | 'GEOTHERMAL' | 'OTHER';
+
+export interface QueueTopActive {
+  name: string | null;
+  mw: number;
+  fuel: QueueFuel;
+  cod: string | null;
+}
+
+export interface SubstationQueueLoad {
+  hifld_id: number;
+  iso: QueueIso;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+  active_count: number;
+  active_mw: number;
+  in_service_count: number;
+  in_service_mw: number;
+  withdrawn_count_5y: number;
+  withdrawn_mw_5y: number;
+  withdrawn_count_total: number;
+  withdrawn_mw_total: number;
+  withdrawal_rate_5y: number | null;
+  median_time_to_cod_days: number | null;
+  completed_sample_size: number;
+  earliest_active_cod: string | null;
+  top_active: QueueTopActive[];
+  updated_at: string;
+}
+
 export type ToolId =
   | 'site-appraiser'
   | 'broadband-lookup'
