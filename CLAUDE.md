@@ -195,6 +195,8 @@ public/
   favicon.svg
   logo.svg
   icons.svg
+scripts/
+  queue-ingestion/            # Weekly Python pipeline: pulls all 7 ISO queues, matches to HIFLD substations, writes Firestore. See scripts/queue-ingestion/README.md
 ```
 
 ## Routes

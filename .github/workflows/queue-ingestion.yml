@@ -1,0 +1,93 @@
+name: ISO Queue Ingestion
+
+on:
+  # Weekly cron — Monday 06:00 UTC (~2am Eastern, ~midnight Pacific).
+  # The Firestore-side 6-day skip guard prevents accidental double-runs.
+  schedule:
+    - cron: "0 6 * * 1"
+  # Manual trigger for testing / one-off runs.
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Bypass 6-day skip guard"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Don't write to Firestore"
+        type: boolean
+        default: false
+
+# Prevent overlapping runs (e.g. cron triggers while a manual run is in flight).
+concurrency:
+  group: queue-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: scripts/queue-ingestion
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/queue-ingestion/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build ERCOT INR registry
+        run: python build_ercot_archive.py
+
+      - name: Pull and normalize ISO queues
+        env:
+          PJM_API_KEY: dummy
+        run: python pull_and_normalize.py
+
+      - name: Pull HIFLD substations
+        run: python pull_hifld_us.py
+
+      - name: Match queue projects to substations
+        run: python matcher.py
+
+      - name: Aggregate per substation
+        run: python aggregate.py
+
+      - name: Write Firebase service account to disk
+        env:
+          FIREBASE_ADMIN_KEY: ${{ secrets.FIREBASE_ADMIN_KEY }}
+        run: |
+          if [ -z "$FIREBASE_ADMIN_KEY" ]; then
+            echo "::error::FIREBASE_ADMIN_KEY secret is not set"
+            exit 1
+          fi
+          echo "$FIREBASE_ADMIN_KEY" > /tmp/firebase-key.json
+
+      - name: Write to Firestore
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/firebase-key.json
+        run: |
+          ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python write_to_firestore.py $ARGS
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f /tmp/firebase-key.json
+
+      - name: Upload data artifacts (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: queue-data-${{ github.run_number }}
+          path: scripts/queue-ingestion/data/
+          retention-days: 7
