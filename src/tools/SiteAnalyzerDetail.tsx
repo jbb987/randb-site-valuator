@@ -14,6 +14,8 @@ import WaterSection from '../components/site-analyzer/WaterSection';
 import GasSection from '../components/site-analyzer/GasSection';
 import LaborSection from '../components/site-analyzer/LaborSection';
 import InfrastructureResults from '../components/power-calculator/InfrastructureResults';
+import CountyQueueSection from '../components/site-analyzer/CountyQueueSection';
+import { useCountyQueueLoad } from '../hooks/useCountyQueueLoad';
 import { useSiteAnalysis, type AnalysisInputs } from '../hooks/useSiteAnalysis';
 import { usePdfExport } from '../hooks/usePdfExport';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
@@ -84,6 +86,7 @@ export default function SiteAnalyzerDetail() {
   const companyName = site?.companyId
     ? companies.find((c) => c.id === site.companyId)?.name ?? null
     : null;
+  const { data: countyQueue } = useCountyQueueLoad(site?.detectedState ?? null, site?.county ?? null);
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -343,6 +346,7 @@ export default function SiteAnalyzerDetail() {
       water: report.water.data,
       gas: report.gas.data,
       labor: report.labor.data,
+      countyQueue: countyQueue,
       siteMapImage: null,
       generatedAt: report.generatedAt,
     });
@@ -526,6 +530,7 @@ export default function SiteAnalyzerDetail() {
               {report.infra.data && (
                 <InfrastructureResults data={report.infra.data} loading={false} hasRunAnalysis={true} collapsible={false} cardWrap context="site-analyzer" />
               )}
+              <CountyQueueSection state={site.detectedState ?? null} county={site.county ?? null} />
             </div>
 
             <div id="section-broadband"><BroadbandSection section={report.broadband} /></div>

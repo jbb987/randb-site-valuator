@@ -71,6 +71,31 @@ export interface SubstationQueueLoad {
   updated_at: string;
 }
 
+/** County-level queue aggregate. One doc per (state, county) with activity.
+ *  Read by the Site Analyzer's County Power Queue section. */
+export interface CountyQueueLoad {
+  doc_id: string;
+  state: string;
+  county: string;
+  iso: QueueIso | null;
+  active_count: number;
+  active_mw: number;
+  in_service_count: number;
+  in_service_mw: number;
+  withdrawn_count_5y: number;
+  withdrawn_mw_5y: number;
+  withdrawal_rate_5y: number | null;
+  median_time_to_cod_days: number | null;
+  completed_sample_size: number;
+  earliest_active_cod: string | null;
+  /** % of active MW per fuel category (0–1). */
+  fuel_mix: Partial<Record<QueueFuel, number>>;
+  /** % of active MW per voltage class (key = voltage in kV as string). */
+  voltage_mix: Record<string, number>;
+  top_active: Array<QueueTopActive & { voltage_kv: number | null }>;
+  updated_at: string;
+}
+
 export type ToolId =
   | 'site-appraiser'
   | 'broadband-lookup'

@@ -65,6 +65,7 @@ src/
       GasSection.tsx          # Gas analysis results wrapper
       TransportSection.tsx    # Transport infrastructure results (airports, interstates, ports, railroads)
       LaborSection.tsx        # Labor pool results wrapper
+      CountyQueueSection.tsx  # County-level interconnection queue summary inside the Power Infrastructure section (read-only, fed by useCountyQueueLoad)
       SiteAnalysisPdfDocument.tsx # Full PDF document structure (react-pdf)
     broadband/                # Broadband Lookup components
       BroadbandReport.tsx     # Due diligence report display
@@ -156,6 +157,7 @@ src/
     useUserHistory.ts         # Per-user activity history
     useUserQuota.ts           # Reactive monthly Site Analyzer quota for the signed-in user (admins unlimited)
     useQueueLoad.ts           # One-shot fetch of substation_queue_load doc by HIFLD ID, with session in-memory cache (no live subscription)
+    useCountyQueueLoad.ts     # One-shot fetch of county_queue_load doc by (state, county), session-cached
     useAnimatedNumber.ts      # Number animation utility
   lib/
     firebase.ts               # Firebase config + legacy site CRUD
