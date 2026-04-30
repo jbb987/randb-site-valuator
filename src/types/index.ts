@@ -106,7 +106,8 @@ export type ToolId =
   | 'gas-analysis'
   | 'sales-crm'
   | 'sales-admin'
-  | 'crm';
+  | 'crm'
+  | 'construction-tracker';
 
 export const ALL_TOOL_IDS: ToolId[] = [
   'site-appraiser',
@@ -119,6 +120,7 @@ export const ALL_TOOL_IDS: ToolId[] = [
   'sales-crm',
   'sales-admin',
   'crm',
+  'construction-tracker',
 ];
 
 export const TOOL_LABELS: Record<ToolId, string> = {
@@ -132,6 +134,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   'sales-crm': 'Leads',
   'sales-admin': 'Sales Dashboard',
   'crm': 'Directory',
+  'construction-tracker': 'Construction Tracker',
 };
 
 // Backward-compat: old ToolId 'piddr' was renamed to 'site-analyzer'. Translate
@@ -614,4 +617,93 @@ export interface CrmDocument {
   uploadedBy: string;          // userId
   uploadedByName: string;      // cached display name
 }
+
+// ── Construction Tracker ────────────────────────────────────────────────
+
+export type ConstructionJobStatus =
+  | 'planning'
+  | 'active'
+  | 'on-hold'
+  | 'completed'
+  | 'cancelled';
+
+export const ALL_CONSTRUCTION_JOB_STATUSES: ConstructionJobStatus[] = [
+  'planning',
+  'active',
+  'on-hold',
+  'completed',
+  'cancelled',
+];
+
+export const CONSTRUCTION_JOB_STATUS_LABELS: Record<ConstructionJobStatus, string> = {
+  planning:  'Planning',
+  active:    'Active',
+  'on-hold': 'On Hold',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+export const CONSTRUCTION_JOB_STATUS_COLORS: Record<ConstructionJobStatus, string> = {
+  planning:  '#3B82F6',  // blue
+  active:    '#10B981',  // emerald
+  'on-hold': '#F59E0B',  // amber
+  completed: '#6B7280',  // gray
+  cancelled: '#EF4444',  // red
+};
+
+export type LinkedCompanyRole = 'client' | 'general-contractor' | 'subcontractor' | 'other';
+
+export const ALL_LINKED_COMPANY_ROLES: LinkedCompanyRole[] = [
+  'client',
+  'general-contractor',
+  'subcontractor',
+  'other',
+];
+
+export const LINKED_COMPANY_ROLE_LABELS: Record<LinkedCompanyRole, string> = {
+  'client':              'Client',
+  'general-contractor':  'General Contractor',
+  'subcontractor':       'Subcontractor',
+  'other':               'Other',
+};
+
+export interface LinkedCompany {
+  companyId: string;
+  role: LinkedCompanyRole;
+  isPrimary: boolean;             // exactly one entry must be primary
+}
+
+export interface ConstructionJob {
+  id: string;
+  name: string;                   // Project name
+
+  // Companies — one or more, exactly one isPrimary. linkedCompanyIds mirrors
+  // the IDs only so we can use Firestore array-contains queries (which can't
+  // match objects) when surfacing jobs on a company profile.
+  linkedCompanies: LinkedCompany[];
+  linkedCompanyIds: string[];
+
+  // Team (real platform users with logins)
+  projectManagerId: string;       // Firebase UID — required
+  workerIds: string[];            // Firebase UIDs of assigned workers
+
+  // Lifecycle
+  status: ConstructionJobStatus;
+  startDate?: number;             // Unix ms
+  expectedEndDate?: number;
+  actualEndDate?: number;
+
+  // Optional details
+  address?: string;
+  budget?: number;                // USD
+  description?: string;
+
+  // Metadata
+  createdAt: number;
+  updatedAt: number;
+  createdBy: string;              // Firebase UID of creator
+}
+
+/** Per-job permission level, derived from membership at runtime — not stored. */
+export type ConstructionJobLevel = 'admin' | 'pm' | 'worker' | 'none';
 

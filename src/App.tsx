@@ -18,6 +18,9 @@ import GasAnalysisTool from './tools/GasAnalysisTool';
 import CrmTool from './tools/CrmTool';
 import CompanyDetailTool from './tools/CompanyDetailTool';
 import ContactDetailTool from './tools/ContactDetailTool';
+import ConstructionTrackerIndex from './tools/ConstructionTrackerIndex';
+import ConstructionTrackerNew from './tools/ConstructionTrackerNew';
+import ConstructionTrackerDetail from './tools/ConstructionTrackerDetail';
 
 function LegacyAnalyzerRedirect() {
   const { search } = useLocation();
@@ -110,6 +113,21 @@ export default function App() {
           <Route path="/crm/people/:id" element={
             <ProtectedRoute toolId="crm">
               <ContactDetailTool />
+            </ProtectedRoute>
+          } />
+          <Route path="/construction-tracker" element={
+            <ProtectedRoute toolId="construction-tracker">
+              <ConstructionTrackerIndex />
+            </ProtectedRoute>
+          } />
+          <Route path="/construction-tracker/new" element={
+            <ProtectedRoute toolId="construction-tracker">
+              <ConstructionTrackerNew />
+            </ProtectedRoute>
+          } />
+          <Route path="/construction-tracker/:jobId" element={
+            <ProtectedRoute toolId="construction-tracker">
+              <ConstructionTrackerDetail />
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" />} />
