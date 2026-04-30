@@ -19,6 +19,9 @@ import { usePdfExport } from '../hooks/usePdfExport';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
 import { useUserHistory } from '../hooks/useUserHistory';
 import { useCompanies } from '../hooks/useCompanies';
+import { useAuth } from '../hooks/useAuth';
+import { useUserQuota } from '../hooks/useUserQuota';
+import { incrementGeneration } from '../lib/userQuotas';
 import {
   saveAnalysisResults,
   saveLandCompsToSite,
@@ -71,8 +74,11 @@ export default function SiteAnalyzerDetail() {
   const { sites, loading: registryLoading } = useSiteRegistry();
   const { companies } = useCompanies();
   const { logActivity } = useUserHistory();
+  const { user } = useAuth();
+  const { quota } = useUserQuota();
   const report = useSiteAnalysis();
   const pdfExport = usePdfExport();
+  const [quotaError, setQuotaError] = useState<string | null>(null);
 
   const site = useMemo(() => sites.find((s) => s.id === siteId), [sites, siteId]);
   const companyName = site?.companyId
@@ -123,6 +129,10 @@ export default function SiteAnalyzerDetail() {
 
   // Auto-trigger initial generation when arriving via /new (?run=1).
   const runTriggeredRef = useRef(false);
+  // Set true when the in-flight generation should consume one of the user's
+  // monthly quota slots (only for never-before-analyzed sites). Cleared after
+  // the increment succeeds, or on failure so a retry isn't free.
+  const shouldIncrementRef = useRef(false);
   useEffect(() => {
     if (!site) return;
     if (searchParams.get('run') !== '1') return;
@@ -132,6 +142,7 @@ export default function SiteAnalyzerDetail() {
     next.delete('run');
     setSearchParams(next, { replace: true });
     const inputs = buildAnalysisInputs(site, companies);
+    shouldIncrementRef.current = !site.piddrGeneratedAt;
     void report.generateReport(inputs);
   }, [site, companies, searchParams, setSearchParams, report]);
 
@@ -151,8 +162,17 @@ export default function SiteAnalyzerDetail() {
     if (report.gas.data) payload.gasResult = report.gas.data as unknown as Record<string, unknown>;
     if (report.labor.data) payload.laborResult = report.labor.data as unknown as Record<string, unknown>;
 
+    const wasFirstAnalysis = shouldIncrementRef.current;
+    shouldIncrementRef.current = false;
     void saveAnalysisResults(site.id, payload).then(
-      () => flashSaveIndicator(),
+      () => {
+        flashSaveIndicator();
+        if (wasFirstAnalysis && user) {
+          void incrementGeneration(user.uid).catch((err) =>
+            console.error('[SiteAnalyzer] Failed to increment quota:', err),
+          );
+        }
+      },
       (err) => console.error('[SiteAnalyzer] Failed to save results:', err),
     );
 
@@ -258,7 +278,16 @@ export default function SiteAnalyzerDetail() {
 
   function handleReanalyze() {
     if (!site) return;
+    const isFirstAnalysis = !site.piddrGeneratedAt;
+    if (isFirstAnalysis && quota && !quota.isAdmin && quota.remaining <= 0) {
+      setQuotaError(
+        `You've reached your monthly limit of ${quota.limit} site analyses. Contact an admin to increase your limit.`,
+      );
+      return;
+    }
+    setQuotaError(null);
     const inputs = buildAnalysisInputs(site, companies);
+    shouldIncrementRef.current = isFirstAnalysis;
     writebackDoneRef.current = null;
     void report.generateReport(inputs);
   }
@@ -395,6 +424,12 @@ export default function SiteAnalyzerDetail() {
         {pdfExport.error && (
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">
             {pdfExport.error}
+          </div>
+        )}
+
+        {quotaError && (
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">
+            {quotaError}
           </div>
         )}
 

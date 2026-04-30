@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import CompanyPicker from '../components/crm-directory/CompanyPicker';
 import { useAuth } from '../hooks/useAuth';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
+import { useUserQuota } from '../hooks/useUserQuota';
 import { createSiteEntry, findSiteByCoordinates } from '../lib/siteRegistry';
 import { parseCoordinates } from '../utils/parseCoordinates';
 
@@ -25,6 +26,7 @@ export default function SiteAnalyzerNew() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { sites: registrySites } = useSiteRegistry();
+  const { quota } = useUserQuota();
 
   const initialCompanyId = searchParams.get('companyId');
   const latParam = searchParams.get('lat');
@@ -65,6 +67,13 @@ export default function SiteAnalyzerNew() {
 
     if (!user) {
       setError('You must be signed in.');
+      return;
+    }
+
+    if (runAnalysis && quota && !quota.isAdmin && quota.remaining <= 0) {
+      setError(
+        `You've reached your monthly limit of ${quota.limit} site analyses. Contact an admin to increase your limit.`,
+      );
       return;
     }
 
@@ -115,18 +124,7 @@ export default function SiteAnalyzerNew() {
   return (
     <Layout>
       <main className="py-2">
-        <div className="mb-5">
-          <button
-            onClick={() => navigate('/site-analyzer')}
-            className="text-sm text-[#7A756E] hover:text-[#201F1E] inline-flex items-center gap-1.5 mb-2"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            All sites
-          </button>
-          <h1 className="font-heading text-2xl font-semibold text-[#201F1E]">New Site</h1>
-        </div>
+        <h1 className="mb-5 font-heading text-2xl font-semibold text-[#201F1E]">New Site</h1>
 
         <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6 mb-6 max-w-lg">
           <div className="space-y-5">
@@ -167,6 +165,17 @@ export default function SiteAnalyzerNew() {
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
+        )}
+
+        {quota && !quota.isAdmin && (
+          <p
+            className={`mb-3 text-xs ${
+              quota.remaining === 0 ? 'text-[#ED202B] font-medium' : 'text-[#7A756E]'
+            }`}
+          >
+            {quota.used} of {quota.limit} site analyses used this month
+            {quota.remaining === 0 && ' — limit reached'}
+          </p>
         )}
 
         <div className="flex flex-col sm:flex-row gap-3">
