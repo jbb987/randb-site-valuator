@@ -169,6 +169,7 @@ src/
     useCountyQueueLoad.ts     # One-shot fetch of county_queue_load doc by (state, county), session-cached
     useConstructionJobs.ts    # Construction Tracker: list, single-job, by-company hooks
     useJobPermissions.ts      # Per-job permission level (admin/pm/worker/none) derived from membership
+    useJobTasks.ts            # Construction Tracker: tasks sub-collection list + CRUD
     useAnimatedNumber.ts      # Number animation utility
   lib/
     firebase.ts               # Firebase config + legacy site CRUD
@@ -183,6 +184,7 @@ src/
     userQuotas.ts             # Monthly Site Analyzer generation quotas (5/month default, per-user override, atomic Firestore increment)
     queueLoad.ts              # Read substation_queue_load doc by HIFLD ID (one-shot getDoc; refreshed weekly by scripts/queue-ingestion)
     constructionJobs.ts       # Construction Tracker Firestore CRUD (collection: construction-jobs). Maintains linkedCompanyIds mirror for array-contains queries.
+    constructionTasks.ts      # Construction Tracker Firestore CRUD for tasks sub-collection (construction-jobs/{jobId}/tasks)
     broadbandLookup.ts        # FCC Census Block + ArcGIS BDC API
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions

@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import JobStatusBadge from '../components/construction/JobStatusBadge';
 import JobOverviewSection from '../components/construction/JobOverviewSection';
 import JobTeamSection from '../components/construction/JobTeamSection';
+import JobTasksSection from '../components/construction/JobTasksSection';
 import JobForm, { formToPartialJob, jobToForm, type JobFormValues } from '../components/construction/JobForm';
 import { useCompanies } from '../hooks/useCompanies';
 import { useUsers } from '../hooks/useUsers';
@@ -176,9 +177,10 @@ export default function ConstructionTrackerDetail() {
           <>
             <JobOverviewSection job={job} />
             <JobTeamSection job={job} />
+            <JobTasksSection job={job} perms={perms} />
             <section className="bg-white rounded-xl border border-dashed border-[#D8D5D0] p-4 sm:p-5 text-center">
               <p className="text-sm text-[#7A756E]">
-                Tasks, photos, documents, and timeline are coming in upcoming releases.
+                Photos, documents, and timeline are coming in upcoming releases.
               </p>
             </section>
           </>

@@ -688,3 +688,32 @@ export interface ConstructionJob {
 /** Per-job permission level, derived from membership at runtime — not stored. */
 export type ConstructionJobLevel = 'admin' | 'pm' | 'worker' | 'none';
 
+// ── Construction Tracker · Tasks ────────────────────────────────────────
+
+export type JobTaskStatus = 'todo' | 'in-progress' | 'done';
+
+export const ALL_JOB_TASK_STATUSES: JobTaskStatus[] = ['todo', 'in-progress', 'done'];
+
+export const JOB_TASK_STATUS_LABELS: Record<JobTaskStatus, string> = {
+  'todo':         'To do',
+  'in-progress':  'In progress',
+  'done':         'Done',
+};
+
+/** Sub-collection: construction-jobs/{jobId}/tasks/{taskId} */
+export interface JobTask {
+  id: string;
+  jobId: string;             // denormalized for queries / rules
+  title: string;
+  status: JobTaskStatus;
+
+  assigneeId?: string;       // Firebase UID of user this is assigned to
+  dueDate?: number;          // Unix ms
+  completedAt?: number;      // Unix ms — stamped when status flips to 'done'
+  notes?: string;
+
+  createdAt: number;
+  updatedAt: number;
+  createdBy: string;         // Firebase UID
+}
+
