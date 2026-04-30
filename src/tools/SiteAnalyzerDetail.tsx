@@ -12,6 +12,7 @@ import BroadbandSection from '../components/site-analyzer/BroadbandSection';
 import TransportSection from '../components/site-analyzer/TransportSection';
 import WaterSection from '../components/site-analyzer/WaterSection';
 import GasSection from '../components/site-analyzer/GasSection';
+import LaborSection from '../components/site-analyzer/LaborSection';
 import InfrastructureResults from '../components/power-calculator/InfrastructureResults';
 import { useSiteAnalysis, type AnalysisInputs } from '../hooks/useSiteAnalysis';
 import { usePdfExport } from '../hooks/usePdfExport';
@@ -19,16 +20,11 @@ import { useSiteRegistry } from '../hooks/useSiteRegistry';
 import { useUserHistory } from '../hooks/useUserHistory';
 import { useCompanies } from '../hooks/useCompanies';
 import {
-  saveAppraisalToSite,
-  saveInfraToSite,
-  saveBroadbandToSite,
-  saveTransportToSite,
-  saveWaterToSite,
-  saveGasToSite,
+  saveAnalysisResults,
   saveLandCompsToSite,
-  saveAnalysisTimestamp,
   updateSiteEntry,
   deleteSiteEntry,
+  type AnalysisResultsPayload,
 } from '../lib/siteRegistry';
 import { parseCoordinates } from '../utils/parseCoordinates';
 import type { Company, FilteredCompResult, LandComp, SiteRegistryEntry } from '../types';
@@ -44,13 +40,14 @@ const SECTIONS = [
   { id: 'section-transport', label: 'Transport' },
   { id: 'section-water', label: 'Water' },
   { id: 'section-gas', label: 'Gas' },
+  { id: 'section-labor', label: 'Labor' },
 ];
 
 function buildAnalysisInputs(site: SiteRegistryEntry, companies: Company[]): AnalysisInputs {
   return {
     siteName: site.name || 'Untitled Site',
     address: site.address || '',
-    coordinates: `${site.coordinates.lat}, ${site.coordinates.lng}`,
+    coordinates: site.coordinates ? `${site.coordinates.lat}, ${site.coordinates.lng}` : '',
     acreage: site.acreage || 0,
     mw: site.mwCapacity || 50,
     ppaLow: site.dollarPerAcreLow || 0,
@@ -86,7 +83,6 @@ export default function SiteAnalyzerDetail() {
   const [saving, setSaving] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [landComps, setLandComps] = useState<LandComp[]>([]);
-  const [activeCompCount, setActiveCompCount] = useState(0);
   const [mwOverride, setMwOverride] = useState<number | null>(null);
   const [saveVisible, setSaveVisible] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,10 +95,19 @@ export default function SiteAnalyzerDetail() {
 
   // Load saved analysis (or wait for ?run=1 trigger) when site becomes available.
   const loadedSiteIdRef = useRef<string | null>(null);
+  // Tracks the last serialized landComps snapshot we persisted to Firestore so
+  // the autosave effect can skip no-op writes triggered by registry snapshots.
+  const lastSavedLandCompsRef = useRef<string>('[]');
+  // Mirror guard for the filtered-comps median writeback.
+  const lastSavedMedianRef = useRef<number | null>(null);
+  const compsMedianTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!site || loadedSiteIdRef.current === site.id) return;
     loadedSiteIdRef.current = site.id;
-    setLandComps(site.landComps ?? []);
+    const initialComps = site.landComps ?? [];
+    setLandComps(initialComps);
+    lastSavedLandCompsRef.current = JSON.stringify(initialComps);
+    lastSavedMedianRef.current = site.dollarPerAcreLow ?? null;
     if (site.piddrGeneratedAt) {
       const inputs = buildAnalysisInputs(site, companies);
       report.loadReport(inputs, {
@@ -111,6 +116,7 @@ export default function SiteAnalyzerDetail() {
         transport: site.transportResult,
         water: site.waterResult,
         gas: site.gasResult,
+        labor: site.laborResult,
       });
     }
   }, [site, companies, report]);
@@ -136,20 +142,16 @@ export default function SiteAnalyzerDetail() {
     if (writebackDoneRef.current === report.generatedAt) return;
     writebackDoneRef.current = report.generatedAt;
 
-    const promises: Promise<void>[] = [];
-    if (report.appraisal.data) promises.push(saveAppraisalToSite(site.id, report.appraisal.data));
-    if (report.infra.data)
-      promises.push(saveInfraToSite(site.id, report.infra.data as unknown as Record<string, unknown>));
-    if (report.broadband.data) promises.push(saveBroadbandToSite(site.id, report.broadband.data));
-    if (report.transport.data)
-      promises.push(saveTransportToSite(site.id, report.transport.data as unknown as Record<string, unknown>));
-    if (report.water.data)
-      promises.push(saveWaterToSite(site.id, report.water.data as unknown as Record<string, unknown>));
-    if (report.gas.data)
-      promises.push(saveGasToSite(site.id, report.gas.data as unknown as Record<string, unknown>));
-    promises.push(saveAnalysisTimestamp(site.id));
+    const payload: AnalysisResultsPayload = {};
+    if (report.appraisal.data) payload.appraisalResult = report.appraisal.data;
+    if (report.infra.data) payload.infraResult = report.infra.data as unknown as Record<string, unknown>;
+    if (report.broadband.data) payload.broadbandResult = report.broadband.data;
+    if (report.transport.data) payload.transportResult = report.transport.data as unknown as Record<string, unknown>;
+    if (report.water.data) payload.waterResult = report.water.data as unknown as Record<string, unknown>;
+    if (report.gas.data) payload.gasResult = report.gas.data as unknown as Record<string, unknown>;
+    if (report.labor.data) payload.laborResult = report.labor.data as unknown as Record<string, unknown>;
 
-    void Promise.all(promises).then(
+    void saveAnalysisResults(site.id, payload).then(
       () => flashSaveIndicator(),
       (err) => console.error('[SiteAnalyzer] Failed to save results:', err),
     );
@@ -162,7 +164,7 @@ export default function SiteAnalyzerDetail() {
       site.id,
       {
         siteName: site.name,
-        coordinates: `${site.coordinates.lat}, ${site.coordinates.lng}`,
+        coordinates: site.coordinates ? `${site.coordinates.lat}, ${site.coordinates.lng}` : '',
         acreage: site.acreage,
         mw: site.mwCapacity,
       },
@@ -178,20 +180,30 @@ export default function SiteAnalyzerDetail() {
     report.transport.data,
     report.water.data,
     report.gas.data,
+    report.labor.data,
     flashSaveIndicator,
     logActivity,
   ]);
 
-  // Debounced save of land comps.
+  // Debounced save of land comps. The serialized compare guards against an
+  // infinite write loop: every save echoes back via onSnapshot, replacing the
+  // `site` reference and re-firing this effect — without the guard each loop
+  // iteration would schedule another identical write.
   useEffect(() => {
-    if (!site || landComps.length === 0) return;
+    if (!site) return;
+    const serialized = JSON.stringify(landComps);
+    if (serialized === lastSavedLandCompsRef.current) return;
+    const siteId = site.id;
     const timer = setTimeout(() => {
-      saveLandCompsToSite(site.id, landComps)
-        .then(() => flashSaveIndicator())
+      saveLandCompsToSite(siteId, landComps)
+        .then(() => {
+          lastSavedLandCompsRef.current = serialized;
+          flashSaveIndicator();
+        })
         .catch((err) => console.error('[SiteAnalyzer] Failed to save land comps:', err));
     }, 1000);
     return () => clearTimeout(timer);
-  }, [site, landComps, flashSaveIndicator]);
+  }, [site?.id, landComps, flashSaveIndicator]);
 
   // Track which section is in view for the sticky TOC.
   useEffect(() => {
@@ -216,18 +228,32 @@ export default function SiteAnalyzerDetail() {
     };
   }, [report.hasReport]);
 
+  // Debounced + dedup'd median writeback. Comp-table edits and CSV pastes
+  // produce a flurry of intermediate medians; without the guards each one
+  // wrote a new dollarPerAcre pair, and the snapshot echo on each write
+  // re-rendered the table — burning Firestore writes for transient values.
   const handleFilteredCompsChange = useCallback(
     (result: FilteredCompResult) => {
+      const siteId = site?.id;
+      if (!siteId) return;
       const median = Math.round(result.medianPricePerAcre);
-      setActiveCompCount(result.activeCount);
-      if (site && median > 0) {
-        void updateSiteEntry(site.id, {
+      if (median <= 0) return;
+      if (lastSavedMedianRef.current === median) return;
+      if (compsMedianTimerRef.current) clearTimeout(compsMedianTimerRef.current);
+      compsMedianTimerRef.current = setTimeout(() => {
+        void updateSiteEntry(siteId, {
           dollarPerAcreLow: median,
           dollarPerAcreHigh: median,
-        }).then(() => flashSaveIndicator());
-      }
+        }).then(
+          () => {
+            lastSavedMedianRef.current = median;
+            flashSaveIndicator();
+          },
+          (err) => console.error('[SiteAnalyzer] Failed to save median:', err),
+        );
+      }, 1000);
     },
-    [site, flashSaveIndicator],
+    [site?.id, flashSaveIndicator],
   );
 
   function handleReanalyze() {
@@ -239,8 +265,7 @@ export default function SiteAnalyzerDetail() {
 
   async function handleSave(values: EditFormValues) {
     if (!site) return;
-    const coords = parseCoordinates(values.coordinates);
-    if (!coords) return;
+    const coords = values.coordinates.trim() ? parseCoordinates(values.coordinates) : null;
     setSaving(true);
     try {
       await updateSiteEntry(site.id, {
@@ -288,6 +313,7 @@ export default function SiteAnalyzerDetail() {
       transport: report.transport.data,
       water: report.water.data,
       gas: report.gas.data,
+      labor: report.labor.data,
       siteMapImage: null,
       generatedAt: report.generatedAt,
     });
@@ -315,7 +341,9 @@ export default function SiteAnalyzerDetail() {
                 ? getSectionState(report.transport)
                 : s.id === 'section-water'
                   ? getSectionState(report.water)
-                  : getSectionState(report.gas),
+                  : s.id === 'section-gas'
+                    ? getSectionState(report.gas)
+                    : getSectionState(report.labor),
   }));
 
   if (registryLoading) {
@@ -387,18 +415,26 @@ export default function SiteAnalyzerDetail() {
 
         {!editing && !report.hasReport && !report.isGenerating && (
           <div className="bg-white rounded-2xl border border-[#D8D5D0] p-8 text-center">
-            <p className="text-sm text-[#7A756E] mb-4">
-              No analysis has been run for this site yet.
-            </p>
-            <button
-              onClick={handleReanalyze}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#ED202B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#9B0E18] transition"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Run Analysis
-            </button>
+            {site.coordinates ? (
+              <>
+                <p className="text-sm text-[#7A756E] mb-4">
+                  No analysis has been run for this site yet.
+                </p>
+                <button
+                  onClick={handleReanalyze}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#ED202B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#9B0E18] transition"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Run Analysis
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-[#7A756E]">
+                Add coordinates to this site to run the analysis.
+              </p>
+            )}
           </div>
         )}
 
@@ -406,16 +442,7 @@ export default function SiteAnalyzerDetail() {
           <div className="space-y-5 mt-5">
             <div id="section-overview">
               <SiteOverviewSection
-                address={report.inputs.address}
                 coordinates={report.inputs.coordinates}
-                acreage={report.inputs.acreage}
-                mw={report.inputs.mw}
-                priorUsage={report.inputs.priorUsage}
-                legalDescription={report.inputs.legalDescription}
-                county={report.inputs.county}
-                parcelId={report.inputs.parcelId}
-                companyId={report.inputs.companyId}
-                companyName={report.inputs.companyName}
               />
             </div>
 
@@ -430,11 +457,10 @@ export default function SiteAnalyzerDetail() {
                 landComps={landComps}
                 onLandCompsChange={setLandComps}
                 onFilteredCompsChange={handleFilteredCompsChange}
-                activeCompCount={activeCompCount}
               />
             </div>
 
-            <div id="section-power" className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
+            <div id="section-power">
               <div className="flex items-center gap-2.5 mb-5">
                 <div className="h-8 w-8 rounded-lg bg-[#ED202B]/10 flex items-center justify-center">
                   <svg className="h-4 w-4 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -446,27 +472,41 @@ export default function SiteAnalyzerDetail() {
                 </h2>
               </div>
               {report.infra.loading && (
-                <div className="flex items-center justify-center py-12">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#D8D5D0] border-t-[#ED202B]" />
-                    <span className="text-sm text-[#7A756E]">Analyzing power infrastructure…</span>
+                <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
+                  <div className="flex items-center justify-center py-12">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#D8D5D0] border-t-[#ED202B]" />
+                      <span className="text-sm text-[#7A756E]">Analyzing power infrastructure…</span>
+                    </div>
                   </div>
                 </div>
               )}
               {report.infra.error && (
-                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                  {report.infra.error}
+                <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                    {report.infra.error}
+                  </div>
                 </div>
               )}
               {report.infra.data && (
-                <InfrastructureResults data={report.infra.data} loading={false} hasRunAnalysis={true} />
+                <InfrastructureResults data={report.infra.data} loading={false} hasRunAnalysis={true} collapsible={false} cardWrap context="site-analyzer" />
               )}
             </div>
 
             <div id="section-broadband"><BroadbandSection section={report.broadband} /></div>
             <div id="section-transport"><TransportSection section={report.transport} /></div>
             <div id="section-water"><WaterSection section={report.water} /></div>
-            <div id="section-gas"><GasSection section={report.gas} /></div>
+            <div id="section-gas">
+              <GasSection
+                section={report.gas}
+                pipelineSuppliers={site.pipelineMarketers}
+                onSupplierChange={(operator, supplier) => {
+                  const updated = { ...site.pipelineMarketers, [operator]: supplier };
+                  void updateSiteEntry(site.id, { pipelineMarketers: updated });
+                }}
+              />
+            </div>
+            <div id="section-labor"><LaborSection section={report.labor} /></div>
           </div>
         )}
 

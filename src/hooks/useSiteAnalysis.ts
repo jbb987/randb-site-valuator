@@ -6,8 +6,10 @@ import type { InfrastructureData } from '../components/power-calculator/Infrastr
 import { analyzeWater } from '../lib/waterAnalysis';
 import { analyzeGasInfrastructure } from '../lib/gasAnalysis';
 import { lookupTransport } from '../lib/transportLookup';
+import { analyzeLabor } from '../lib/laborAnalysis';
 import type { WaterAnalysisResult } from '../lib/waterAnalysis.types';
 import type { GasAnalysisResult } from '../lib/gasAnalysis';
+import type { LaborAnalysisResult } from '../lib/laborAnalysis';
 import type { TransportResult } from '../types/infrastructure';
 import { parseCoordinates } from '../utils/parseCoordinates';
 
@@ -43,6 +45,7 @@ export interface ExistingResults {
   transport?: Record<string, unknown> | null;
   water?: Record<string, unknown> | null;
   gas?: Record<string, unknown> | null;
+  labor?: Record<string, unknown> | null;
 }
 
 const VALUE_PER_MW = 3_000_000;
@@ -68,7 +71,9 @@ function isInfraResultMeaningful(infra: Record<string, unknown> | null | undefin
     ((typeof data.solarWind.ghi === 'number' && data.solarWind.ghi > 0) ||
       (typeof data.solarWind.windSpeed === 'number' && data.solarWind.windSpeed > 0));
 
-  return hasIso || hasUtility || hasTsp || hasSubs || hasLines || hasPlants || hasSolar;
+  const hasStateGen = !!data.stateGenerationByFuel && Object.keys(data.stateGenerationByFuel).length > 0;
+
+  return (hasIso || hasUtility || hasTsp || hasSubs || hasLines || hasPlants || hasSolar) && hasStateGen;
 }
 
 function computeAppraisal(inputs: AnalysisInputs): AppraisalResult {
@@ -106,6 +111,9 @@ export function useSiteAnalysis() {
     loading: false, error: null, data: null,
   });
   const [gas, setGas] = useState<AnalysisSectionState<GasAnalysisResult>>({
+    loading: false, error: null, data: null,
+  });
+  const [labor, setLabor] = useState<AnalysisSectionState<LaborAnalysisResult>>({
     loading: false, error: null, data: null,
   });
   const [generatedAt, setGeneratedAt] = useState<number | null>(null);
@@ -158,6 +166,7 @@ export function useSiteAnalysis() {
                 floodZone: res.floodZone,
                 solarWind: res.solarWind ?? null,
                 electricityPrice: res.electricityPrice ?? null,
+                stateGenerationByFuel: res.stateGenerationByFuel ?? null,
                 detectedState: res.detectedState ?? null,
                 lastAnalyzedAt: Date.now(),
               };
@@ -282,8 +291,30 @@ export function useSiteAnalysis() {
           }
         })();
 
+    // Section 7: Labor — skip if existing results provided
+    const hasExistingLabor = existing?.labor && Object.keys(existing.labor).length > 0;
+    if (hasExistingLabor) {
+      setLabor({ loading: false, error: null, data: existing!.labor as unknown as LaborAnalysisResult });
+    } else {
+      setLabor({ loading: true, error: null, data: null });
+    }
+
+    const laborPromise = hasExistingLabor
+      ? Promise.resolve()
+      : (async () => {
+          try {
+            const res = await analyzeLabor({
+              coordinates: coords ?? undefined,
+              address: reportInputs.address || undefined,
+            });
+            setLabor({ loading: false, error: null, data: res });
+          } catch (err) {
+            setLabor({ loading: false, error: err instanceof Error ? err.message : 'Labor analysis failed', data: null });
+          }
+        })();
+
     // Run all sections in parallel
-    await Promise.allSettled([infraPromise, broadbandPromise, transportPromise, waterPromise, gasPromise]);
+    await Promise.allSettled([infraPromise, broadbandPromise, transportPromise, waterPromise, gasPromise, laborPromise]);
   }, [infraLookup, broadbandLookup]);
 
   /**
@@ -306,6 +337,7 @@ export function useSiteAnalysis() {
     setTransport({ loading: false, error: null, data: (existing.transport ?? null) as unknown as TransportResult | null });
     setWater({ loading: false, error: null, data: (existing.water ?? null) as unknown as WaterAnalysisResult | null });
     setGas({ loading: false, error: null, data: (existing.gas ?? null) as unknown as GasAnalysisResult | null });
+    setLabor({ loading: false, error: null, data: (existing.labor ?? null) as unknown as LaborAnalysisResult | null });
   }, []);
 
   const reset = useCallback(() => {
@@ -316,10 +348,11 @@ export function useSiteAnalysis() {
     setTransport({ loading: false, error: null, data: null });
     setWater({ loading: false, error: null, data: null });
     setGas({ loading: false, error: null, data: null });
+    setLabor({ loading: false, error: null, data: null });
     setGeneratedAt(null);
   }, []);
 
-  const isGenerating = appraisal.loading || infra.loading || broadband.loading || transport.loading || water.loading || gas.loading;
+  const isGenerating = appraisal.loading || infra.loading || broadband.loading || transport.loading || water.loading || gas.loading || labor.loading;
   const hasReport = generatedAt !== null;
 
   return {
@@ -330,6 +363,7 @@ export function useSiteAnalysis() {
     transport,
     water,
     gas,
+    labor,
     generatedAt,
     isGenerating,
     hasReport,

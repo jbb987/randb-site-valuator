@@ -15,9 +15,8 @@ Internal tool suite for R&B Power. The **CRM** is the central database (companie
 - **Grid Power Analyzer** — Interactive MapLibre GL map showing power generators, transmission lines, substations, and available capacity with heat map overlay. Coordinate search with gold diamond pin.
 - **Water Analysis** — Flood zones, stream networks, wetlands, groundwater, drought, NPDES permits, precipitation analysis from coordinates.
 - **Gas Infrastructure Analysis** — Nearby gas pipelines, demand calculation, lateral cost estimate, LDC assessment, supply reliability, gas pricing, environmental compliance.
+- **Labor Pool (Site Analyzer section only)** — County-anchored workforce data: population, labor force, unemployment, education, commute, industry mix, occupational wages, with state/national benchmarks. Live: Census Geocoder + Census ACS 5yr. Stubbed (mock until BLS key wired): BLS QCEW (industries), BLS OEWS (wages), BLS LAUS (unemployment).
 - **Broadband Lookup** — Broadband due diligence report from site coordinates. Queries FCC Census Block API and ArcGIS FCC BDC.
-- **Site Pipeline** — Kanban pipeline for tracking site requests through stages (new → ongoing → done).
-- **Submit Site Request** — Form to submit new site requests with customer and address details.
 - **Leads (Sales CRM)** — Lead management for the sales team. Tracks leads through call/email outreach sequence (New → Call 1 → Email → Call 2 → Final Call → Won/Lost).
 - **Sales Dashboard** — Admin-only aggregated view of sales performance. Leaderboard, pipeline breakdown, conversion rates.
 - **User Management** — Admin-only tool to view, manage roles, and remove platform users.
@@ -65,6 +64,7 @@ src/
       WaterSection.tsx        # Water analysis results wrapper
       GasSection.tsx          # Gas analysis results wrapper
       TransportSection.tsx    # Transport infrastructure results (airports, interstates, ports, railroads)
+      LaborSection.tsx        # Labor pool results wrapper
       SiteAnalysisPdfDocument.tsx # Full PDF document structure (react-pdf)
     broadband/                # Broadband Lookup components
       BroadbandReport.tsx     # Due diligence report display
@@ -72,6 +72,8 @@ src/
       WaterReport.tsx         # Water analysis report display
     gas/                      # Gas Analysis components
       GasReport.tsx           # Gas analysis report display
+    labor/                    # Labor Pool components
+      LaborReport.tsx         # Labor pool report display (used by Site Analyzer Labor section)
     power-map/                # Grid Power Analyzer components
       PowerMapView.tsx        # Main map container (MapLibre GL)
       MapLegend.tsx           # Layer toggles and source legend
@@ -103,9 +105,6 @@ src/
       DocumentsSection.tsx    # Company documents panel (upload/view/download/delete, category chips)
     admin/                    # Admin-only components
       InfraRefreshPanel.tsx   # Infrastructure data cache refresh panel
-    site-request/             # Site Request components
-      PipelineColumn.tsx      # Kanban column
-      RequestCard.tsx         # Request card in pipeline
     EnergyBridge.tsx          # Energy bridge visualization
     Header.tsx                # Section header
     OutcomeBar.tsx            # Outcome bar chart
@@ -118,7 +117,6 @@ src/
   pages/
     Dashboard.tsx             # Tool grid (root page "/") — grouped by section
     LoginPage.tsx             # Firebase auth login
-    SiteRequestForm.tsx       # Site request submission form
     UserManagement.tsx        # User management (admin-only)
   tools/
     SiteAnalyzerIndex.tsx     # Site Analyzer index — list of all analyzed sites with search ("/site-analyzer")
@@ -130,7 +128,6 @@ src/
     WaterAnalysisTool.tsx     # Water Analysis ("/water-analysis")
     GasAnalysisTool.tsx       # Gas Infrastructure Analysis ("/gas-analysis")
     BroadbandLookupTool.tsx   # Broadband Lookup ("/broadband-lookup")
-    SiteRequestPipeline.tsx   # Site Pipeline ("/site-pipeline")
     SalesCrmTool.tsx          # Sales CRM / Leads ("/sales-crm")
     SalesAdminDashboard.tsx   # Admin sales dashboard ("/sales-admin")
     CrmTool.tsx               # CRM directory ("/crm") — Companies & People list
@@ -143,7 +140,6 @@ src/
     usePdfExport.ts           # PDF generation via react-pdf
     useSites.ts               # Site CRUD operations (legacy appraiser internals)
     useSiteRegistry.ts        # Site registry real-time subscription
-    useSiteRequests.ts        # Site request CRUD operations
     useUsers.ts               # User management CRUD (admin)
     useLeads.ts               # Lead CRUD operations (Sales CRM)
     useCompanies.ts           # CRM company CRUD + single-company subscription
@@ -152,6 +148,7 @@ src/
     useBroadbandLookup.ts     # Broadband data lookup
     useWaterAnalysis.ts       # Water analysis hook
     useGasAnalysis.ts         # Gas analysis hook
+    useLaborAnalysis.ts       # Labor pool analysis hook
     usePowerMap.ts            # Power map data fetching and state
     useInfraData.ts           # Cached infrastructure data (plants, substations, EIA, solar)
     useInfraLookup.ts         # Infrastructure lookup for Power Calculator
@@ -162,8 +159,6 @@ src/
     firebaseErrors.ts         # Firebase error handling
     firebaseInfra.ts          # Firestore CRUD for cached infrastructure data
     siteRegistry.ts           # Site registry CRUD, writeback, dedup, migration
-    projects.ts               # Project Firestore save (used by SiteRequestForm only; folder UI is gone)
-    siteRequests.ts           # Site request Firestore operations
     leads.ts                  # Lead Firestore operations
     crmCompanies.ts           # CRM company Firestore operations (collection: crm-companies)
     crmContacts.ts            # CRM contact Firestore operations (collection: crm-contacts)
@@ -173,6 +168,7 @@ src/
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions
     gasAnalysis.ts            # Gas analysis (pipelines, demand, lateral, LDC, pricing)
+    laborAnalysis.ts          # Labor pool analysis (Census Geocoder + ACS live; BLS QCEW/OEWS/LAUS stubbed pending key)
     transportLookup.ts        # Transport infrastructure (airports, interstates, ports, railroads via geo.dot.gov)
     infraLookup.ts            # Infrastructure lookup (substations, lines, plants, geocode)
     infraIngestion.ts         # Admin data ingestion pipeline (ArcGIS → Firestore)
@@ -218,12 +214,9 @@ public/
 | `/water-analysis` | `WaterAnalysisTool` | toolId: `water-analysis` | Water due diligence |
 | `/gas-analysis` | `GasAnalysisTool` | toolId: `gas-analysis` | Gas infrastructure analysis |
 | `/broadband-lookup` | `BroadbandLookupTool` | toolId: `broadband-lookup` | Broadband due diligence |
-| `/site-pipeline` | `SiteRequestPipeline` | toolId: `site-pipeline` | Request pipeline (kanban) |
-| `/site-request/form` | `SiteRequestForm` | toolId: `site-request-form` | Submit new site request |
 | `/sales-crm` | `SalesCrmTool` | toolId: `sales-crm` | Sales lead management |
 | `/sales-admin` | `SalesAdminDashboard` | toolId: `sales-admin` | Admin sales dashboard |
 | `/user-management` | `UserManagement` | role: `admin` | Manage users and roles |
-| `/site-request` | Redirect → `/site-pipeline` | — | Legacy redirect |
 
 ## Design System
 
@@ -273,7 +266,7 @@ public/
 
 ### Site Analysis Generation
 
-- `useSiteAnalysis` hook manages 6 parallel sections: Appraisal (instant), Infrastructure, Broadband, Transport, Water, Gas
+- `useSiteAnalysis` hook manages 7 parallel sections: Appraisal (instant), Infrastructure, Broadband, Transport, Water, Gas, Labor
 - Each section has `AnalysisSectionState<T>` with `loading`, `error`, `data`
 - `ExistingResults` allows skipping re-fetch for cached data from the registry
 - Results are auto-saved to the site registry on completion
@@ -284,14 +277,14 @@ public/
 - Sites stored in Firestore `sites-registry` collection as `SiteRegistryEntry`
 - Each entry has an optional `projectId` field — **legacy** from the old folder system; preserved on documents but no UI reads it. Existing folders in the `projects` Firestore collection are also preserved as data; only the UI was removed.
 - Sites are grouped by **company** instead (via `companyId`). The Company detail page lists all sites for a company; the Site Analyzer index lists all sites with a search.
-- Write-back helpers: `saveAppraisalToSite`, `saveInfraToSite`, `saveBroadbandToSite`, `saveTransportToSite`, `saveWaterToSite`, `saveGasToSite`, `saveAnalysisTimestamp`
+- Write-back helpers: `saveAppraisalToSite`, `saveInfraToSite`, `saveBroadbandToSite`, `saveTransportToSite`, `saveWaterToSite`, `saveGasToSite`, `saveLaborToSite`, `saveAnalysisTimestamp`
 - Dedup and migration utilities exist in `siteRegistry.ts` but are not auto-run
 
 ### Dashboard Organization
 
 Tools are grouped into 4 sections on the Dashboard (section headers only show if user has access):
 1. **CRM** — CRM (cross-cutting hub for Companies + Contacts)
-2. **Power Infrastructure Due Diligence Report** — Site Analyzer, Site Pipeline, Submit Request, Power Calculator, Grid Power Analyzer, Water, Gas, Broadband, Site Appraiser
+2. **Power Infrastructure Due Diligence Report** — Site Analyzer, Power Calculator, Grid Power Analyzer, Water, Gas, Broadband, Site Appraiser
 3. **Sales** — Leads, Sales Dashboard
 4. **Settings** — User Management
 
@@ -313,7 +306,6 @@ All protected pages must be wrapped in `<Layout>` which provides:
 ### Data Hierarchy
 
 - **Companies** (CRM) own **Sites** (via `companyId` on `SiteRegistryEntry`)
-- **Site Requests** still write to a `Project` document (legacy, via `SiteRequestForm` → `saveProject`) for compatibility with the existing pipeline UI
 - Sites can also be unlinked (no `companyId`) — visible on the Site Analyzer index only
 
 ### Auth & Roles

@@ -195,6 +195,13 @@ export async function saveTransportToSite(
   await updateSiteEntry(siteId, { transportResult: result });
 }
 
+export async function saveLaborToSite(
+  siteId: string,
+  result: Record<string, unknown>,
+): Promise<void> {
+  await updateSiteEntry(siteId, { laborResult: result });
+}
+
 export async function saveLandCompsToSite(
   siteId: string,
   comps: LandComp[],
@@ -204,6 +211,30 @@ export async function saveLandCompsToSite(
 
 export async function saveAnalysisTimestamp(siteId: string): Promise<void> {
   await updateSiteEntry(siteId, { piddrGeneratedAt: Date.now() });
+}
+
+/** Bag of analysis section payloads written together in a single updateDoc. */
+export interface AnalysisResultsPayload {
+  appraisalResult?: AppraisalResult;
+  infraResult?: Record<string, unknown>;
+  broadbandResult?: BroadbandResult;
+  transportResult?: Record<string, unknown>;
+  waterResult?: Record<string, unknown>;
+  gasResult?: Record<string, unknown>;
+  laborResult?: Record<string, unknown>;
+}
+
+/**
+ * Persist all completed sections of a Site Analyzer run plus the run timestamp
+ * in a single Firestore write. Replaces the previous fan-out of 7 separate
+ * updateDoc calls (one per section + timestamp) which both burned writes and
+ * produced 7 redundant snapshots downstream.
+ */
+export async function saveAnalysisResults(
+  siteId: string,
+  results: AnalysisResultsPayload,
+): Promise<void> {
+  await updateSiteEntry(siteId, { ...results, piddrGeneratedAt: Date.now() });
 }
 
 // ── Migration: Site Appraiser sites → Registry ────────────────────────────
@@ -327,6 +358,7 @@ export async function deduplicateRegistry(): Promise<number> {
       if (s.broadbandResult) n++;
       if (s.waterResult) n++;
       if (s.gasResult) n++;
+      if (s.laborResult) n++;
       if (s.piddrGeneratedAt) n++;
       if (s.address) n++;
       if (s.name && s.name !== 'Untitled Site') n++;
@@ -348,6 +380,7 @@ export async function deduplicateRegistry(): Promise<number> {
       if (!keeper.broadbandResult && dup.broadbandResult) mergedFields.broadbandResult = dup.broadbandResult;
       if (!keeper.waterResult && dup.waterResult) mergedFields.waterResult = dup.waterResult;
       if (!keeper.gasResult && dup.gasResult) mergedFields.gasResult = dup.gasResult;
+      if (!keeper.laborResult && dup.laborResult) mergedFields.laborResult = dup.laborResult;
       if (!keeper.piddrGeneratedAt && dup.piddrGeneratedAt) mergedFields.piddrGeneratedAt = dup.piddrGeneratedAt;
       if (!keeper.priorUsage && dup.priorUsage) mergedFields.priorUsage = dup.priorUsage;
       if (!keeper.county && dup.county) mergedFields.county = dup.county;

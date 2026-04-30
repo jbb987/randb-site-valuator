@@ -2,8 +2,6 @@ export type UserRole = 'admin' | 'employee';
 
 export type ToolId =
   | 'site-appraiser'
-  | 'site-pipeline'
-  | 'site-request-form'
   | 'broadband-lookup'
   | 'grid-power-analyzer'
   | 'power-calculator'
@@ -16,8 +14,6 @@ export type ToolId =
 
 export const ALL_TOOL_IDS: ToolId[] = [
   'site-appraiser',
-  'site-pipeline',
-  'site-request-form',
   'broadband-lookup',
   'grid-power-analyzer',
   'power-calculator',
@@ -31,8 +27,6 @@ export const ALL_TOOL_IDS: ToolId[] = [
 
 export const TOOL_LABELS: Record<ToolId, string> = {
   'site-appraiser': 'Site Appraiser',
-  'site-pipeline': 'Site Pipeline',
-  'site-request-form': 'Submit Site Request',
   'broadband-lookup': 'Broadband Lookup',
   'grid-power-analyzer': 'Grid Power Analyzer',
   'power-calculator': 'Power Calculator',
@@ -49,14 +43,6 @@ export const TOOL_LABELS: Record<ToolId, string> = {
 export function normalizeToolId(id: string): ToolId | undefined {
   if (id === 'piddr') return 'site-analyzer';
   return ALL_TOOL_IDS.includes(id as ToolId) ? (id as ToolId) : undefined;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  memberIds: string[];
-  createdAt: number;
-  updatedAt: number;
 }
 
 // ── Power Infrastructure lookup types ───────────────────────────────────────
@@ -273,6 +259,9 @@ export interface BroadbandResult {
   // Nearby service blocks (populated when fiber/cable unavailable and adjacent blocks have them)
   nearbyServiceBlocks?: NearbyServiceBlock[];
 
+  // Distance to nearest fiber in county (wider search, populated when fiber not on site or nearby)
+  nearestCountyFiberMi?: number | null;
+
   // Classification
   tier: ConnectivityTier;
 
@@ -365,7 +354,7 @@ export interface SiteRegistryEntry {
   id: string;
   name: string;
   address: string;
-  coordinates: { lat: number; lng: number };
+  coordinates: { lat: number; lng: number } | null;
   acreage: number;
   mwCapacity: number;
   dollarPerAcreLow: number;
@@ -385,6 +374,7 @@ export interface SiteRegistryEntry {
   waterResult?: Record<string, unknown> | null;
   gasResult?: Record<string, unknown> | null;
   transportResult?: Record<string, unknown> | null;
+  laborResult?: Record<string, unknown> | null;
   landComps?: LandComp[];
   piddrGeneratedAt?: number | null;
 
@@ -397,6 +387,9 @@ export interface SiteRegistryEntry {
 
   // CRM linkage (supersedes `owner` going forward; owner kept for legacy data).
   companyId?: string;
+
+  // Gas marketers/distributors per pipeline (manual entry, keyed by operator name)
+  pipelineMarketers?: Record<string, string>;
 
   // Metadata
   createdAt: number;
@@ -474,18 +467,18 @@ export interface Contact {
 // ── Documents ────────────────────────────────────────────────────────────
 
 export type DocumentCategory =
-  | 'legal'         // NDA, agreements, PFAA, MSA
+  | 'legal'         // NDA, disclosure agreements
   | 'invoice'       // invoices, receipts
-  | 'deliverable'   // allocation letters, one-line diagrams, final outputs
-  | 'report'        // site analyses, technical reports
+  | 'contract'      // proposals, agreements, executed contracts
+  | 'deliverable'   // allocation letters, one-line diagrams, reports, final outputs
   | 'photo'         // site photos
   | 'other';
 
 export const ALL_DOCUMENT_CATEGORIES: DocumentCategory[] = [
   'legal',
   'invoice',
+  'contract',
   'deliverable',
-  'report',
   'photo',
   'other',
 ];
@@ -493,8 +486,8 @@ export const ALL_DOCUMENT_CATEGORIES: DocumentCategory[] = [
 export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
   legal:       'Legal',
   invoice:     'Invoices',
+  contract:    'Contracts',
   deliverable: 'Deliverables',
-  report:      'Reports',
   photo:       'Photos',
   other:       'Other',
 };
@@ -523,22 +516,3 @@ export interface CrmDocument {
   uploadedByName: string;      // cached display name
 }
 
-// Site Request types
-export interface SiteRequestSite {
-  address: string;
-  coordinates: string;
-  acres: number;
-}
-
-export type SiteRequestStatus = 'new' | 'ongoing' | 'done';
-
-export interface SiteRequest {
-  id: string;
-  projectId: string;
-  customerName: string;
-  sites: SiteRequestSite[];
-  status: SiteRequestStatus;
-  submittedBy: string;
-  createdAt: number;
-  updatedAt: number;
-}
