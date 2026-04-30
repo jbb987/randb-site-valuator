@@ -223,6 +223,145 @@ def main():
     print(f"  confirmed-only:        {n_confirmed - n_both:,}")
     print(f"  area-only:             {n_area - n_both:,}")
 
+    # ── County-level rollup ────────────────────────────────────────────────
+    # Aggregates queue projects by (state, county). Uses 100% of normalized
+    # data — no matching uncertainty, no cluster cap. Designed to power the
+    # Site Analyzer's "County Power Queue" section.
+    print("\nBuilding county rollup...")
+    county_buckets = defaultdict(empty_bucket)
+    county_meta = {}
+    for p in matched:
+        state = p.get("state")
+        county = p.get("county")
+        if not state or not county:
+            continue
+        key = (state, county)
+        capacity = p.get("capacity_mw") or 0
+        status = p["status"]
+        proj_record = {
+            "queue_id": p.get("queue_id"),
+            "name": p.get("project_name") or p.get("queue_id"),
+            "mw": capacity,
+            "fuel": p["fuel"],
+            "cod": (p.get("proposed_cod") or "")[:10] or None,
+            "queue_date": date_or_none(p.get("queue_date")),
+            "in_service_date": date_or_none(p.get("in_service_date")),
+            "withdrawn_date": date_or_none(p.get("withdrawn_date")),
+            "proposed_cod": date_or_none(p.get("proposed_cod")),
+            "voltage_kv": (p.get("poi") or {}).get("voltage_kv"),
+            "status": status,
+        }
+        bucket = county_buckets[key]
+        if status in ("ACTIVE", "UNDER_CONSTRUCTION", "SUSPENDED"):
+            bucket["active_projects"].append(proj_record)
+        elif status == "IN_SERVICE":
+            bucket["in_service_projects"].append(proj_record)
+        elif status == "WITHDRAWN" and proj_record["withdrawn_date"] and proj_record["withdrawn_date"] >= WINDOW_5Y_AGO:
+            bucket["withdrawn_5y_projects"].append(proj_record)
+        # Track which ISO dominates this county
+        county_meta.setdefault(key, {"isos": defaultdict(int)})
+        county_meta[key]["isos"][p["iso"]] += capacity if status in ("ACTIVE", "UNDER_CONSTRUCTION", "SUSPENDED") else 0
+
+    counties = []
+    for (state, county), bucket in county_buckets.items():
+        active = bucket["active_projects"]
+        in_serv = bucket["in_service_projects"]
+        wd5y = bucket["withdrawn_5y_projects"]
+        if not (active or in_serv or wd5y):
+            continue
+
+        active_mw = sum(p["mw"] for p in active)
+        in_service_mw = sum(p["mw"] for p in in_serv)
+        withdrawn_mw_5y = sum(p["mw"] for p in wd5y)
+
+        # Withdrawal rate
+        denom = len(wd5y) + len(in_serv) + len(active)
+        withdrawal_rate = round(len(wd5y) / denom, 3) if denom >= 3 else None
+
+        # Median time to COD
+        cod_days = []
+        for p in in_serv:
+            qd, isd = p.get("queue_date"), p.get("in_service_date")
+            if qd and isd:
+                d = (isd - qd).days
+                if 90 < d < 365 * 15:
+                    cod_days.append(d)
+        median_cod = round(statistics.median(cod_days)) if len(cod_days) >= 3 else None
+
+        # Earliest active COD
+        cods = [p["proposed_cod"] for p in active if p.get("proposed_cod")]
+        earliest = min(cods).isoformat() if cods else None
+
+        # Fuel mix (% of active MW per fuel)
+        fuel_mw = defaultdict(float)
+        for p in active:
+            fuel_mw[p["fuel"]] += p["mw"]
+        fuel_mix = (
+            {f: round(mw / active_mw, 3) for f, mw in fuel_mw.items()}
+            if active_mw > 0 else {}
+        )
+
+        # Voltage class mix (% of active MW per voltage class)
+        volt_mw = defaultdict(float)
+        for p in active:
+            v = p.get("voltage_kv")
+            if v:
+                volt_mw[str(int(v))] += p["mw"]
+        # Fraction relative to active MW *with known voltage*
+        known_volt_mw = sum(volt_mw.values())
+        voltage_mix = (
+            {v: round(mw / known_volt_mw, 3) for v, mw in volt_mw.items()}
+            if known_volt_mw > 0 else {}
+        )
+
+        # Top 10 active by full MW
+        top_active = sorted(active, key=lambda p: -(p["mw"] or 0))[:10]
+        top_active_out = [
+            {
+                "name": p["name"],
+                "mw": p["mw"],
+                "fuel": p["fuel"],
+                "cod": p["cod"],
+                "voltage_kv": p.get("voltage_kv"),
+            }
+            for p in top_active
+        ]
+
+        # Dominant ISO (by active MW)
+        iso_tally = county_meta[(state, county)]["isos"]
+        iso = max(iso_tally, key=iso_tally.get) if iso_tally else None
+
+        # Sanitize county name for doc ID (lowercase, alphanumeric + underscore)
+        import re
+        county_slug = re.sub(r"[^a-z0-9]+", "_", county.lower()).strip("_")
+        doc_id = f"{state}_{county_slug}"
+
+        counties.append({
+            "doc_id": doc_id,
+            "state": state,
+            "county": county,
+            "iso": iso,
+            "active_count": len(active),
+            "active_mw": round(active_mw, 1),
+            "in_service_count": len(in_serv),
+            "in_service_mw": round(in_service_mw, 1),
+            "withdrawn_count_5y": len(wd5y),
+            "withdrawn_mw_5y": round(withdrawn_mw_5y, 1),
+            "withdrawal_rate_5y": withdrawal_rate,
+            "median_time_to_cod_days": median_cod,
+            "completed_sample_size": len(cod_days),
+            "earliest_active_cod": earliest,
+            "fuel_mix": fuel_mix,
+            "voltage_mix": voltage_mix,
+            "top_active": top_active_out,
+            "updated_at": TODAY.isoformat(),
+        })
+
+    counties.sort(key=lambda c: -c["active_mw"])
+    (OUT / "county_queue_load.json").write_text(json.dumps(counties, default=str))
+    print(f"County rollup: {len(counties):,} counties with queue activity")
+    print(f"Total active MW (county sum): {sum(c['active_mw'] for c in counties):,.0f}")
+
 
 if __name__ == "__main__":
     main()

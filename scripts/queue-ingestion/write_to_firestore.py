@@ -40,6 +40,7 @@ from firebase_admin import credentials, firestore
 DATA = Path(__file__).parent / "data"
 
 SUBSTATION_COLL = "substation_queue_load"
+COUNTY_COLL = "county_queue_load"
 PROJECTS_COLL = "iso_queue_projects"
 META_COLL = "iso_queue_meta"
 META_DOC = "run"
@@ -133,17 +134,19 @@ def main():
 
     # Load inputs
     sub_load_path = DATA / "substation_queue_load.json"
+    county_load_path = DATA / "county_queue_load.json"
     projects_path = DATA / "all_normalized.json"
     if not sub_load_path.exists() or not projects_path.exists():
         print(f"ERROR: missing inputs in {DATA}. Run pull_and_normalize.py + matcher.py + aggregate.py first.")
         return 1
     sub_load = json.loads(sub_load_path.read_text())
+    county_load = json.loads(county_load_path.read_text()) if county_load_path.exists() else []
     projects = json.loads(projects_path.read_text()) if args.write_projects else None
+    msg = f"{len(sub_load):,} substation aggregates, {len(county_load):,} county aggregates"
     if args.write_projects:
-        print(f"Loaded: {len(sub_load):,} substation aggregates, {len(projects):,} projects (--write-projects on)")
+        print(f"Loaded: {msg}, {len(projects):,} projects (--write-projects on)")
     else:
-        print(f"Loaded: {len(sub_load):,} substation aggregates "
-              f"(skipping iso_queue_projects — pass --write-projects to refresh it)")
+        print(f"Loaded: {msg} (skipping iso_queue_projects — pass --write-projects to refresh it)")
 
     db = init_firebase(args.credentials)
 
@@ -152,10 +155,16 @@ def main():
 
     print("\nWriting to Firestore...")
 
-    # Substation aggregates: doc id = HIFLD ID (string). The only collection the app reads.
+    # Substation aggregates: doc id = HIFLD ID (string). Read by the Grid Power Analyzer popup.
     sub_written = write_collection(db, SUBSTATION_COLL, sub_load,
                                     key_fn=lambda d: d.get("hifld_id"),
                                     dry_run=args.dry_run)
+
+    # County aggregates: doc id = "{state}_{county-slug}". Read by the Site Analyzer's
+    # County Power Queue section. ~500 docs, cheap to refresh.
+    county_written = write_collection(db, COUNTY_COLL, county_load,
+                                       key_fn=lambda d: d.get("doc_id"),
+                                       dry_run=args.dry_run)
 
     # Raw projects (audit/debug only) — opt-in via --write-projects.
     proj_written = 0
@@ -171,6 +180,7 @@ def main():
         meta_payload = {
             "lastRunAt": firestore.SERVER_TIMESTAMP,
             "substationCount": sub_written,
+            "countyCount": county_written,
             "totalActiveMW": int(sum(s.get("active_mw", 0) for s in sub_load)),
         }
         if args.write_projects:
@@ -179,7 +189,7 @@ def main():
         print(f"\nUpdated {META_COLL}/{META_DOC}")
 
     proj_msg = f" + {proj_written:,} project docs" if args.write_projects else " (projects skipped)"
-    print(f"\n✓ Done. {sub_written:,} substation docs{proj_msg}.")
+    print(f"\n✓ Done. {sub_written:,} substation docs + {county_written:,} county docs{proj_msg}.")
     return 0
 
 
