@@ -22,25 +22,52 @@ export interface QueueTopActive {
   cod: string | null;
 }
 
-export interface SubstationQueueLoad {
-  hifld_id: number;
-  iso: QueueIso;
-  name: string | null;
-  lat: number | null;
-  lng: number | null;
+/** Confirmed bucket — projects matched specifically to this substation
+ *  (named match, voltage match, or line tap endpoint). Includes derived
+ *  metrics (withdrawal rate, median time to COD). */
+export interface QueueConfirmedBucket {
   active_count: number;
   active_mw: number;
   in_service_count: number;
   in_service_mw: number;
   withdrawn_count_5y: number;
   withdrawn_mw_5y: number;
-  withdrawn_count_total: number;
-  withdrawn_mw_total: number;
-  withdrawal_rate_5y: number | null;
-  median_time_to_cod_days: number | null;
+  withdrawal_rate_5y: number | null;     // 0–1, null if denominator <3
+  median_time_to_cod_days: number | null;// null if <3 completed projects
   completed_sample_size: number;
   earliest_active_cod: string | null;
   top_active: QueueTopActive[];
+}
+
+/** Area bucket — projects we could only narrow to a county+voltage
+ *  cluster of substations. Same data appears on every cluster member. */
+export interface QueueAreaBucket {
+  active_count: number;
+  active_mw: number;
+  in_service_count: number;
+  in_service_mw: number;
+  withdrawn_count_5y: number;
+  withdrawn_mw_5y: number;
+  earliest_active_cod: string | null;
+  top_active: QueueTopActive[];
+}
+
+/** Cluster context — describes the county+voltage scope of the area bucket. */
+export interface QueueAreaCluster {
+  size: number | null;            // # of substations sharing this area data
+  county: string | null;
+  voltage_kv: number | null;
+}
+
+export interface SubstationQueueLoad {
+  hifld_id: number;
+  iso: QueueIso;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+  confirmed: QueueConfirmedBucket | null;
+  area: QueueAreaBucket | null;
+  area_cluster?: QueueAreaCluster;
   updated_at: string;
 }
 

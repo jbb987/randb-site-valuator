@@ -1107,7 +1107,7 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
                       const label = avail <= 0 ? 'No capacity' : `${avail.toLocaleString()} MW`;
                       return (
                         <div className="flex justify-between text-xs">
-                          <span className="text-[#7A756E]">Available</span>
+                          <span className="text-[#7A756E]" title="Existing capacity headroom from current generation/demand. Excludes queued projects.">Available today</span>
                           <span className="font-semibold" style={{ color }}>{label}</span>
                         </div>
                       );
