@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { WellEnrichment } from '../../types';
 import { useViewportEnrichment } from '../../hooks/useViewportEnrichment';
-import { colorForStatus } from '../../lib/wellFinderRrc';
 import { computeSb1150, type Sb1150Bucket, type Sb1150Status } from '../../lib/sb1150';
 import { computeReactivationScore, scoreColor, type ScoreBreakdown } from '../../lib/reactivationScore';
 
@@ -44,7 +43,6 @@ type SortKey =
   | 'completionDate'
   | 'operator'
   | 'api'
-  | 'status'
   | 'sb1150';
 
 interface Row {
@@ -123,7 +121,7 @@ export default function WellTable(props: WellTableProps) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      setSortDir(key === 'operator' || key === 'api' || key === 'status' ? 'asc' : 'desc');
+      setSortDir(key === 'operator' || key === 'api' ? 'asc' : 'desc');
     }
   }
 
@@ -167,7 +165,7 @@ export default function WellTable(props: WellTableProps) {
           <thead className="sticky top-0 bg-stone-50 z-10">
             <tr className="text-left text-[10px] uppercase tracking-wide text-[#7A756E]">
               <SortableHeader label="Score"  k="score"            current={sortKey} dir={sortDir} onClick={toggleSort} alignRight />
-              <SortableHeader label="Status" k="status"           current={sortKey} dir={sortDir} onClick={toggleSort} />
+              <th className="px-2 py-1.5 select-none">Status</th>
               <SortableHeader label="API"    k="api"              current={sortKey} dir={sortDir} onClick={toggleSort} />
               <SortableHeader label="Operator" k="operator"       current={sortKey} dir={sortDir} onClick={toggleSort} />
               <SortableHeader label="Inactive" k="monthsInactive" current={sortKey} dir={sortDir} onClick={toggleSort} alignRight />
@@ -274,7 +272,6 @@ function pickSortValue(row: Row, key: SortKey): number | string | null {
     case 'completionDate': return row.enrichment?.iwarOriginalCompletionDate ?? null;
     case 'operator':       return row.operator ?? null;
     case 'api':            return row.api ?? null;
-    case 'status':         return row.status ?? null;
     // For SB 1150: smaller monthsToTrigger = more urgent → ascending sort puts
     // urgent first. Past-trigger wells get the most-negative values so they
     // sort to the top with asc and bottom with desc.

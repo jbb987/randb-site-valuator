@@ -76,7 +76,6 @@ export default function WellFinderMap() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveProgress, setLiveProgress] = useState(0);
   const [liveError, setLiveError] = useState<string | null>(null);
-  const [liveTruncated, setLiveTruncated] = useState(false);
 
   // Status counts (computed per-mode)
   const [counts, setCounts] = useState<Partial<Record<WellStatus, number>>>({});
@@ -172,7 +171,6 @@ export default function WellFinderMap() {
     setLiveLoading(true);
     setLiveError(null);
     setLiveProgress(0);
-    setLiveTruncated(false);
 
     const statusList = Array.from(visible);
     if (statusList.length === 0) {
@@ -186,7 +184,6 @@ export default function WellFinderMap() {
     (async () => {
       try {
         const all: RrcWell[] = [];
-        let truncatedAny = false;
         for (const status of statusList) {
           if (controller.signal.aborted) return;
           const res = await fetchWells({
@@ -200,11 +197,9 @@ export default function WellFinderMap() {
             },
           });
           all.push(...res.wells);
-          if (res.truncated) truncatedAny = true;
         }
         if (controller.signal.aborted) return;
         setLiveWells(all);
-        setLiveTruncated(truncatedAny);
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
         if (err instanceof Error && err.name === 'AbortError') return;
