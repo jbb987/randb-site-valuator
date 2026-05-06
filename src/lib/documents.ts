@@ -9,7 +9,7 @@ export interface DocumentShortcut {
 }
 
 export const TEMPLATES_FOLDER_URL =
-  'https://drive.google.com/drive/folders/1VLX6mHFyY1o1CpP8Y42AzirGbqKdI5--';
+  'https://drive.google.com/drive/folders/0AGZwPQ1NHtIbUk9PVA';
 
 export const MY_DRIVE_URL = 'https://drive.google.com/drive/my-drive';
 
