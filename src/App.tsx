@@ -22,6 +22,7 @@ import ConstructionTrackerIndex from './tools/ConstructionTrackerIndex';
 import ConstructionTrackerNew from './tools/ConstructionTrackerNew';
 import ConstructionTrackerDetail from './tools/ConstructionTrackerDetail';
 import WellFinderTool from './tools/WellFinderTool';
+import DocumentsTool from './tools/DocumentsTool';
 import AdminActivity from './pages/AdminActivity';
 
 function LegacyAnalyzerRedirect() {
@@ -135,6 +136,11 @@ export default function App() {
           <Route path="/well-finder" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <WellFinderTool />
+            </ProtectedRoute>
+          } />
+          <Route path="/documents" element={
+            <ProtectedRoute>
+              <DocumentsTool />
             </ProtectedRoute>
           } />
           <Route path="/admin/activity" element={

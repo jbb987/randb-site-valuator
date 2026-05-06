@@ -116,7 +116,8 @@ export type ToolId =
   | 'sales-admin'
   | 'crm'
   | 'construction-tracker'
-  | 'well-finder';
+  | 'well-finder'
+  | 'documents';
 
 export const ALL_TOOL_IDS: ToolId[] = [
   'site-appraiser',
@@ -131,6 +132,7 @@ export const ALL_TOOL_IDS: ToolId[] = [
   'crm',
   'construction-tracker',
   'well-finder',
+  'documents',
 ];
 
 export const TOOL_LABELS: Record<ToolId, string> = {
@@ -146,6 +148,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   'crm': 'Directory',
   'construction-tracker': 'Construction',
   'well-finder': 'Well Finder',
+  'documents': 'Documents',
 };
 
 // Backward-compat: old ToolId 'piddr' was renamed to 'site-analyzer'. Translate

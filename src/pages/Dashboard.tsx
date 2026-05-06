@@ -10,6 +10,8 @@ interface Tool {
   path: string;
   icon: string;
   adminOnly?: boolean;
+  /** Visible to every authenticated user, regardless of allowedTools. */
+  allRoles?: boolean;
 }
 
 interface ToolSection {
@@ -19,7 +21,7 @@ interface ToolSection {
 
 const toolSections: ToolSection[] = [
   {
-    title: 'Directory',
+    title: 'Company',
     tools: [
       {
         id: 'crm',
@@ -28,10 +30,18 @@ const toolSections: ToolSection[] = [
         path: '/crm',
         icon: 'directory',
       },
+      {
+        id: 'documents',
+        name: 'Documents',
+        description: 'Internal templates and shared files',
+        path: '/documents',
+        icon: 'folder',
+        allRoles: true,
+      },
     ],
   },
   {
-    title: 'Power Infrastructure Due Diligence Report',
+    title: 'Pre-Construction',
     tools: [
       {
         id: 'site-analyzer',
@@ -39,6 +49,13 @@ const toolSections: ToolSection[] = [
         description: '',
         path: '/site-analyzer',
         icon: 'analyzer',
+      },
+      {
+        id: 'site-appraiser',
+        name: 'Site Appraiser',
+        description: '',
+        path: '/site-appraiser',
+        icon: 'dollar',
       },
       {
         id: 'power-calculator',
@@ -76,11 +93,12 @@ const toolSections: ToolSection[] = [
         icon: 'wifi',
       },
       {
-        id: 'site-appraiser',
-        name: 'Site Appraiser',
-        description: '',
-        path: '/site-appraiser',
-        icon: 'dollar',
+        id: 'well-finder',
+        name: 'Well Finder',
+        description: 'Texas oil & gas reactivation candidates, ranked by opportunity',
+        path: '/well-finder',
+        icon: 'flame',
+        adminOnly: true,
       },
     ],
   },
@@ -97,7 +115,7 @@ const toolSections: ToolSection[] = [
     ],
   },
   {
-    title: 'Sales',
+    title: 'REP',
     tools: [
       {
         id: 'sales-crm',
@@ -112,19 +130,6 @@ const toolSections: ToolSection[] = [
         description: 'View sales performance and leaderboard across all salespeople',
         path: '/sales-admin',
         icon: 'chart',
-        adminOnly: true,
-      },
-    ],
-  },
-  {
-    title: 'Acquisition',
-    tools: [
-      {
-        id: 'well-finder',
-        name: 'Well Finder',
-        description: 'Texas oil & gas reactivation candidates, ranked by opportunity',
-        path: '/well-finder',
-        icon: 'flame',
         adminOnly: true,
       },
     ],
@@ -236,6 +241,13 @@ function ToolIcon({ type }: { type: string }) {
       </svg>
     );
   }
+  if (type === 'folder') {
+    return (
+      <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+      </svg>
+    );
+  }
   if (type === 'hardhat') {
     return (
       <svg className="h-5 w-5 text-[#ED202B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -274,6 +286,7 @@ export default function Dashboard() {
     if (!role) return false;
     if (role === 'admin') return true;
     if (tool.adminOnly) return false;
+    if (tool.allRoles) return true;
     return allowedTools.includes(tool.id as ToolId);
   };
 
