@@ -22,6 +22,7 @@ Internal tool suite for R&B Power. The **CRM** is the central database (companie
 - **Construction** — Track active construction jobs linked to CRM companies. Each job has overview, team (PM + workers), tasks, photos, documents, and timeline. Three permission levels derived from membership: Admin (global) sees everything; Project Manager sees and edits jobs they're assigned to; Worker sees only assigned jobs and can update their own task status + upload photos. Shipping in 4 PRs: foundation (overview + team), tasks + Firestore rules, photos + documents, timeline + polish.
 - **User Management** — Admin-only tool to view, manage roles, and remove platform users.
 - **Activity Log** — Admin-only audit trail at `/admin/activity`. Cloud Functions Firestore triggers (`onDocumentWrittenWithAuthContext`) on every top-level collection (`crm-companies`, `crm-contacts`, `crm-documents`, `sites-registry`, `construction-jobs`, `construction-jobs/*/tasks`, `leads`, `users`) plus a mirror trigger on `user-history` write activity entries to the `activity` collection. Each entry has actor (uid + email), action (create/update/delete/upload/tool-run/login/export), resource (type + id + label + optional parent), changedFields, before/after slice, and a pre-rendered summary string. Idempotent on Functions v2 eventId. See `docs/activity-firestore-setup.md` for required Firestore rules and indexes.
+- **Documents** — Internal document hub. Visible to every authenticated user; the cards on the page are filtered by `UserRole`. Each card opens a Google Drive URL in a new tab — no API or OAuth involved (Drive enforces access at click time; users can request access if denied). Shortcuts live in `src/lib/documents.ts` (`DOCUMENT_SHORTCUTS` array, role-gated). Today: My Documents (personal Drive) + Templates (shared folder). Add more shortcuts (HR, Legal, etc.) by appending to the array.
 - **Well Finder** — Admin-only map of Texas oil & gas wells from the RRC. Identifies reactivation candidates (shut-in wells) and acquisition candidates (active wells). Status-colored points with toggleable filters. Production mode reads pre-tiled `wells.pmtiles` from Firebase Storage; dev fallback paginates the live RRC ArcGIS layer. Backend pipeline: monthly scheduled function (`fetchRrcWells`) → Storage trigger (`triggerPmtilesBuild`) → Cloud Run tippecanoe service → `wells.pmtiles`. See `functions/src/wellFinder/README.md`.
 
 ## Tech Stack
@@ -150,6 +151,7 @@ src/
     ConstructionTrackerNew.tsx    # New construction job form ("/construction-tracker/new"; reads ?companyId)
     ConstructionTrackerDetail.tsx # Construction job detail page with view/edit toggle ("/construction-tracker/:jobId")
     WellFinderTool.tsx        # Well Finder ("/well-finder") — admin-only map of TX oil & gas wells
+    DocumentsTool.tsx         # Documents ("/documents") — admin-only embedded Google Drive folder
   hooks/
     useAuth.ts                # Firebase auth state + user role + allowed tools
     useAppraisal.ts           # Appraisal calculation logic
@@ -198,6 +200,7 @@ src/
     laborAnalysis.ts          # Labor pool analysis (Census Geocoder + ACS live; BLS QCEW/OEWS/LAUS stubbed pending key)
     transportLookup.ts        # Transport infrastructure (airports, interstates, ports, railroads via geo.dot.gov)
     wellFinderRrc.ts          # RRC ArcGIS Layer 1 query helper (paginated). PMTiles URL config.
+    documents.ts              # Documents tool: Drive folder ID + embed/open URL constants
     infraLookup.ts            # Infrastructure lookup (substations, lines, plants, geocode)
     infraIngestion.ts         # Admin data ingestion pipeline (ArcGIS → Firestore)
     powerMapData.ts           # Power map data fetching and availability calculations
@@ -252,6 +255,7 @@ scripts/
 | `/user-management` | `UserManagement` | role: `admin` | Manage users and roles |
 | `/admin/activity` | `AdminActivity` | role: `admin` | Activity log — every CRUD + tool run, newest first |
 | `/well-finder` | `WellFinderTool` | role: `admin` | Texas oil & gas wells map (reactivation candidates) |
+| `/documents` | `DocumentsTool` | all | Role-gated grid of Google Drive shortcuts (Templates, My Documents, etc.) |
 
 ## Design System
 
@@ -317,12 +321,12 @@ scripts/
 
 ### Dashboard Organization
 
-Tools are grouped into 5 sections on the Dashboard (section headers only show if user has access):
-1. **CRM** — CRM (cross-cutting hub for Companies + Contacts)
-2. **Power Infrastructure Due Diligence Report** — Site Analyzer, Power Calculator, Grid Power Analyzer, Water, Gas, Broadband, Site Appraiser
+Tools are grouped into 5 sections that mirror R&B Power's three business lines (Pre-Construction, Construction, REP) plus cross-cutting Company tools and admin Settings. Section headers only render if the signed-in user has at least one visible tool inside.
+1. **Company** — Directory, Documents *(cross-cutting)*
+2. **Pre-Construction** — Site Analyzer, Site Appraiser, Power Calculator, Grid Power Analyzer, Water Analysis, Gas Analysis, Broadband Lookup, Well Finder *(admin-only)*
 3. **Construction** — Construction
-4. **Sales** — Leads, Sales Dashboard
-5. **Settings** — User Management
+4. **REP** — Leads, Sales Dashboard *(admin-only)*
+5. **Settings** *(admin-only)* — Activity Log, User Management
 
 ### Adding a New Tool/Page
 

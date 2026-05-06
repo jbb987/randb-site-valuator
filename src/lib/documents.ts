@@ -1,0 +1,36 @@
+import type { UserRole } from '../types';
+
+export interface DocumentShortcut {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  allowedRoles: UserRole[];
+}
+
+export const TEMPLATES_FOLDER_URL =
+  'https://drive.google.com/drive/folders/1VLX6mHFyY1o1CpP8Y42AzirGbqKdI5--';
+
+export const MY_DRIVE_URL = 'https://drive.google.com/drive/my-drive';
+
+export const DOCUMENT_SHORTCUTS: DocumentShortcut[] = [
+  {
+    id: 'my-documents',
+    name: 'My Documents',
+    description: 'Your personal Google Drive',
+    url: MY_DRIVE_URL,
+    allowedRoles: ['admin', 'employee', 'worker'],
+  },
+  {
+    id: 'templates',
+    name: 'Templates',
+    description: 'Shared templates and forms',
+    url: TEMPLATES_FOLDER_URL,
+    allowedRoles: ['admin', 'employee', 'worker'],
+  },
+];
+
+export function getShortcutsForRole(role: UserRole | null): DocumentShortcut[] {
+  if (!role) return [];
+  return DOCUMENT_SHORTCUTS.filter((s) => s.allowedRoles.includes(role));
+}
