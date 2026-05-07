@@ -11,7 +11,6 @@ import PoiSection from './PoiSection';
 import SubstationsTable from './SubstationsTable';
 import TransmissionLinesTable from './TransmissionLinesTable';
 import PowerPlantsTable from './PowerPlantsTable';
-import SolarResourceWidget from '../appraiser/SolarResourceWidget';
 import ElectricityPriceWidget from '../appraiser/ElectricityPriceWidget';
 import FuelMixCard from '../site-analyzer/FuelMixCard';
 
@@ -38,12 +37,11 @@ interface Props {
   hasRunAnalysis: boolean;
   collapsible?: boolean;
   cardWrap?: boolean;
-  context?: 'site-analyzer' | 'power-calculator';
 }
 
 const cardClass = 'bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6';
 
-export default function InfrastructureResults({ data, loading, hasRunAnalysis, collapsible = true, cardWrap = false, context = 'power-calculator' }: Props) {
+export default function InfrastructureResults({ data, loading, hasRunAnalysis, collapsible = true, cardWrap = false }: Props) {
   const hasAnalysisData =
     hasRunAnalysis ||
     data.nearbySubstations?.length > 0 ||
@@ -51,8 +49,6 @@ export default function InfrastructureResults({ data, loading, hasRunAnalysis, c
     data.nearbyPowerPlants?.length > 0 ||
     data.floodZone != null ||
     data.solarWind != null;
-
-  const isSiteAnalyzer = context === 'site-analyzer';
 
   const wrap = (children: React.ReactNode) =>
     cardWrap ? <div className={cardClass}>{children}</div> : <>{children}</>;
@@ -156,25 +152,13 @@ export default function InfrastructureResults({ data, loading, hasRunAnalysis, c
             </div>
           )}
 
-          {/* Fuel Mix — Site Analyzer only */}
-          {isSiteAnalyzer && wrap(
+          {wrap(
             <FuelMixCard
               nearbyPowerPlants={data.nearbyPowerPlants ?? []}
               stateGenerationByFuel={data.stateGenerationByFuel ?? null}
               detectedState={data.detectedState ?? null}
               loading={loading}
             />
-          )}
-
-          {/* Solar Resource Widget — Power Calculator only */}
-          {!isSiteAnalyzer && (data.solarWind || loading) && wrap(
-            <div className={cardWrap ? '' : 'mt-6'}>
-              <SolarResourceWidget
-                solarWind={data.solarWind}
-                detectedState={data.detectedState ?? null}
-                loading={loading}
-              />
-            </div>
           )}
 
           {/* Electricity Price Widget */}

@@ -3,18 +3,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
-import SiteAppraiserTool from './tools/SiteAppraiserTool';
 import UserManagement from './pages/UserManagement';
-import BroadbandLookupTool from './tools/BroadbandLookupTool';
 import GridPowerAnalyzer from './tools/GridPowerAnalyzer';
 import SalesCrmTool from './tools/SalesCrmTool';
 import SalesAdminDashboard from './tools/SalesAdminDashboard';
-import PowerCalculatorTool from './tools/PowerCalculatorTool';
 import SiteAnalyzerIndex from './tools/SiteAnalyzerIndex';
 import SiteAnalyzerNew from './tools/SiteAnalyzerNew';
 import SiteAnalyzerDetail from './tools/SiteAnalyzerDetail';
-import WaterAnalysisTool from './tools/WaterAnalysisTool';
-import GasAnalysisTool from './tools/GasAnalysisTool';
 import CrmTool from './tools/CrmTool';
 import CompanyDetailTool from './tools/CompanyDetailTool';
 import ContactDetailTool from './tools/ContactDetailTool';
@@ -41,16 +36,6 @@ export default function App() {
               <Dashboard />
             </ProtectedRoute>
           } />
-          <Route path="/site-appraiser" element={
-            <ProtectedRoute toolId="site-appraiser">
-              <SiteAppraiserTool />
-            </ProtectedRoute>
-          } />
-          <Route path="/broadband-lookup" element={
-            <ProtectedRoute toolId="broadband-lookup">
-              <BroadbandLookupTool />
-            </ProtectedRoute>
-          } />
           <Route path="/user-management" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <UserManagement />
@@ -71,11 +56,6 @@ export default function App() {
               <SalesAdminDashboard />
             </ProtectedRoute>
           } />
-          <Route path="/power-calculator" element={
-            <ProtectedRoute toolId="power-calculator">
-              <PowerCalculatorTool />
-            </ProtectedRoute>
-          } />
           <Route path="/site-analyzer" element={
             <ProtectedRoute toolId="site-analyzer">
               <SiteAnalyzerIndex />
@@ -93,16 +73,6 @@ export default function App() {
           } />
           {/* Legacy redirect: /power-infrastructure-report → /site-analyzer (preserves query string) */}
           <Route path="/power-infrastructure-report" element={<LegacyAnalyzerRedirect />} />
-          <Route path="/water-analysis" element={
-            <ProtectedRoute toolId="water-analysis">
-              <WaterAnalysisTool />
-            </ProtectedRoute>
-          } />
-          <Route path="/gas-analysis" element={
-            <ProtectedRoute toolId="gas-analysis">
-              <GasAnalysisTool />
-            </ProtectedRoute>
-          } />
           <Route path="/crm" element={
             <ProtectedRoute toolId="crm">
               <CrmTool />

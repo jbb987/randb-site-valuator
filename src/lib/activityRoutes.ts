@@ -37,12 +37,7 @@ export function resourceUrl(resource: ActivityResource): string | null {
 function toolPath(toolId: string): string | null {
   const map: Record<string, string> = {
     'site-analyzer':       '/site-analyzer',
-    'site-appraiser':      '/site-appraiser',
-    'power-calculator':    '/power-calculator',
     'grid-power-analyzer': '/grid-power-analyzer',
-    'water-analysis':      '/water-analysis',
-    'gas-analysis':        '/gas-analysis',
-    'broadband-lookup':    '/broadband-lookup',
     'sales-crm':           '/sales-crm',
     'sales-admin':         '/sales-admin',
     'crm':                 '/crm',
