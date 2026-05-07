@@ -175,24 +175,32 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
 
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
-    if (map) {
-      // Active plant bolt (green)
-      if (!map.hasImage('bolt')) {
-        map.addImage('bolt', createBoltImage('#22C55E'), { pixelRatio: 2 });
-      }
-      // Planned plant bolt (yellow)
-      if (!map.hasImage('bolt-planned')) {
-        map.addImage('bolt-planned', createBoltImage(STATUS_COLORS.planned), { pixelRatio: 2 });
-      }
-      // Retired plant bolt (grey)
-      if (!map.hasImage('bolt-retired')) {
-        map.addImage('bolt-retired', createBoltImage(STATUS_COLORS.retired), { pixelRatio: 2 });
-      }
-      // Gold diamond for search pin (your land)
-      if (!map.hasImage('search-diamond')) {
-        map.addImage('search-diamond', createDiamondImage('#F59E0B', 40), { pixelRatio: 2 });
-      }
+    if (!map) {
+      setMapReady(true);
+      return;
     }
+
+    // Lazy-register icons on demand. MapLibre fires 'styleimagemissing'
+    // when a layer references an unregistered icon — this prevents the
+    // race between layer mount and addImage().
+    const ensureImage = (id: string) => {
+      if (map.hasImage(id)) return;
+      switch (id) {
+        case 'bolt':           map.addImage(id, createBoltImage('#22C55E'),             { pixelRatio: 2 }); break;
+        case 'bolt-planned':   map.addImage(id, createBoltImage(STATUS_COLORS.planned), { pixelRatio: 2 }); break;
+        case 'bolt-retired':   map.addImage(id, createBoltImage(STATUS_COLORS.retired), { pixelRatio: 2 }); break;
+        case 'search-diamond': map.addImage(id, createDiamondImage('#F59E0B', 40),      { pixelRatio: 2 }); break;
+      }
+    };
+
+    map.on('styleimagemissing', (e) => ensureImage(e.id));
+
+    // Eager-register so the first paint has them ready.
+    ensureImage('bolt');
+    ensureImage('bolt-planned');
+    ensureImage('bolt-retired');
+    ensureImage('search-diamond');
+
     setMapReady(true);
   }, []);
 
@@ -596,7 +604,8 @@ export default function PowerMapView({ sites = [], flyToSite }: PowerMapViewProp
         <NavigationControl position="top-right" />
 
         {/* ── My Sites layer (always visible if toggled on) ── */}
-        {showMySites && sitesGeoJSON.features.length > 0 && (
+        {/* Gated on mapReady so the search-diamond icon is registered before the layer mounts. */}
+        {mapReady && showMySites && sitesGeoJSON.features.length > 0 && (
           <Source id="my-sites" type="geojson" data={sitesGeoJSON}>
             <Layer
               id="my-sites-layer"
