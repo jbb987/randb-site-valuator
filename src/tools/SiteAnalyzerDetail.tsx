@@ -545,7 +545,7 @@ export default function SiteAnalyzerDetail() {
                 </div>
               )}
               {report.infra.data && (
-                <InfrastructureResults data={report.infra.data} loading={false} hasRunAnalysis={true} collapsible={false} cardWrap context="site-analyzer" />
+                <InfrastructureResults data={report.infra.data} loading={false} hasRunAnalysis={true} collapsible={false} cardWrap />
               )}
               <CountyQueueSection state={queueState} county={queueCounty} />
             </div>

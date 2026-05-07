@@ -10,13 +10,8 @@ Internal tool suite for R&B Power. The **CRM** is the central database (companie
 
 - **CRM** — Cross-cutting directory of Companies and Contacts, shared across Pre-Construction, Construction, and REP dimensions. Toggle between Companies and People, search, add/edit/delete. Fixed-enum tags (`REP` / `Construction` / `Pre Construction` / `Utility`) classify each company. Each company has a Documents section (PDFs + images) categorized as Legal / Invoices / Deliverables / Reports / Photos / Other, and a collapsible License Numbers section with free-text fields for the 5 tracked states (OK, TX, AZ, NM, TN). Mobile-first UI.
 - **Site Analyzer** — Site analysis tool. Enter coordinates → runs land valuation, power, broadband, transport, water, and gas analyses in parallel. Saves results to the site registry, optionally linked to a CRM company. PDF export. Three routes: index (`/site-analyzer`) lists all sites with search; new (`/site-analyzer/new`) is the entry form; detail (`/site-analyzer/:siteId`) is view/edit + analysis sections.
-- **Site Appraiser** — Standalone calculator for site valuation. Input coordinates, acreage, MW, $/acre to see current vs energized value. No sidebar, no data persistence — Site Analyzer owns the registry.
-- **Power Calculator** — Analyze nearby substations, transmission lines, power plants, and grid territory for any coordinates.
 - **Grid Power Analyzer** — Interactive MapLibre GL map showing power generators, transmission lines, substations, and available capacity with heat map overlay. Coordinate search with gold diamond pin.
-- **Water Analysis** — Flood zones, stream networks, wetlands, groundwater, drought, NPDES permits, precipitation analysis from coordinates.
-- **Gas Infrastructure Analysis** — Nearby gas pipelines, demand calculation, lateral cost estimate, LDC assessment, supply reliability, gas pricing, environmental compliance.
 - **Labor Pool (Site Analyzer section only)** — County-anchored workforce data: population, labor force, unemployment, education, commute, industry mix, occupational wages, with state/national benchmarks. Live: FCC Area API (county FIPS, CORS-friendly), Census ACS 5yr (population/labor/education/commute), BLS QCEW (private-sector industries by NAICS supersector, county-level), BLS OEWS (occupations + hourly wage percentiles, state-level). MSA resolution requires a server-side proxy (Census Geocoder is CORS-blocked); `resolvedMsa` is null in the browser today. Optional `VITE_BLS_API_KEY` raises the BLS quota from 25 → 500 requests/day.
-- **Broadband Lookup** — Broadband due diligence report from site coordinates. Queries FCC Census Block API and ArcGIS FCC BDC.
 - **Leads (Sales CRM)** — Lead management for the sales team. Tracks leads through call/email outreach sequence (New → Call 1 → Email → Call 2 → Final Call → Won/Lost).
 - **Sales Dashboard** — Admin-only aggregated view of sales performance. Leaderboard, pipeline breakdown, conversion rates.
 - **Construction** — Track active construction jobs linked to CRM companies. Each job has overview, team (PM + workers), tasks, photos, documents, and timeline. Three permission levels derived from membership: Admin (global) sees everything; Project Manager sees and edits jobs they're assigned to; Worker sees only assigned jobs and can update their own task status + upload photos. Shipping in 4 PRs: foundation (overview + team), tasks + Firestore rules, photos + documents, timeline + polish.
@@ -49,13 +44,9 @@ src/
     Breadcrumb.tsx            # Route-aware breadcrumb navigation
     ProtectedRoute.tsx        # Auth gate with optional allowedRoles or toolId
     ErrorBoundary.tsx         # Error boundary
-    SiteSelector.tsx          # Searchable site selector dropdown (used by tools)
     navbar/                   # Navbar, NavLinks, UserMenu, MobileMenu, navConfig
-    appraiser/                # Site Appraiser components
-      SiteDetailPanel.tsx     # Map + calculator (PresentationView only)
-      SiteMapCard.tsx         # Google Maps iframe embed
+    appraiser/                # Shared widgets used by Site Analyzer's Power Infrastructure section
       ElectricityPriceWidget.tsx  # Electricity price comparison
-      SolarResourceWidget.tsx # Solar/wind resource display
     site-analyzer/            # Site Analyzer components
       DetailHeader.tsx        # Detail page header (name, company chip, last analyzed, action buttons)
       DetailSummary.tsx       # Read-only key/value table of site inputs (view mode)
@@ -71,11 +62,11 @@ src/
       LaborSection.tsx        # Labor pool results wrapper
       CountyQueueSection.tsx  # County-level interconnection queue summary inside the Power Infrastructure section (read-only, fed by useCountyQueueLoad)
       SiteAnalysisPdfDocument.tsx # Full PDF document structure (react-pdf)
-    broadband/                # Broadband Lookup components
+    broadband/                # Broadband report (rendered inside Site Analyzer's Broadband section)
       BroadbandReport.tsx     # Due diligence report display
-    water/                    # Water Analysis components
+    water/                    # Water report (rendered inside Site Analyzer's Water section)
       WaterReport.tsx         # Water analysis report display
-    gas/                      # Gas Analysis components
+    gas/                      # Gas report (rendered inside Site Analyzer's Gas section)
       GasReport.tsx           # Gas analysis report display
     labor/                    # Labor Pool components
       LaborReport.tsx         # Labor pool report display (used by Site Analyzer Labor section)
@@ -88,7 +79,7 @@ src/
       SubstationList.tsx      # Substation data table
       Methodology.tsx         # Map methodology docs
       QueueCard.tsx           # Interconnection-queue summary in substation popup (active/withdrawn/in-service MW, withdrawal rate, top competitors)
-    power-calculator/         # Power Calculator components
+    power-calculator/         # Power Infrastructure results (rendered inside Site Analyzer's Power section)
       InfrastructureResults.tsx # Main results display
       PowerPlantsTable.tsx    # Power plants table
       SubstationsTable.tsx    # Substations table
@@ -119,15 +110,7 @@ src/
       JobTeamSection.tsx      # Read-only team: PM + workers
     admin/                    # Admin-only components
       InfraRefreshPanel.tsx   # Infrastructure data cache refresh panel
-    EnergyBridge.tsx          # Energy bridge visualization
-    Header.tsx                # Section header
-    OutcomeBar.tsx            # Outcome bar chart
-    PowerScale.tsx            # Power scale visualization
-    PowerSlider.tsx           # MW slider input
-    PresentationView.tsx      # Presentation/summary view (calculator)
-    SetupPanel.tsx            # Site setup form panel
-    SiteSwitcher.tsx          # Switch between sites
-    ValueCard.tsx             # Value display card
+    PowerSlider.tsx           # MW slider input (used in Site Analyzer land valuation)
   pages/
     Dashboard.tsx             # Tool grid (root page "/") — grouped by section
     LoginPage.tsx             # Firebase auth login
@@ -136,12 +119,7 @@ src/
     SiteAnalyzerIndex.tsx     # Site Analyzer index — list of all analyzed sites with search ("/site-analyzer")
     SiteAnalyzerNew.tsx       # New site analysis form ("/site-analyzer/new"; reads ?companyId, ?lat, ?lng)
     SiteAnalyzerDetail.tsx    # Site analysis detail page with view/edit toggle ("/site-analyzer/:siteId")
-    SiteAppraiserTool.tsx     # Site Appraiser ("/site-appraiser") — standalone calculator
-    PowerCalculatorTool.tsx   # Power Calculator ("/power-calculator")
     GridPowerAnalyzer.tsx     # Grid Power Analyzer ("/grid-power-analyzer")
-    WaterAnalysisTool.tsx     # Water Analysis ("/water-analysis")
-    GasAnalysisTool.tsx       # Gas Infrastructure Analysis ("/gas-analysis")
-    BroadbandLookupTool.tsx   # Broadband Lookup ("/broadband-lookup")
     SalesCrmTool.tsx          # Sales CRM / Leads ("/sales-crm")
     SalesAdminDashboard.tsx   # Admin sales dashboard ("/sales-admin")
     CrmTool.tsx               # CRM directory ("/crm") — Companies & People list
@@ -154,23 +132,19 @@ src/
     DocumentsTool.tsx         # Documents ("/documents") — admin-only embedded Google Drive folder
   hooks/
     useAuth.ts                # Firebase auth state + user role + allowed tools
-    useAppraisal.ts           # Appraisal calculation logic
-    useSiteAnalysis.ts        # Site analysis generation (all 6 sections in parallel)
+    useSiteAnalysis.ts        # Site analysis generation (all 7 sections in parallel)
     usePdfExport.ts           # PDF generation via react-pdf
-    useSites.ts               # Site CRUD operations (legacy appraiser internals)
     useSiteRegistry.ts        # Site registry real-time subscription
     useUsers.ts               # User management CRUD (admin)
     useLeads.ts               # Lead CRUD operations (Sales CRM)
     useCompanies.ts           # CRM company CRUD + single-company subscription
     useContacts.ts            # CRM contact CRUD, by-company, single-contact hooks
     useDocuments.ts           # CRM document upload/delete/list per company (Firebase Storage + Firestore)
-    useBroadbandLookup.ts     # Broadband data lookup
-    useWaterAnalysis.ts       # Water analysis hook
-    useGasAnalysis.ts         # Gas analysis hook
+    useBroadbandLookup.ts     # Broadband data lookup (used by useSiteAnalysis)
     useLaborAnalysis.ts       # Labor pool analysis hook
     usePowerMap.ts            # Power map data fetching and state
     useInfraData.ts           # Cached infrastructure data (plants, substations, EIA, solar)
-    useInfraLookup.ts         # Infrastructure lookup for Power Calculator
+    useInfraLookup.ts         # Power infrastructure lookup (used by useSiteAnalysis)
     useUserHistory.ts         # Per-user activity history
     useUserQuota.ts           # Reactive monthly Site Analyzer quota for the signed-in user (admins unlimited)
     useQueueLoad.ts           # One-shot fetch of substation_queue_load doc by HIFLD ID, with session in-memory cache (no live subscription)
@@ -242,12 +216,7 @@ scripts/
 | `/site-analyzer/new` | `SiteAnalyzerNew` | toolId: `site-analyzer` | New analysis form (accepts `?companyId`, `?lat`, `?lng` pre-fills) |
 | `/site-analyzer/:siteId` | `SiteAnalyzerDetail` | toolId: `site-analyzer` | Site analysis detail (view/edit toggle; `?run=1` auto-triggers analysis) |
 | `/power-infrastructure-report` | Redirect → `/site-analyzer` | — | Legacy redirect (preserves query string) |
-| `/site-appraiser` | `SiteAppraiserTool` | toolId: `site-appraiser` | Standalone site value calculator |
-| `/power-calculator` | `PowerCalculatorTool` | toolId: `power-calculator` | Power infrastructure analysis |
 | `/grid-power-analyzer` | `GridPowerAnalyzer` | toolId: `grid-power-analyzer` | Interactive power map |
-| `/water-analysis` | `WaterAnalysisTool` | toolId: `water-analysis` | Water due diligence |
-| `/gas-analysis` | `GasAnalysisTool` | toolId: `gas-analysis` | Gas infrastructure analysis |
-| `/broadband-lookup` | `BroadbandLookupTool` | toolId: `broadband-lookup` | Broadband due diligence |
 | `/sales-crm` | `SalesCrmTool` | toolId: `sales-crm` | Sales lead management |
 | `/sales-admin` | `SalesAdminDashboard` | toolId: `sales-admin` | Admin sales dashboard |
 | `/construction-tracker` | `ConstructionTrackerIndex` | toolId: `construction-tracker` | List of construction jobs (workers see only their assigned jobs) |
@@ -297,11 +266,10 @@ scripts/
 ### Tool Architecture
 
 - **CRM is the central database** — companies and contacts live in `crm-companies` and `crm-contacts`. The Site Analyzer's saved sites link to a company via `companyId` on `SiteRegistryEntry`.
-- **Site Analyzer** owns writes to `sites-registry` (the analysis output cache). Other tools (Power Calculator, Water, Gas) can read from it via `SiteSelector`.
+- **Site Analyzer** owns writes to `sites-registry` (the analysis output cache).
 - **Coordinates are the universal identifier** — sites are matched across tools by coordinates (parsed via `parseCoordinates` which supports decimal and DMS formats).
 - **Company linkage** is set via the Site Analyzer's Company picker. Legacy `owner` field retained on pre-link sites for backward compatibility. The Company detail page surfaces all linked sites; clicking a site navigates to `/site-analyzer?siteId=X` which auto-loads the site in the Site Analyzer.
-- **All tools use coordinates-only input** — no address search. Coordinates field accepts decimal (`28.65, -98.84`) or DMS (`28°39'22.0"N 98°50'38.3"W`).
-- **SiteSelector** bar at the top of tools (Power Calculator, Water, Gas) lets users pick a saved site to auto-fill coordinates.
+- **Coordinates-only input** — no address search. Coordinates field accepts decimal (`28.65, -98.84`) or DMS (`28°39'22.0"N 98°50'38.3"W`).
 - **Backward-compat:** the previous ToolId `'piddr'` is normalized to `'site-analyzer'` on read in `useAuth` and `useUserHistory`. The Firestore field `piddrGeneratedAt` on `SiteRegistryEntry` is intentionally preserved (no migration).
 
 ### Site Analysis Generation
@@ -324,7 +292,7 @@ scripts/
 
 Tools are grouped into 5 sections that mirror R&B Power's three business lines (Pre-Construction, Construction, REP) plus cross-cutting Company tools and admin Settings. Section headers only render if the signed-in user has at least one visible tool inside.
 1. **Company** — Directory, Documents *(cross-cutting)*
-2. **Pre-Construction** — Site Analyzer, Site Appraiser, Power Calculator, Grid Power Analyzer, Water Analysis, Gas Analysis, Broadband Lookup, Well Finder *(admin-only)*
+2. **Pre-Construction** — Site Analyzer, Grid Power Analyzer, Well Finder *(admin-only)*
 3. **Construction** — Construction
 4. **REP** — Leads, Sales Dashboard *(admin-only)*
 5. **Settings** *(admin-only)* — Activity Log, User Management

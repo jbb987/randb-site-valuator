@@ -105,13 +105,8 @@ export interface CountyQueueLoad {
 }
 
 export type ToolId =
-  | 'site-appraiser'
-  | 'broadband-lookup'
   | 'grid-power-analyzer'
-  | 'power-calculator'
   | 'site-analyzer'
-  | 'water-analysis'
-  | 'gas-analysis'
   | 'sales-crm'
   | 'sales-admin'
   | 'crm'
@@ -120,13 +115,8 @@ export type ToolId =
   | 'documents';
 
 export const ALL_TOOL_IDS: ToolId[] = [
-  'site-appraiser',
-  'broadband-lookup',
   'grid-power-analyzer',
-  'power-calculator',
   'site-analyzer',
-  'water-analysis',
-  'gas-analysis',
   'sales-crm',
   'sales-admin',
   'crm',
@@ -136,13 +126,8 @@ export const ALL_TOOL_IDS: ToolId[] = [
 ];
 
 export const TOOL_LABELS: Record<ToolId, string> = {
-  'site-appraiser': 'Site Appraiser',
-  'broadband-lookup': 'Broadband Lookup',
   'grid-power-analyzer': 'Grid Power Analyzer',
-  'power-calculator': 'Power Calculator',
   'site-analyzer': 'Site Analyzer',
-  'water-analysis': 'Water Analysis',
-  'gas-analysis': 'Gas Infrastructure Analysis',
   'sales-crm': 'Leads',
   'sales-admin': 'Sales Dashboard',
   'crm': 'Directory',
