@@ -15,7 +15,7 @@ Internal tool suite for R&B Power. The **CRM** is the central database (companie
 - **Grid Power Analyzer** — Interactive MapLibre GL map showing power generators, transmission lines, substations, and available capacity with heat map overlay. Coordinate search with gold diamond pin.
 - **Water Analysis** — Flood zones, stream networks, wetlands, groundwater, drought, NPDES permits, precipitation analysis from coordinates.
 - **Gas Infrastructure Analysis** — Nearby gas pipelines, demand calculation, lateral cost estimate, LDC assessment, supply reliability, gas pricing, environmental compliance.
-- **Labor Pool (Site Analyzer section only)** — County-anchored workforce data: population, labor force, unemployment, education, commute, industry mix, occupational wages, with state/national benchmarks. Live: Census Geocoder + Census ACS 5yr. Stubbed (mock until BLS key wired): BLS QCEW (industries), BLS OEWS (wages), BLS LAUS (unemployment).
+- **Labor Pool (Site Analyzer section only)** — County-anchored workforce data: population, labor force, unemployment, education, commute, industry mix, occupational wages, with state/national benchmarks. Live: FCC Area API (county FIPS, CORS-friendly), Census ACS 5yr (population/labor/education/commute), BLS QCEW (private-sector industries by NAICS supersector, county-level), BLS OEWS (occupations + hourly wage percentiles, state-level). MSA resolution requires a server-side proxy (Census Geocoder is CORS-blocked); `resolvedMsa` is null in the browser today. Optional `VITE_BLS_API_KEY` raises the BLS quota from 25 → 500 requests/day.
 - **Broadband Lookup** — Broadband due diligence report from site coordinates. Queries FCC Census Block API and ArcGIS FCC BDC.
 - **Leads (Sales CRM)** — Lead management for the sales team. Tracks leads through call/email outreach sequence (New → Call 1 → Email → Call 2 → Final Call → Won/Lost).
 - **Sales Dashboard** — Admin-only aggregated view of sales performance. Leaderboard, pipeline breakdown, conversion rates.
@@ -197,7 +197,8 @@ src/
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions
     gasAnalysis.ts            # Gas analysis (pipelines, demand, lateral, LDC, pricing)
-    laborAnalysis.ts          # Labor pool analysis (Census Geocoder + ACS live; BLS QCEW/OEWS/LAUS stubbed pending key)
+    laborAnalysis.ts          # Labor pool analysis orchestrator (FCC Area API + Census ACS + BLS QCEW + BLS OEWS)
+    blsLabor.ts               # BLS Public Data API v2 client: QCEW (county industries) + OEWS (state occupations & hourly wage percentiles). VITE_BLS_API_KEY optional.
     transportLookup.ts        # Transport infrastructure (airports, interstates, ports, railroads via geo.dot.gov)
     wellFinderRrc.ts          # RRC ArcGIS Layer 1 query helper (paginated). PMTiles URL config.
     documents.ts              # Documents tool: Drive folder ID + embed/open URL constants

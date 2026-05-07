@@ -2,8 +2,11 @@
  * Labor Pool Analysis — Phase 1 (county-anchored)
  *
  * Live data sources:
- * - Census Geocoder (coords → county FIPS + CBSA/MSA) — no key
+ * - FCC Area API (coords → county FIPS + state) — no key, CORS-friendly
  * - Census ACS 5yr API — VITE_CENSUS_API_KEY optional (50/day without)
+ *
+ * MSA/CBSA resolution requires the Census Geocoder, which does not send
+ * CORS headers; left null in the browser until a server-side proxy lands.
  *
  * Stubbed sources (mock until BLS key wired):
  * - BLS QCEW open-data CSV (industry employment + wages, county)
@@ -18,6 +21,7 @@
 import { detectStateFromCoords } from './solarAverages';
 import { geocodeAddress } from './infraLookup';
 import { cachedFetch, TTL_LOCATION } from './requestCache';
+import { fetchQcewByCounty, fetchOewsByState } from './blsLabor';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -369,50 +373,41 @@ interface CensusGeoResolved {
 }
 
 /**
- * Census Geocoder: coords → county FIPS + CBSA/MSA. No API key required.
- * https://geocoding.geo.census.gov/geocoder/Geocoding_Services_API.html
+ * FCC Area API: coords → county FIPS + state. No API key, CORS-enabled.
+ * https://geo.fcc.gov/api/census/area
+ *
+ * MSA is not returned by the FCC API; left null. The Census Geocoder has it
+ * but blocks browser fetches via CORS, so MSA resolution needs a server proxy.
  */
 async function resolveGeographies(lat: number, lng: number): Promise<CensusGeoResolved> {
   const url =
-    `https://geocoding.geo.census.gov/geocoder/geographies/coordinates` +
-    `?x=${encodeURIComponent(lng)}&y=${encodeURIComponent(lat)}` +
-    `&benchmark=Public_AR_Current&vintage=Current_Current` +
-    `&layers=Counties,Metropolitan+Statistical+Areas,Micropolitan+Statistical+Areas` +
+    `https://geo.fcc.gov/api/census/area` +
+    `?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}` +
     `&format=json`;
 
   try {
     const json = await cachedFetch<{
-      result?: {
-        geographies?: {
-          Counties?: Array<{ STATE: string; COUNTY: string; NAME: string; STUSAB: string }>;
-          'Metropolitan Statistical Areas'?: Array<{ CBSA: string; NAME: string }>;
-          'Micropolitan Statistical Areas'?: Array<{ CBSA: string; NAME: string }>;
-        };
-      };
+      results?: Array<{
+        county_fips?: string;
+        county_name?: string;
+        state_code?: string;
+      }>;
     }>(
       `labor:geo:${lat.toFixed(4)},${lng.toFixed(4)}`,
       async () => {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`Census Geocoder HTTP ${res.status}`);
+        if (!res.ok) throw new Error(`FCC Area HTTP ${res.status}`);
         return res.json();
       },
       TTL_LOCATION,
     );
 
-    const geos = json.result?.geographies ?? {};
-    const countyRow = geos.Counties?.[0];
-    const msaRow = geos['Metropolitan Statistical Areas']?.[0]
-      ?? geos['Micropolitan Statistical Areas']?.[0]
-      ?? null;
-
-    const county: ResolvedCounty | null = countyRow
-      ? { fips: `${countyRow.STATE}${countyRow.COUNTY}`, name: countyRow.NAME, state: countyRow.STUSAB }
-      : null;
-    const msa: ResolvedMsa | null = msaRow
-      ? { code: msaRow.CBSA, name: msaRow.NAME }
+    const row = json.results?.[0];
+    const county: ResolvedCounty | null = row?.county_fips && row.county_name && row.state_code
+      ? { fips: row.county_fips, name: row.county_name, state: row.state_code }
       : null;
 
-    return { county, msa, state: county?.state ?? null };
+    return { county, msa: null, state: county?.state ?? null };
   } catch {
     return { county: null, msa: null, state: null };
   }
@@ -447,9 +442,9 @@ async function fetchAcsCounty(fips: string): Promise<AcsCountyStats | null> {
   const vars = [
     'DP05_0001E',
     'DP03_0001E', 'DP03_0002E', 'DP03_0004E', 'DP03_0005E', 'DP03_0009PE', 'DP03_0062E',
-    'DP02_0059E', 'DP02_0060E', 'DP02_0061E', 'DP02_0062E', 'DP02_0063E', 'DP02_0064E', 'DP02_0065E',
+    'DP02_0060E', 'DP02_0061E', 'DP02_0062E', 'DP02_0063E', 'DP02_0064E', 'DP02_0065E', 'DP02_0066E',
     'DP03_0025E', 'DP03_0019PE', 'DP03_0020PE', 'DP03_0021PE', 'DP03_0024PE',
-    'DP05_0009E', 'DP05_0010E', 'DP05_0011E', 'DP05_0012E', 'DP05_0013E', 'DP05_0014E', 'DP05_0015E', 'DP05_0024E',
+    'DP05_0008E', 'DP05_0009E', 'DP05_0010E', 'DP05_0011E', 'DP05_0012E', 'DP05_0013E', 'DP05_0014E', 'DP05_0024E',
   ].join(',');
 
   const apiKey = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_CENSUS_API_KEY;
@@ -487,13 +482,13 @@ async function fetchAcsCounty(fips: string): Promise<AcsCountyStats | null> {
     const unemploymentPct = num(get('DP03_0009PE'));
     const medianIncome = num(get('DP03_0062E'));
 
-    const eduLessThan9 = num(get('DP02_0059E'));
-    const eduSomeHs = num(get('DP02_0060E'));
-    const eduHs = num(get('DP02_0061E'));
-    const eduSomeCollege = num(get('DP02_0062E'));
-    const eduAssoc = num(get('DP02_0063E'));
-    const eduBach = num(get('DP02_0064E'));
-    const eduGrad = num(get('DP02_0065E'));
+    const eduLessThan9   = num(get('DP02_0060E'));
+    const eduSomeHs      = num(get('DP02_0061E'));
+    const eduHs          = num(get('DP02_0062E'));
+    const eduSomeCollege = num(get('DP02_0063E'));
+    const eduAssoc       = num(get('DP02_0064E'));
+    const eduBach        = num(get('DP02_0065E'));
+    const eduGrad        = num(get('DP02_0066E'));
     const eduTotal = eduLessThan9 + eduSomeHs + eduHs + eduSomeCollege + eduAssoc + eduBach + eduGrad;
     const eduDiv = eduTotal > 0 ? eduTotal : 1;
 
@@ -504,13 +499,13 @@ async function fetchAcsCounty(fips: string): Promise<AcsCountyStats | null> {
     const modeWfh = num(get('DP03_0024PE')) / 100;
     const modeOther = Math.max(0, 1 - modeCar - modeCarpool - modeTransit - modeWfh);
 
-    const age15to19 = num(get('DP05_0009E'));
-    const age20to24 = num(get('DP05_0010E'));
-    const age25to34 = num(get('DP05_0011E'));
-    const age35to44 = num(get('DP05_0012E'));
-    const age45to54 = num(get('DP05_0013E'));
-    const age55to59 = num(get('DP05_0014E'));
-    const age60to64 = num(get('DP05_0015E'));
+    const age15to19 = num(get('DP05_0008E'));
+    const age20to24 = num(get('DP05_0009E'));
+    const age25to34 = num(get('DP05_0010E'));
+    const age35to44 = num(get('DP05_0011E'));
+    const age45to54 = num(get('DP05_0012E'));
+    const age55to59 = num(get('DP05_0013E'));
+    const age60to64 = num(get('DP05_0014E'));
     const age65plus = num(get('DP05_0024E'));
     const age16to24 = age15to19 * 0.4 + age20to24;
     const age25to44 = age25to34 + age35to44;
@@ -565,9 +560,12 @@ export interface AnalyzeLaborOptions {
 
 /**
  * Run the labor pool analysis for a site.
- * Live: Census Geocoder + Census ACS 5yr.
- * Mock fallback: industries (QCEW), occupations + wages (OEWS), unemployment (LAUS)
- * — these activate when the BLS API key wiring is added in a follow-up.
+ *   FCC Area API → county FIPS + state.
+ *   Census ACS 5yr → population, labor force, unemployment, education, commute.
+ *   BLS QCEW → private-sector industry breakdown (county).
+ *   BLS OEWS → top SOC major group employment + hourly wage percentiles (state).
+ * Each source fails independently; per-source error flags drive the UI's
+ * "Estimates in use" / "Data unavailable" notices.
  */
 export async function analyzeLabor(opts: AnalyzeLaborOptions): Promise<LaborAnalysisResult> {
   let lat = opts.coordinates?.lat;
@@ -592,9 +590,11 @@ export async function analyzeLabor(opts: AnalyzeLaborOptions): Promise<LaborAnal
   // 2. Start with the seed mock so any field we don't fetch live still has data
   const base = buildMockResult({ lat, lng, state: detectedState });
 
-  // 3. Override the resolved geos with the real ones from Census Geocoder
-  if (geo.county) base.resolvedCounty = geo.county;
-  if (geo.msa)    base.resolvedMsa = geo.msa;
+  // 3. Replace seed geos with what FCC resolved. We overwrite unconditionally
+  //    (even with null) so the seed's "Dimmit County / Eagle Pass MSA" labels
+  //    never leak through when geo resolution fails or MSA is unavailable.
+  base.resolvedCounty = geo.county;
+  base.resolvedMsa = geo.msa;
   base.detectedState = detectedState;
 
   // 4. Fetch live ACS data for the county
@@ -614,22 +614,6 @@ export async function analyzeLabor(opts: AnalyzeLaborOptions): Promise<LaborAnal
         meanTravelTimeMinutes: acs.meanCommuteMinutes,
         modeShare: acs.modeShare,
       };
-      // Re-derive industry / occupation employment counts off the real employed total
-      const realEmployed = acs.laborForce.employed;
-      if (realEmployed > 0) {
-        const totalMockEmployed = base.industries.reduce((s, r) => s + r.employed, 0) || 1;
-        base.industries = base.industries.map((r) => ({
-          ...r,
-          employed: Math.round((r.employed / totalMockEmployed) * realEmployed),
-        }));
-        const totalMockOccEmployed = base.wagesByOccupation.reduce((s, r) => s + (r.employed ?? 0), 0) || 1;
-        base.wagesByOccupation = base.wagesByOccupation.map((r) => ({
-          ...r,
-          employed: r.employed != null
-            ? Math.round((r.employed / totalMockOccEmployed) * realEmployed)
-            : r.employed,
-        }));
-      }
     } else {
       base.acsError = 'Census ACS lookup failed; showing seed estimates.';
     }
@@ -637,9 +621,50 @@ export async function analyzeLabor(opts: AnalyzeLaborOptions): Promise<LaborAnal
     base.acsError = 'Could not resolve county for these coordinates.';
   }
 
-  // 5. TODO: Wire BLS QCEW, BLS LAUS, BLS OEWS once VITE_BLS_API_KEY is configured.
-  base.qcewError = 'BLS QCEW not yet wired — industry rows are seed estimates.';
-  base.oewsError = 'BLS OEWS not yet wired — occupational wages are seed estimates.';
+  // 5. Fetch real BLS data for industries (QCEW, county-level) and
+  //    occupations + wages (OEWS, state-level). Both via the BLS Public Data
+  //    API, which is CORS-enabled. Fallbacks: empty rows + an error flag, so
+  //    the UI shows an explicit "data unavailable" notice rather than seeds.
+  const stateFips = geo.county?.fips.slice(0, 2) ?? null;
+  const [qcewSettled, oewsSettled] = await Promise.allSettled([
+    geo.county ? fetchQcewByCounty(geo.county.fips) : Promise.reject(new Error('no county resolved')),
+    stateFips ? fetchOewsByState(stateFips) : Promise.reject(new Error('no state resolved')),
+  ]);
+
+  if (qcewSettled.status === 'fulfilled' && qcewSettled.value.rows.length > 0) {
+    base.industries = qcewSettled.value.rows.map((r) => ({
+      naicsCode: r.code,
+      naicsName: r.name,
+      employed: r.employed ?? 0,
+      avgWeeklyWage: r.avgWeeklyWage,
+      establishments: null,
+    }));
+    base.vintages.qcew = qcewSettled.value.vintage;
+    delete base.qcewError;
+  } else {
+    base.industries = [];
+    base.qcewError = qcewSettled.status === 'rejected'
+      ? `BLS QCEW request failed: ${(qcewSettled.reason as Error).message}`
+      : 'BLS QCEW returned no industry data for this county.';
+  }
+
+  if (oewsSettled.status === 'fulfilled' && oewsSettled.value.rows.length > 0) {
+    base.wagesByOccupation = oewsSettled.value.rows.map((r) => ({
+      socCode: r.socCode,
+      socName: r.socName,
+      employed: r.employed,
+      wages: r.wages,
+      geographyUsed: 'state' as const,
+      suppressed: r.suppressed,
+    }));
+    base.vintages.oews = oewsSettled.value.vintage;
+    delete base.oewsError;
+  } else {
+    base.wagesByOccupation = [];
+    base.oewsError = oewsSettled.status === 'rejected'
+      ? `BLS OEWS request failed: ${(oewsSettled.reason as Error).message}`
+      : 'BLS OEWS returned no occupation data for this state.';
+  }
 
   return base;
 }
