@@ -136,6 +136,39 @@ function Row({ tag, value, width, accent = false }: { tag: string; value: string
   );
 }
 
+// ── Data source notices (failed sources + seed-estimate flags) ─────────────
+
+function DataSourceNotices({ result }: { result: LaborAnalysisResult }) {
+  const hard: string[] = [];
+  const soft: string[] = [];
+  if (result.acsError) hard.push(result.acsError);
+  if (result.qcewError) soft.push(result.qcewError);
+  if (result.oewsError) soft.push(result.oewsError);
+  if (result.lausError) soft.push(result.lausError);
+  if (hard.length === 0 && soft.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {hard.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-xs font-semibold text-red-800 mb-1">Data unavailable</p>
+          <ul className="text-xs text-red-800 space-y-0.5">
+            {hard.map((m, i) => <li key={i}>· {m}</li>)}
+          </ul>
+        </div>
+      )}
+      {soft.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-semibold text-amber-900 mb-1">Estimates in use</p>
+          <ul className="text-xs text-amber-900 space-y-0.5">
+            {soft.map((m, i) => <li key={i}>· {m}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Geography header (county + MSA the data covers) ────────────────────────
 
 function GeographyHeader({ result }: { result: LaborAnalysisResult }) {
@@ -152,6 +185,14 @@ function GeographyHeader({ result }: { result: LaborAnalysisResult }) {
 
 function PoolSummarySection({ result }: { result: LaborAnalysisResult }) {
   const { laborForce, population, unemploymentRate, medianHouseholdIncome, benchmarks } = result;
+
+  if (result.acsError) {
+    return (
+      <SectionCard title="Pool Summary">
+        <p className="text-sm text-[#7A756E] italic">Data unavailable for this county.</p>
+      </SectionCard>
+    );
+  }
 
   return (
     <SectionCard title="Pool Summary">
@@ -208,11 +249,18 @@ function PoolSummarySection({ result }: { result: LaborAnalysisResult }) {
 // ── Section: Workers by Industry ────────────────────────────────────────────
 
 function IndustriesSection({ industries }: { industries: IndustryRow[] }) {
+  if (industries.length === 0) {
+    return (
+      <SectionCard title="Workers by Industry" subtitle="Private-sector employment by NAICS supersector (BLS QCEW)">
+        <p className="text-sm text-[#7A756E] italic">Data unavailable for this county.</p>
+      </SectionCard>
+    );
+  }
   const total = industries.reduce((sum, r) => sum + r.employed, 0);
   const max = Math.max(...industries.map((r) => r.employed), 1);
 
   return (
-    <SectionCard title="Workers by Industry">
+    <SectionCard title="Workers by Industry" subtitle="Private-sector employment by NAICS supersector (BLS QCEW)">
       <div className="space-y-2">
         {industries.map((row) => {
           const share = total > 0 ? row.employed / total : 0;
@@ -241,52 +289,24 @@ function IndustriesSection({ industries }: { industries: IndustryRow[] }) {
   );
 }
 
-// ── Section: Workers by Occupation ──────────────────────────────────────────
-
-function OccupationsBarsSection({ occupations }: { occupations: OccupationRow[] }) {
-  const employed = occupations.filter((o) => o.employed != null);
-  const total = employed.reduce((sum, r) => sum + (r.employed ?? 0), 0);
-  const max = Math.max(...employed.map((r) => r.employed ?? 0), 1);
-
-  return (
-    <SectionCard title="Workers by Occupation">
-      <div className="space-y-2">
-        {employed.map((row) => {
-          const share = total > 0 ? (row.employed ?? 0) / total : 0;
-          return (
-            <div key={row.socCode} className="flex items-center gap-3">
-              <span className="w-56 shrink-0 text-sm text-[#201F1E] truncate" title={row.socName}>
-                {row.socName}
-              </span>
-              <div className="flex-1 h-3 rounded-full bg-stone-100 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-stone-500/70"
-                  style={{ width: `${((row.employed ?? 0) / max) * 100}%` }}
-                />
-              </div>
-              <span className="w-16 shrink-0 text-right text-sm font-medium text-[#201F1E]">
-                {fmtNum(row.employed)}
-              </span>
-              <span className="w-12 shrink-0 text-right text-xs text-[#7A756E]">
-                {(share * 100).toFixed(0)}%
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </SectionCard>
-  );
-}
-
 // ── Section: Education Distribution ─────────────────────────────────────────
 
 function EducationSection({
   education,
   benchmarks,
+  unavailable,
 }: {
   education: EducationDistribution;
   benchmarks: { state: LaborBenchmark; national: LaborBenchmark };
+  unavailable?: boolean;
 }) {
+  if (unavailable) {
+    return (
+      <SectionCard title="Education Distribution">
+        <p className="text-sm text-[#7A756E] italic">Data unavailable for this county.</p>
+      </SectionCard>
+    );
+  }
   const rows: Array<{ key: keyof EducationDistribution; label: string }> = [
     { key: 'noHs',         label: 'No high school' },
     { key: 'hs',           label: 'High school' },
@@ -334,7 +354,14 @@ function EducationSection({
 
 // ── Section: Commute ────────────────────────────────────────────────────────
 
-function CommuteSection({ commute }: { commute: LaborAnalysisResult['commute'] }) {
+function CommuteSection({ commute, unavailable }: { commute: LaborAnalysisResult['commute']; unavailable?: boolean }) {
+  if (unavailable) {
+    return (
+      <SectionCard title="Commute Patterns">
+        <p className="text-sm text-[#7A756E] italic">Data unavailable for this county.</p>
+      </SectionCard>
+    );
+  }
   const modes: Array<{ key: keyof typeof commute.modeShare; label: string }> = [
     { key: 'car',     label: 'Car (alone)' },
     { key: 'carpool', label: 'Carpool' },
@@ -375,9 +402,16 @@ function CommuteSection({ commute }: { commute: LaborAnalysisResult['commute'] }
 // ── Section: Wages by Occupation ────────────────────────────────────────────
 
 function WagesSection({ rows, msaName }: { rows: OccupationRow[]; msaName: string | null }) {
+  if (rows.length === 0) {
+    return (
+      <SectionCard title="Wages by Occupation" subtitle="Hourly wage percentiles (BLS OEWS)">
+        <p className="text-sm text-[#7A756E] italic">Data unavailable for this state.</p>
+      </SectionCard>
+    );
+  }
   const subtitle = msaName
     ? `Hourly wage percentiles, ${msaName} MSA. Falls back to state when an MSA cell is suppressed.`
-    : 'Hourly wage percentiles. Geography level shown per row.';
+    : 'Hourly wage percentiles, state level (BLS OEWS).';
   return (
     <SectionCard title="Wages by Occupation" subtitle={subtitle}>
       <div className="overflow-x-auto -mx-1">
@@ -431,11 +465,15 @@ export default function LaborReport({ result }: { result: LaborAnalysisResult })
   return (
     <div className="space-y-4">
       <GeographyHeader result={result} />
+      <DataSourceNotices result={result} />
       <PoolSummarySection result={result} />
       <IndustriesSection industries={result.industries} />
-      <OccupationsBarsSection occupations={result.wagesByOccupation} />
-      <EducationSection education={result.education} benchmarks={result.benchmarks} />
-      <CommuteSection commute={result.commute} />
+      <EducationSection
+        education={result.education}
+        benchmarks={result.benchmarks}
+        unavailable={!!result.acsError}
+      />
+      <CommuteSection commute={result.commute} unavailable={!!result.acsError} />
       <WagesSection rows={result.wagesByOccupation} msaName={result.resolvedMsa?.name ?? null} />
     </div>
   );

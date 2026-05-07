@@ -1736,10 +1736,6 @@ function LaborPage({ data }: { data: SiteAnalysisPdfData }) {
   const indMax = Math.max(...industries.map((r) => r.employed), 1);
   const indTotal = industries.reduce((sum, r) => sum + r.employed, 0);
 
-  const occupations = labor.wagesByOccupation.filter((o) => o.employed != null);
-  const occMax = Math.max(...occupations.map((r) => r.employed ?? 0), 1);
-  const occTotal = occupations.reduce((sum, r) => sum + (r.employed ?? 0), 0);
-
   const eduRows: Array<{ key: keyof typeof labor.education; label: string }> = [
     { key: 'noHs',        label: 'No high school' },
     { key: 'hs',          label: 'High school' },
@@ -1772,38 +1768,48 @@ function LaborPage({ data }: { data: SiteAnalysisPdfData }) {
 
       {/* Pool Summary */}
       <Text style={s.subsectionTitle}>Pool Summary</Text>
-      <Text style={{ ...heading, fontSize: 18, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1.15, marginBottom: 2 }}>
-        {fmtNumLocal(labor.laborForce.total)}
-      </Text>
-      <Text style={{ ...body, fontSize: 8.5, color: TEXT_MUTED, marginBottom: 10, lineHeight: 1.3 }}>
-        workers in the labor force · out of {fmtNumLocal(labor.population.total)} residents
-      </Text>
-
-      <KvRow label="Population" value={`${fmtNumLocal(labor.population.total)} (${fmtNumLocal(labor.population.workingAge16Plus)} working-age 16+)`} />
-      <KvRow label="Employed" value={`${fmtNumLocal(labor.laborForce.employed)} (${fmtNumLocal(labor.laborForce.unemployed)} unemployed)`} />
-      <KvRow label="Unemployment" value={`${fmtPctRaw(labor.unemploymentRate.current)} (${labor.unemploymentRate.vintage})`} />
-      <KvRow label="Median Household Income" value={fmtMoneyShort(labor.medianHouseholdIncome)} />
-
-      <View style={{ marginTop: 10 }}>
-        <CompareBars
-          title="Labor force participation rate"
-          county={labor.laborForce.participationRate}
-          state={labor.benchmarks.state.laborForceParticipationRate}
-          national={labor.benchmarks.national.laborForceParticipationRate}
-          format="pct-fraction"
-        />
-        <CompareBars
-          title="Unemployment rate"
-          county={labor.unemploymentRate.current}
-          state={labor.benchmarks.state.unemploymentRate}
-          national={labor.benchmarks.national.unemploymentRate}
-          format="pct-raw"
-        />
-      </View>
+      {labor.acsError ? (
+        <Text style={{ ...body, fontSize: 9, fontStyle: 'italic', color: TEXT_MUTED, marginBottom: 10 }}>
+          Data unavailable for this county.
+        </Text>
+      ) : (
+        <>
+          <Text style={{ ...heading, fontSize: 18, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1.15, marginBottom: 2 }}>
+            {fmtNumLocal(labor.laborForce.total)}
+          </Text>
+          <Text style={{ ...body, fontSize: 8.5, color: TEXT_MUTED, marginBottom: 10, lineHeight: 1.3 }}>
+            workers in the labor force · out of {fmtNumLocal(labor.population.total)} residents
+          </Text>
+          <KvRow label="Population" value={`${fmtNumLocal(labor.population.total)} (${fmtNumLocal(labor.population.workingAge16Plus)} working-age 16+)`} />
+          <KvRow label="Employed" value={`${fmtNumLocal(labor.laborForce.employed)} (${fmtNumLocal(labor.laborForce.unemployed)} unemployed)`} />
+          <KvRow label="Unemployment" value={`${fmtPctRaw(labor.unemploymentRate.current)} (${labor.unemploymentRate.vintage})`} />
+          <KvRow label="Median Household Income" value={fmtMoneyShort(labor.medianHouseholdIncome)} />
+          <View style={{ marginTop: 10 }}>
+            <CompareBars
+              title="Labor force participation rate"
+              county={labor.laborForce.participationRate}
+              state={labor.benchmarks.state.laborForceParticipationRate}
+              national={labor.benchmarks.national.laborForceParticipationRate}
+              format="pct-fraction"
+            />
+            <CompareBars
+              title="Unemployment rate"
+              county={labor.unemploymentRate.current}
+              state={labor.benchmarks.state.unemploymentRate}
+              national={labor.benchmarks.national.unemploymentRate}
+              format="pct-raw"
+            />
+          </View>
+        </>
+      )}
 
       {/* Workers by Industry */}
       <Text style={s.subsectionTitle}>Workers by Industry</Text>
-      {industries.map((r) => {
+      {industries.length === 0 ? (
+        <Text style={{ ...body, fontSize: 9, fontStyle: 'italic', color: TEXT_MUTED, marginBottom: 10 }}>
+          Data unavailable for this county.
+        </Text>
+      ) : industries.map((r) => {
         const share = indTotal > 0 ? r.employed / indTotal : 0;
         return (
           <View key={r.naicsCode} style={barRow}>
@@ -1817,49 +1823,47 @@ function LaborPage({ data }: { data: SiteAnalysisPdfData }) {
         );
       })}
 
-      {/* Workers by Occupation */}
-      <Text style={s.subsectionTitle}>Workers by Occupation</Text>
-      {occupations.map((r) => {
-        const share = occTotal > 0 ? (r.employed ?? 0) / occTotal : 0;
-        return (
-          <View key={r.socCode} style={barRow}>
-            <Text style={barLabel}>{r.socName}</Text>
-            <View style={barTrack}>
-              <View style={barFillGray(`${((r.employed ?? 0) / occMax) * 100}%`)} />
-            </View>
-            <Text style={barValue}>{fmtNumLocal(r.employed)}</Text>
-            <Text style={barShare}>{(share * 100).toFixed(0)}%</Text>
-          </View>
-        );
-      })}
-
       {/* Education */}
       <Text style={s.subsectionTitle}>Education Distribution</Text>
-      {eduRows.map((r) => {
-        const v = labor.education[r.key] ?? 0;
-        return (
-          <View key={r.key} style={barRow}>
-            <Text style={barLabel}>{r.label}</Text>
-            <View style={barTrack}>
-              <View style={barFillRed(`${(v / eduMax) * 100}%`)} />
-            </View>
-            <Text style={barValue}>{fmtPctFrac(v, 0)}</Text>
-            <Text style={barShare}> </Text>
+      {labor.acsError ? (
+        <Text style={{ ...body, fontSize: 9, fontStyle: 'italic', color: TEXT_MUTED, marginBottom: 10 }}>
+          Data unavailable for this county.
+        </Text>
+      ) : (
+        <>
+          {eduRows.map((r) => {
+            const v = labor.education[r.key] ?? 0;
+            return (
+              <View key={r.key} style={barRow}>
+                <Text style={barLabel}>{r.label}</Text>
+                <View style={barTrack}>
+                  <View style={barFillRed(`${(v / eduMax) * 100}%`)} />
+                </View>
+                <Text style={barValue}>{fmtPctFrac(v, 0)}</Text>
+                <Text style={barShare}> </Text>
+              </View>
+            );
+          })}
+          <View style={{ marginTop: 6 }}>
+            <CompareBars
+              title="Bachelor's degree or higher"
+              county={countyBach}
+              state={labor.benchmarks.state.educationBachelorPlus}
+              national={labor.benchmarks.national.educationBachelorPlus}
+              format="pct-fraction"
+            />
           </View>
-        );
-      })}
-      <View style={{ marginTop: 6 }}>
-        <CompareBars
-          title="Bachelor's degree or higher"
-          county={countyBach}
-          state={labor.benchmarks.state.educationBachelorPlus}
-          national={labor.benchmarks.national.educationBachelorPlus}
-          format="pct-fraction"
-        />
-      </View>
+        </>
+      )}
 
       {/* Commute */}
       <Text style={s.subsectionTitle}>Commute Patterns</Text>
+      {labor.acsError ? (
+        <Text style={{ ...body, fontSize: 9, fontStyle: 'italic', color: TEXT_MUTED, marginBottom: 10 }}>
+          Data unavailable for this county.
+        </Text>
+      ) : (
+        <>
       <Text style={{ ...body, fontSize: 8.5, color: TEXT_MUTED, marginBottom: 6 }}>
         Mean travel time · <Text style={{ color: TEXT_PRIMARY, fontWeight: 600 }}>
           {labor.commute.meanTravelTimeMinutes.toFixed(1)} min
@@ -1878,9 +1882,16 @@ function LaborPage({ data }: { data: SiteAnalysisPdfData }) {
           </View>
         );
       })}
+        </>
+      )}
 
       {/* Wages by Occupation */}
       <Text style={s.subsectionTitle}>Wages by Occupation (hourly)</Text>
+      {labor.wagesByOccupation.length === 0 ? (
+        <Text style={{ ...body, fontSize: 9, fontStyle: 'italic', color: TEXT_MUTED, marginBottom: 10 }}>
+          Data unavailable for this state.
+        </Text>
+      ) : (
       <View style={s.table}>
         <View style={s.tableHeaderRow}>
           <Text style={[s.tableHeaderCell, { width: '36%' }]}>Occupation</Text>
@@ -1913,6 +1924,7 @@ function LaborPage({ data }: { data: SiteAnalysisPdfData }) {
           </View>
         ))}
       </View>
+      )}
 
       <PageFooter />
     </Page>
