@@ -99,18 +99,30 @@ async function fetchBillPage(
   offset: number,
   fromDateTime: string | null,
 ): Promise<CongressApiResponse> {
-  const params = new URLSearchParams({
-    api_key: apiKey,
-    limit: String(PAGE_SIZE),
-    offset: String(offset),
-    sort: 'updateDate+desc',
-    format: 'json',
-  });
-  if (fromDateTime) params.set('fromDateTime', fromDateTime);
-  const url = `https://api.congress.gov/v3/bill/${CURRENT_CONGRESS}/${billType}?${params.toString()}`;
+  // Congress.gov sits behind api.data.gov, which only accepts the API key as
+  // an `api_key` query parameter — the X-Api-Key header is rejected with a
+  // generic "API_KEY_MISSING" 403. Build the querystring by hand because
+  // URLSearchParams encodes `+` as `%2B`, and the only param that ever needs
+  // a `+` (sort grammar) is omitted here anyway — sort doesn't matter since
+  // we filter every row client-side.
+  const qs = [
+    `api_key=${encodeURIComponent(apiKey)}`,
+    `limit=${PAGE_SIZE}`,
+    `offset=${offset}`,
+    'format=json',
+  ];
+  if (fromDateTime) qs.push(`fromDateTime=${encodeURIComponent(fromDateTime)}`);
+  const url = `https://api.congress.gov/v3/bill/${CURRENT_CONGRESS}/${billType}?${qs.join('&')}`;
+
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    // Redact the api_key from the logged URL — Cloud Logging is ACL'd but
+    // there's no reason to leave the secret in retained log lines.
+    const safeUrl = url.replace(/api_key=[^&]*/, 'api_key=REDACTED');
+    logger.warn(
+      `refreshFederalBills: ${billType} ${res.status} — ${safeUrl} — body: ${body.slice(0, 400)}`,
+    );
     throw new Error(`Congress.gov ${billType} ${res.status}: ${body.slice(0, 200)}`);
   }
   return (await res.json()) as CongressApiResponse;
@@ -161,8 +173,12 @@ export const refreshFederalBills = onSchedule(
     const metaRef = db.doc(META_DOC);
     const metaSnap = await metaRef.get();
     const meta = metaSnap.exists ? (metaSnap.data() as { lastRunAt?: number }) : {};
+    // Congress.gov fromDateTime requires second-precision ISO (e.g.
+    // 2026-05-07T21:01:28Z). toISOString() always emits fractional seconds
+    // ("...062Z"), which the gateway silently treats as no match — request
+    // returns 200 with an empty bills array. Strip the fractional component.
     const fromDateTime = meta.lastRunAt
-      ? new Date(meta.lastRunAt - 24 * 60 * 60 * 1000).toISOString().replace('.000Z', 'Z')
+      ? new Date(meta.lastRunAt - 24 * 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, 'Z')
       : null;
     const mode = fromDateTime ? `incremental (since ${fromDateTime})` : 'full backfill';
     logger.info(`refreshFederalBills: starting ${mode}`);

@@ -149,12 +149,18 @@ async function fetchAllMembers(apiKey: string): Promise<MemberListRow[]> {
   const all: MemberListRow[] = [];
   let offset = 0;
   while (true) {
+    // api.data.gov gateway only accepts the key as the `api_key` query param;
+    // X-Api-Key header returns 403 API_KEY_MISSING.
     const url =
       `https://api.congress.gov/v3/member/congress/${CURRENT_CONGRESS}` +
-      `?api_key=${apiKey}&limit=${PAGE_SIZE}&offset=${offset}&format=json`;
+      `?api_key=${encodeURIComponent(apiKey)}&limit=${PAGE_SIZE}&offset=${offset}&format=json`;
     const res = await fetch(url);
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      const safeUrl = url.replace(/api_key=[^&]*/, 'api_key=REDACTED');
+      logger.warn(
+        `refreshFederalOfficials: list ${res.status} — ${safeUrl} — body: ${body.slice(0, 400)}`,
+      );
       throw new Error(`Congress.gov member list ${res.status}: ${body.slice(0, 200)}`);
     }
     const data = (await res.json()) as MemberListResponse;
@@ -173,7 +179,7 @@ async function fetchDetail(
   bioguideId: string,
 ): Promise<{ phone: string | null; url: string | null; party: string | null }> {
   try {
-    const url = `https://api.congress.gov/v3/member/${bioguideId}?api_key=${apiKey}&format=json`;
+    const url = `https://api.congress.gov/v3/member/${bioguideId}?api_key=${encodeURIComponent(apiKey)}&format=json`;
     const res = await fetch(url);
     if (!res.ok) return { phone: null, url: null, party: null };
     const data = (await res.json()) as MemberDetailResponse;
