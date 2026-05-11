@@ -133,9 +133,7 @@ export function useSiteAnalysis() {
 
       // Section 2: Infrastructure — if the caller passed `existing.infra`,
       // trust it. Locks are explicit user intent ("don't re-roll this");
-      // the orchestrator must not second-guess them. The
-      // `isInfraResultMeaningful` heuristic still exists for callers that
-      // want it, but it's no longer applied in front of an explicit value.
+      // the orchestrator must not second-guess them.
       const hasExistingInfra = !!existing?.infra;
       if (hasExistingInfra) {
         // Cast back from Record<string, unknown> — the stored format is InfrastructureData
