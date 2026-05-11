@@ -52,7 +52,7 @@ export default function DetailHeader({
   const lastDate = formatDate(lastAnalyzedAt);
 
   return (
-    <div className="mb-5">
+    <div className="mb-3">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-2">
         <div className="min-w-0 flex-1">
           <h1 className="font-heading text-2xl font-semibold text-[#201F1E] truncate">

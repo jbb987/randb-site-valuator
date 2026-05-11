@@ -749,17 +749,22 @@ async function queryNearestCountyTech(
 ): Promise<number | null> {
   const servedField = tech === 'Fiber' ? 'ServedBSLsFiber' : 'ServedBSLsCable';
   const underservedField = tech === 'Fiber' ? 'UnderservedBSLsFiber' : 'UnderservedBSLsCable';
+  const providersField = tech === 'Fiber' ? 'UniqueProvidersFiber' : 'UniqueProvidersCable';
   const key = `bdc:nearest${tech}:${lat.toFixed(4)},${lng.toFixed(4)}`;
   return cachedFetch(
     key,
     async () => {
       // Search the entire county for blocks with this technology, then pick the
-      // nearest by haversine. No radius envelope — we want to find cable/fiber
-      // anywhere in the county, however far.
+      // nearest by haversine. The original where-clause required Served/
+      // Underserved BSL counts > 0, but the BDC dataset can list a provider
+      // that hasn't yet translated into BSL counts in a given block — that
+      // produced silent nulls for sites like Asherton where the county-table
+      // showed fiber providers but no block had `ServedBSLsFiber > 0`. The
+      // `UniqueProviders*` field catches those cases.
       const where =
         `(GEOID LIKE '${countyFips}%' OR geoid20 LIKE '${countyFips}%')` +
-        ` AND (${servedField} > 0 OR ${underservedField} > 0)`;
-      const outFields = `GEOID,${servedField},${underservedField}`;
+        ` AND (${servedField} > 0 OR ${underservedField} > 0 OR ${providersField} > 0)`;
+      const outFields = `GEOID,${servedField},${underservedField},${providersField}`;
       const url =
         `${svcUrl}/${BLOCK_LAYER}/query?` +
         `where=${encodeURIComponent(where)}` +
@@ -793,8 +798,15 @@ async function queryNearestCountyTech(
           // Must be in the same county (first 5 chars of GEOID = county FIPS)
           if (!geoid.startsWith(countyFips)) continue;
 
-          // Must have the requested technology
-          if (num(a, servedField) === 0 && num(a, underservedField) === 0) continue;
+          // Must have the requested technology — accept either BSL counts
+          // OR a UniqueProviders count (the latter catches blocks where the
+          // BDC dataset records a provider but BSL counts haven't propagated).
+          if (
+            num(a, servedField) === 0 &&
+            num(a, underservedField) === 0 &&
+            num(a, providersField) === 0
+          )
+            continue;
 
           const rings: number[][][] | undefined = f.geometry?.rings;
           if (rings && rings.length > 0) {

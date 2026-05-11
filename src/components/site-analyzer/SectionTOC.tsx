@@ -102,7 +102,7 @@ export default function SectionTOC({ sections, activeId, onSelect, onToggleLock 
                     onToggleLock(s.id);
                   }}
                   title={s.locked ? 'Locked — click to unlock and re-run' : 'Click to lock'}
-                  className={`p-1 rounded-full transition ${
+                  className={`p-1.5 rounded-full transition ${
                     active ? 'hover:bg-white/15' : 'hover:bg-stone-100'
                   }`}
                   aria-label={s.locked ? 'Unlock section' : 'Lock section'}

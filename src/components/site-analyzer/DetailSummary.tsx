@@ -34,7 +34,7 @@ export default function DetailSummary({ site, companyName }: Props) {
         : null;
 
   return (
-    <section className="bg-white rounded-2xl border border-[#D8D5D0] p-4 sm:p-5 mb-5">
+    <section className="bg-white rounded-2xl border border-[#D8D5D0] p-4 sm:p-5">
       <h2 className="font-heading text-base font-semibold text-[#201F1E] mb-3">Site details</h2>
 
       <div className="divide-y divide-[#F0EEEB]">

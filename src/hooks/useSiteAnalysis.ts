@@ -53,35 +53,6 @@ export interface ExistingResults {
 
 const VALUE_PER_MW = 3_000_000;
 
-/**
- * A previous Infrastructure result is only worth reusing if it has at least
- * one piece of meaningful data. An all-empty / "Not Available" payload means
- * the original lookup failed silently, so we should re-fetch instead of
- * caching the broken state forever.
- */
-function isInfraResultMeaningful(infra: Record<string, unknown> | null | undefined): boolean {
-  if (!infra) return false;
-  const data = infra as Partial<InfrastructureData>;
-
-  const hasIso = !!data.iso && data.iso !== 'Not Available';
-  const hasUtility = !!data.utilityTerritory && data.utilityTerritory !== 'Not Available';
-  const hasTsp = !!data.tsp && data.tsp !== 'Not Available';
-  const hasSubs = Array.isArray(data.nearbySubstations) && data.nearbySubstations.length > 0;
-  const hasLines = Array.isArray(data.nearbyLines) && data.nearbyLines.length > 0;
-  const hasPlants = Array.isArray(data.nearbyPowerPlants) && data.nearbyPowerPlants.length > 0;
-  const hasSolar =
-    !!data.solarWind &&
-    ((typeof data.solarWind.ghi === 'number' && data.solarWind.ghi > 0) ||
-      (typeof data.solarWind.windSpeed === 'number' && data.solarWind.windSpeed > 0));
-
-  const hasStateGen =
-    !!data.stateGenerationByFuel && Object.keys(data.stateGenerationByFuel).length > 0;
-
-  return (
-    (hasIso || hasUtility || hasTsp || hasSubs || hasLines || hasPlants || hasSolar) && hasStateGen
-  );
-}
-
 function computeAppraisal(inputs: AnalysisInputs): AppraisalResult {
   const currentValueLow = inputs.acreage * inputs.ppaLow;
   const currentValueHigh = inputs.acreage * inputs.ppaHigh;
@@ -160,10 +131,12 @@ export function useSiteAnalysis() {
         setAppraisal({ loading: false, error: 'Failed to compute appraisal', data: null });
       }
 
-      // Section 2: Infrastructure — reuse only if the cached payload actually has
-      // useful data. An all-empty / "Not Available" result from a prior failed
-      // lookup must NOT short-circuit the re-fetch.
-      const hasExistingInfra = isInfraResultMeaningful(existing?.infra);
+      // Section 2: Infrastructure — if the caller passed `existing.infra`,
+      // trust it. Locks are explicit user intent ("don't re-roll this");
+      // the orchestrator must not second-guess them. The
+      // `isInfraResultMeaningful` heuristic still exists for callers that
+      // want it, but it's no longer applied in front of an explicit value.
+      const hasExistingInfra = !!existing?.infra;
       if (hasExistingInfra) {
         // Cast back from Record<string, unknown> — the stored format is InfrastructureData
         setInfra({
@@ -285,22 +258,13 @@ export function useSiteAnalysis() {
             }
           })();
 
-      // Section 5: Water — accretive re-fetch.
-      // If all sub-sections already succeeded, skip entirely. Otherwise pass the
-      // existing data into analyzeWater so it only re-runs the failed sub-sections
-      // and preserves the ones that worked last time.
+      // Section 5: Water — if `existing.water` is provided, trust it. The
+      // older accretive-retry behavior (re-run any sub-section whose stored
+      // error was truthy) silently overrode the lock signal — the user's
+      // explicit "skip this" was being second-guessed by stored FEMA / NWI
+      // errors from a previous run. Lock semantics win.
       const waterExisting = existing?.water as Partial<WaterAnalysisResult> | undefined;
-      const waterHasStoredError =
-        !!waterExisting &&
-        (!!waterExisting.floodZoneError ||
-          !!waterExisting.streamError ||
-          !!waterExisting.wetlandsError ||
-          !!waterExisting.groundwaterError ||
-          !!waterExisting.droughtError ||
-          !!waterExisting.dischargePermitsError ||
-          !!waterExisting.precipitationError);
-      const hasExistingWater =
-        !!waterExisting && Object.keys(waterExisting).length > 0 && !waterHasStoredError;
+      const hasExistingWater = !!waterExisting && Object.keys(waterExisting).length > 0;
       if (hasExistingWater) {
         setWater({ loading: false, error: null, data: waterExisting as WaterAnalysisResult });
       } else if (waterExisting) {
@@ -392,14 +356,13 @@ export function useSiteAnalysis() {
           })();
 
       // Section 8: Political Radar — federal layer + 4 stubs.
-      // Cached results are reused if present and look complete (federal layer
-      // populated). Otherwise the fetch runs from scratch; the federal
-      // orchestrator has its own Firestore-side cache so re-fetches are cheap.
+      // If `existing.political` is provided, trust it (lock semantics).
+      // The Firestore-side cache in the federal orchestrator still makes
+      // unlocked refetches cheap.
       const politicalExisting = existing?.political as
         | Partial<PoliticalRadarResult>
         | undefined;
-      const hasExistingPolitical =
-        !!politicalExisting && !!politicalExisting.layers?.federal?.data;
+      const hasExistingPolitical = !!politicalExisting;
       if (hasExistingPolitical) {
         setPolitical({
           loading: false,

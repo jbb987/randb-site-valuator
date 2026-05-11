@@ -36,7 +36,8 @@ import {
   type AnalysisResultsPayload,
 } from '../lib/siteRegistry';
 import { parseCoordinates } from '../utils/parseCoordinates';
-import type { ExistingResults } from '../hooks/useSiteAnalysis';
+import { getSectionHealth } from '../lib/siteAnalysis/sectionHealth';
+import type { AnalysisSectionState, ExistingResults } from '../hooks/useSiteAnalysis';
 import type {
   Company,
   FilteredCompResult,
@@ -221,18 +222,32 @@ export default function SiteAnalyzerDetail() {
     if (report.political.data)
       payload.politicalResult = report.political.data as unknown as Record<string, unknown>;
 
-    // Auto-lock every section that completed successfully on this run. The
-    // user can unlock individually (or all at once) to re-run; this is what
-    // makes the "I don't want to re-roll Water just to test Political"
-    // workflow work without per-section run buttons.
+    // Auto-(un)lock based on per-section health. Only sections that ACTUALLY
+    // RAN this pass (i.e. were unlocked at run start) are eligible to flip
+    // lock state — locked sections were carried through with stored data
+    // and shouldn't be touched. Within ran sections:
+    //   clean   → lock (✓ green pill on next render)
+    //   partial → unlock (red pill, easy click-to-rerun)
+    //   failed  → unlock (same)
+    //   loading/pending — shouldn't reach here (effect runs after !isGenerating)
+    const startLocks = runStartLocksRef.current ?? {};
     const nextLocks: SectionLocks = { ...(site.sectionLocks ?? {}) };
-    if (report.infra.data) nextLocks.power = true;
-    if (report.broadband.data) nextLocks.broadband = true;
-    if (report.transport.data) nextLocks.transport = true;
-    if (report.water.data) nextLocks.water = true;
-    if (report.gas.data) nextLocks.gas = true;
-    if (report.labor.data) nextLocks.labor = true;
-    if (report.political.data) nextLocks.political = true;
+    const applyLockUpdate = (
+      key: LockableSectionKey,
+      section: AnalysisSectionState<unknown>,
+    ) => {
+      if (startLocks[key]) return; // was locked at run start → carried through, don't touch
+      const h = getSectionHealth(key, section);
+      if (h === 'clean') nextLocks[key] = true;
+      else if (h === 'partial' || h === 'failed') nextLocks[key] = false;
+    };
+    applyLockUpdate('power', report.infra);
+    applyLockUpdate('broadband', report.broadband);
+    applyLockUpdate('transport', report.transport);
+    applyLockUpdate('water', report.water);
+    applyLockUpdate('gas', report.gas);
+    applyLockUpdate('labor', report.labor);
+    applyLockUpdate('political', report.political);
     payload.sectionLocks = nextLocks;
 
     const wasFirstAnalysis = shouldIncrementRef.current;
@@ -330,6 +345,17 @@ export default function SiteAnalyzerDetail() {
     [site?.id, flashSaveIndicator],
   );
 
+  /**
+   * Snapshot of which sections were locked at the moment Re-analyze was
+   * pressed. The writeback effect uses it to decide which sections may have
+   * their lock state mutated post-run: only sections that *actually ran*
+   * (i.e. were unlocked at run start) are eligible to flip lock state. This
+   * prevents a clean Water run from locking a section the user manually
+   * unlocked mid-run, and avoids force-unlocking sections that were
+   * carrying through their stored data.
+   */
+  const runStartLocksRef = useRef<SectionLocks | null>(null);
+
   function handleReanalyze() {
     if (!site) return;
     const isFirstAnalysis = !site.piddrGeneratedAt;
@@ -345,6 +371,7 @@ export default function SiteAnalyzerDetail() {
     // refetch. This is what protects e.g. a working Water result while the
     // user iterates on the Political layer.
     const existing = buildExistingResults(site, site.sectionLocks);
+    runStartLocksRef.current = { ...(site.sectionLocks ?? {}) };
     shouldIncrementRef.current = isFirstAnalysis;
     writebackDoneRef.current = null;
     void report.generateReport(inputs, existing);
@@ -370,6 +397,13 @@ export default function SiteAnalyzerDetail() {
   async function handleSave(values: EditFormValues) {
     if (!site) return;
     const coords = values.coordinates.trim() ? parseCoordinates(values.coordinates) : null;
+    // If the lat/lon actually moves, every section's saved data is geo-keyed
+    // and now stale. Clear all locks so the next Re-analyze refetches them
+    // — leaving them locked would silently carry old-coords data into the
+    // new-coords result.
+    const coordsChanged =
+      (coords?.lat ?? null) !== (site.coordinates?.lat ?? null) ||
+      (coords?.lng ?? null) !== (site.coordinates?.lng ?? null);
     setSaving(true);
     try {
       await updateSiteEntry(site.id, {
@@ -385,6 +419,7 @@ export default function SiteAnalyzerDetail() {
         county: values.county || undefined,
         parcelId: values.parcelId || undefined,
         companyId: values.companyId ?? undefined,
+        ...(coordsChanged ? { sectionLocks: {} } : {}),
       });
       flashSaveIndicator();
       setEditing(false);
@@ -427,11 +462,23 @@ export default function SiteAnalyzerDetail() {
     }
   }
 
-  function getSectionState(s: { loading: boolean; error: string | null; data: unknown }) {
+  /** Status for non-lockable tabs (Overview, Valuation) — no sub-error model. */
+  function plainState(s: { loading: boolean; error: string | null; data: unknown }) {
     if (s.loading) return 'loading' as const;
     if (s.error) return 'error' as const;
     if (s.data) return 'done' as const;
     return 'pending' as const;
+  }
+  /** Status for lockable tabs — sub-errors promote to red. */
+  function healthState(
+    key: LockableSectionKey,
+    section: AnalysisSectionState<unknown>,
+  ): 'pending' | 'loading' | 'done' | 'error' {
+    const h = getSectionHealth(key, section);
+    if (h === 'loading') return 'loading';
+    if (h === 'failed' || h === 'partial') return 'error';
+    if (h === 'clean') return 'done';
+    return 'pending';
   }
 
   const tocSections = SECTIONS.map((s) => ({
@@ -441,20 +488,20 @@ export default function SiteAnalyzerDetail() {
       s.id === 'section-overview'
         ? ('done' as const)
         : s.id === 'section-valuation'
-          ? getSectionState(report.appraisal)
+          ? plainState(report.appraisal)
           : s.id === 'section-power'
-            ? getSectionState(report.infra)
+            ? healthState('power', report.infra)
             : s.id === 'section-broadband'
-              ? getSectionState(report.broadband)
+              ? healthState('broadband', report.broadband)
               : s.id === 'section-transport'
-                ? getSectionState(report.transport)
+                ? healthState('transport', report.transport)
                 : s.id === 'section-water'
-                  ? getSectionState(report.water)
+                  ? healthState('water', report.water)
                   : s.id === 'section-gas'
-                    ? getSectionState(report.gas)
+                    ? healthState('gas', report.gas)
                     : s.id === 'section-labor'
-                      ? getSectionState(report.labor)
-                      : getSectionState(report.political),
+                      ? healthState('labor', report.labor)
+                      : healthState('political', report.political),
     locked: s.lockKey ? !!site?.sectionLocks?.[s.lockKey] : undefined,
   }));
 
@@ -530,14 +577,18 @@ export default function SiteAnalyzerDetail() {
           />
         )}
 
-        {editing ? (
+        {editing && (
           <DetailEditForm
             site={site}
             saving={saving}
             onSave={handleSave}
             onCancel={() => setEditing(false)}
           />
-        ) : (
+        )}
+        {/* Site-details summary lives on the Overview tab once a report
+            exists; before the first run there are no tabs yet, so we show it
+            unconditionally so the user can review inputs before clicking Run. */}
+        {!editing && (!report.hasReport || activeTab === 'section-overview') && (
           <DetailSummary site={site} companyName={companyName} />
         )}
 
