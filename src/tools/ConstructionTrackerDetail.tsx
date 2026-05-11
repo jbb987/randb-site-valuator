@@ -56,10 +56,10 @@ export default function ConstructionTrackerDetail() {
       userId: user.uid,
       toolId: 'construction-tracker',
       routePath: path,
-      routeLabel: 'Construction — job detail',
+      routeLabel: 'Construction Projects — project detail',
       resourceType: 'job',
       resourceId: jobId,
-      resourceLabel: job.name ?? '(unnamed job)',
+      resourceLabel: job.name ?? '(unnamed project)',
     });
   }, [user, job, jobId]);
 
@@ -109,12 +109,12 @@ export default function ConstructionTrackerDetail() {
     return (
       <Layout>
         <div className="text-center py-20">
-          <p className="text-[#7A756E]">Job not found.</p>
+          <p className="text-[#7A756E]">Project not found.</p>
           <button
             onClick={() => navigate('/construction-tracker')}
             className="mt-4 text-sm font-medium text-[#ED202B] hover:underline"
           >
-            Back to Construction
+            Back to projects
           </button>
         </div>
       </Layout>
@@ -125,12 +125,12 @@ export default function ConstructionTrackerDetail() {
     return (
       <Layout>
         <div className="text-center py-20">
-          <p className="text-[#7A756E]">You don't have access to this job.</p>
+          <p className="text-[#7A756E]">You don't have access to this project.</p>
           <button
             onClick={() => navigate('/construction-tracker')}
             className="mt-4 text-sm font-medium text-[#ED202B] hover:underline"
           >
-            Back to Construction
+            Back to projects
           </button>
         </div>
       </Layout>

@@ -161,7 +161,7 @@ function BreadcrumbWithData() {
       } else {
         segments.push({ label: 'Construction Projects', path: '/construction-tracker' });
       }
-      segments.push({ label: 'New Job' });
+      segments.push({ label: 'New Project' });
     } else if (ctJobIdParam) {
       segments.push({ label: 'Construction Projects', path: '/construction-tracker' });
       segments.push({ label: jobOnPage?.name || '…' });

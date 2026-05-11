@@ -80,8 +80,21 @@ function normalizeJob(raw: Record<string, unknown>): ConstructionJob {
   const linkedCompanyIds =
     j.linkedCompanyIds ?? Array.from(new Set([...companyIds, ...subcontractorIds]));
 
+  // Spread `j` then strip the legacy fields we've already folded into the new
+  // schema, so consumers (and `JSON.stringify` dirty-checks in the edit form)
+  // never see both shapes side-by-side.
+  const {
+    linkedCompanies: _legacyLinkedCompanies,
+    generalContractorIds: _legacyGcIds,
+    generalContractorId: _legacyGcId,
+    projectManagerId: _legacyPmId,
+    projectSupervisorId: _legacySupervisorId,
+    projectManagerContactId: _legacyPmContactId,
+    ...rest
+  } = j;
+
   return {
-    ...(j as ConstructionJob),
+    ...(rest as ConstructionJob),
     companyIds,
     subcontractorIds,
     linkedCompanyIds,
