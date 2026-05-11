@@ -41,8 +41,10 @@ export function useUserHistory(limit = 50) {
       inputs?: Record<string, unknown>,
     ) => {
       if (!user) return;
-      // Dedup: skip if identical to most recent entry for this tool within 60s
-      const recent = history.find((e) => e.toolId === toolId);
+      // Dedup: skip if identical to most recent entry for this tool within 60s.
+      // Filter on `inputs` so view/login entries (same toolId, no inputs)
+      // don't mask an earlier tool-run we'd otherwise dedupe against.
+      const recent = history.find((e) => e.toolId === toolId && !!e.inputs);
       if (
         recent &&
         inputs &&
