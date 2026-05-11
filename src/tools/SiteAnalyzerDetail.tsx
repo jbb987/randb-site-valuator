@@ -32,25 +32,67 @@ import {
   saveLandCompsToSite,
   updateSiteEntry,
   deleteSiteEntry,
+  setSectionLock,
+  setAllSectionLocks,
+  allSectionsLocked,
   type AnalysisResultsPayload,
 } from '../lib/siteRegistry';
 import { parseCoordinates } from '../utils/parseCoordinates';
-import type { Company, FilteredCompResult, LandComp, SiteRegistryEntry } from '../types';
+import { getSectionHealth } from '../lib/siteAnalysis/sectionHealth';
+import type { AnalysisSectionState, ExistingResults } from '../hooks/useSiteAnalysis';
+import type {
+  Company,
+  FilteredCompResult,
+  LandComp,
+  LockableSectionKey,
+  SectionLocks,
+  SiteRegistryEntry,
+} from '../types';
+import { LOCKABLE_SECTION_KEYS } from '../types';
 
 const MW_MIN = 10;
 const MW_MAX = 1000;
 
-const SECTIONS = [
+/**
+ * Tab configuration. `lockKey` maps the tab to a lockable section key (when
+ * applicable); Overview and Valuation don't participate in the lock model.
+ */
+const SECTIONS: ReadonlyArray<{
+  id: string;
+  label: string;
+  lockKey?: LockableSectionKey;
+}> = [
   { id: 'section-overview', label: 'Overview' },
   { id: 'section-valuation', label: 'Valuation' },
-  { id: 'section-power', label: 'Power' },
-  { id: 'section-broadband', label: 'Broadband' },
-  { id: 'section-transport', label: 'Transport' },
-  { id: 'section-water', label: 'Water' },
-  { id: 'section-gas', label: 'Gas' },
-  { id: 'section-labor', label: 'Labor' },
-  { id: 'section-political', label: 'Political' },
+  { id: 'section-power', label: 'Power', lockKey: 'power' },
+  { id: 'section-broadband', label: 'Broadband', lockKey: 'broadband' },
+  { id: 'section-transport', label: 'Transport', lockKey: 'transport' },
+  { id: 'section-water', label: 'Water', lockKey: 'water' },
+  { id: 'section-gas', label: 'Gas', lockKey: 'gas' },
+  { id: 'section-labor', label: 'Labor', lockKey: 'labor' },
+  { id: 'section-political', label: 'Political', lockKey: 'political' },
 ];
+
+/**
+ * Build the `ExistingResults` payload passed into `report.generateReport`.
+ * Locked sections forward their currently-saved data so the orchestrator
+ * skips the refetch; unlocked sections omit the field, which makes the
+ * orchestrator run them. This is the core of the per-section re-run model.
+ */
+function buildExistingResults(
+  site: SiteRegistryEntry,
+  locks: SectionLocks | undefined,
+): ExistingResults {
+  const existing: ExistingResults = {};
+  if (locks?.power && site.infraResult) existing.infra = site.infraResult;
+  if (locks?.broadband && site.broadbandResult) existing.broadband = site.broadbandResult;
+  if (locks?.transport && site.transportResult) existing.transport = site.transportResult;
+  if (locks?.water && site.waterResult) existing.water = site.waterResult;
+  if (locks?.gas && site.gasResult) existing.gas = site.gasResult;
+  if (locks?.labor && site.laborResult) existing.labor = site.laborResult;
+  if (locks?.political && site.politicalResult) existing.political = site.politicalResult;
+  return existing;
+}
 
 function buildAnalysisInputs(site: SiteRegistryEntry, companies: Company[]): AnalysisInputs {
   return {
@@ -117,7 +159,7 @@ export default function SiteAnalyzerDetail() {
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('section-overview');
   const [landComps, setLandComps] = useState<LandComp[]>([]);
   const [mwOverride, setMwOverride] = useState<number | null>(null);
   const [saveVisible, setSaveVisible] = useState(false);
@@ -199,6 +241,34 @@ export default function SiteAnalyzerDetail() {
     if (report.political.data)
       payload.politicalResult = report.political.data as unknown as Record<string, unknown>;
 
+    // Auto-(un)lock based on per-section health. Only sections that ACTUALLY
+    // RAN this pass (i.e. were unlocked at run start) are eligible to flip
+    // lock state — locked sections were carried through with stored data
+    // and shouldn't be touched. Within ran sections:
+    //   clean   → lock (✓ green pill on next render)
+    //   partial → unlock (red pill, easy click-to-rerun)
+    //   failed  → unlock (same)
+    //   loading/pending — shouldn't reach here (effect runs after !isGenerating)
+    const startLocks = runStartLocksRef.current ?? {};
+    const nextLocks: SectionLocks = { ...(site.sectionLocks ?? {}) };
+    const applyLockUpdate = (
+      key: LockableSectionKey,
+      section: AnalysisSectionState<unknown>,
+    ) => {
+      if (startLocks[key]) return; // was locked at run start → carried through, don't touch
+      const h = getSectionHealth(key, section);
+      if (h === 'clean') nextLocks[key] = true;
+      else if (h === 'partial' || h === 'failed') nextLocks[key] = false;
+    };
+    applyLockUpdate('power', report.infra);
+    applyLockUpdate('broadband', report.broadband);
+    applyLockUpdate('transport', report.transport);
+    applyLockUpdate('water', report.water);
+    applyLockUpdate('gas', report.gas);
+    applyLockUpdate('labor', report.labor);
+    applyLockUpdate('political', report.political);
+    payload.sectionLocks = nextLocks;
+
     const wasFirstAnalysis = shouldIncrementRef.current;
     shouldIncrementRef.current = false;
     void saveAnalysisResults(site.id, payload).then(
@@ -263,28 +333,8 @@ export default function SiteAnalyzerDetail() {
     return () => clearTimeout(timer);
   }, [site?.id, landComps, flashSaveIndicator]);
 
-  // Track which section is in view for the sticky TOC.
-  useEffect(() => {
-    if (!report.hasReport) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) setActiveSection(entry.target.id);
-        }
-      },
-      { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
-    );
-    const timer = setTimeout(() => {
-      for (const s of SECTIONS) {
-        const el = document.getElementById(s.id);
-        if (el) observer.observe(el);
-      }
-    }, 100);
-    return () => {
-      clearTimeout(timer);
-      observer.disconnect();
-    };
-  }, [report.hasReport]);
+  // (Removed: IntersectionObserver scroll-tracking. Tabs now drive the active
+  // section explicitly via setActiveTab.)
 
   // Debounced + dedup'd median writeback. Comp-table edits and CSV pastes
   // produce a flurry of intermediate medians; without the guards each one
@@ -314,6 +364,17 @@ export default function SiteAnalyzerDetail() {
     [site?.id, flashSaveIndicator],
   );
 
+  /**
+   * Snapshot of which sections were locked at the moment Re-analyze was
+   * pressed. The writeback effect uses it to decide which sections may have
+   * their lock state mutated post-run: only sections that *actually ran*
+   * (i.e. were unlocked at run start) are eligible to flip lock state. This
+   * prevents a clean Water run from locking a section the user manually
+   * unlocked mid-run, and avoids force-unlocking sections that were
+   * carrying through their stored data.
+   */
+  const runStartLocksRef = useRef<SectionLocks | null>(null);
+
   function handleReanalyze() {
     if (!site) return;
     const isFirstAnalysis = !site.piddrGeneratedAt;
@@ -325,14 +386,43 @@ export default function SiteAnalyzerDetail() {
     }
     setQuotaError(null);
     const inputs = buildAnalysisInputs(site, companies);
+    // Locked sections forward their saved data so the orchestrator skips the
+    // refetch. This is what protects e.g. a working Water result while the
+    // user iterates on the Political layer.
+    const existing = buildExistingResults(site, site.sectionLocks);
+    runStartLocksRef.current = { ...(site.sectionLocks ?? {}) };
     shouldIncrementRef.current = isFirstAnalysis;
     writebackDoneRef.current = null;
-    void report.generateReport(inputs);
+    void report.generateReport(inputs, existing);
+  }
+
+  function handleToggleLock(sectionId: string) {
+    if (!site) return;
+    const tab = SECTIONS.find((s) => s.id === sectionId);
+    if (!tab?.lockKey) return;
+    const currentlyLocked = !!site.sectionLocks?.[tab.lockKey];
+    void setSectionLock(site.id, tab.lockKey, !currentlyLocked, site.sectionLocks).catch((err) =>
+      console.error('[SiteAnalyzer] Failed to toggle lock:', err),
+    );
+  }
+
+  function handleUnlockAll() {
+    if (!site) return;
+    void setAllSectionLocks(site.id, false).catch((err) =>
+      console.error('[SiteAnalyzer] Failed to unlock all:', err),
+    );
   }
 
   async function handleSave(values: EditFormValues) {
     if (!site) return;
     const coords = values.coordinates.trim() ? parseCoordinates(values.coordinates) : null;
+    // If the lat/lon actually moves, every section's saved data is geo-keyed
+    // and now stale. Clear all locks so the next Re-analyze refetches them
+    // — leaving them locked would silently carry old-coords data into the
+    // new-coords result.
+    const coordsChanged =
+      (coords?.lat ?? null) !== (site.coordinates?.lat ?? null) ||
+      (coords?.lng ?? null) !== (site.coordinates?.lng ?? null);
     setSaving(true);
     try {
       await updateSiteEntry(site.id, {
@@ -348,6 +438,7 @@ export default function SiteAnalyzerDetail() {
         county: values.county || undefined,
         parcelId: values.parcelId || undefined,
         companyId: values.companyId ?? undefined,
+        ...(coordsChanged ? { sectionLocks: {} } : {}),
       });
       flashSaveIndicator();
       setEditing(false);
@@ -390,33 +481,47 @@ export default function SiteAnalyzerDetail() {
     }
   }
 
-  function getSectionState(s: { loading: boolean; error: string | null; data: unknown }) {
+  /** Status for non-lockable tabs (Overview, Valuation) — no sub-error model. */
+  function plainState(s: { loading: boolean; error: string | null; data: unknown }) {
     if (s.loading) return 'loading' as const;
     if (s.error) return 'error' as const;
     if (s.data) return 'done' as const;
     return 'pending' as const;
   }
+  /** Status for lockable tabs — sub-errors promote to red. */
+  function healthState(
+    key: LockableSectionKey,
+    section: AnalysisSectionState<unknown>,
+  ): 'pending' | 'loading' | 'done' | 'error' {
+    const h = getSectionHealth(key, section);
+    if (h === 'loading') return 'loading';
+    if (h === 'failed' || h === 'partial') return 'error';
+    if (h === 'clean') return 'done';
+    return 'pending';
+  }
 
   const tocSections = SECTIONS.map((s) => ({
-    ...s,
+    id: s.id,
+    label: s.label,
     state:
       s.id === 'section-overview'
         ? ('done' as const)
         : s.id === 'section-valuation'
-          ? getSectionState(report.appraisal)
+          ? plainState(report.appraisal)
           : s.id === 'section-power'
-            ? getSectionState(report.infra)
+            ? healthState('power', report.infra)
             : s.id === 'section-broadband'
-              ? getSectionState(report.broadband)
+              ? healthState('broadband', report.broadband)
               : s.id === 'section-transport'
-                ? getSectionState(report.transport)
+                ? healthState('transport', report.transport)
                 : s.id === 'section-water'
-                  ? getSectionState(report.water)
+                  ? healthState('water', report.water)
                   : s.id === 'section-gas'
-                    ? getSectionState(report.gas)
+                    ? healthState('gas', report.gas)
                     : s.id === 'section-labor'
-                      ? getSectionState(report.labor)
-                      : getSectionState(report.political),
+                      ? healthState('labor', report.labor)
+                      : healthState('political', report.political),
+    locked: s.lockKey ? !!site?.sectionLocks?.[s.lockKey] : undefined,
   }));
 
   if (registryLoading) {
@@ -445,6 +550,10 @@ export default function SiteAnalyzerDetail() {
 
   const canExportPdf = report.hasReport && !report.isGenerating;
   const mw = mwOverride ?? site.mwCapacity ?? 50;
+  // When every lockable section is locked, "Run Analysis" has nothing to do.
+  // We surface that with a disabled button + Unlock-all CTA in the header.
+  const everythingLocked = allSectionsLocked(site.sectionLocks);
+  const hasAnyLock = LOCKABLE_SECTION_KEYS.some((k) => !!site.sectionLocks?.[k]);
 
   return (
     <Layout>
@@ -457,8 +566,11 @@ export default function SiteAnalyzerDetail() {
           isAnalyzing={report.isGenerating}
           canExportPdf={canExportPdf}
           isExportingPdf={pdfExport.generating}
+          everythingLocked={everythingLocked}
+          hasAnyLock={hasAnyLock}
           onEdit={() => setEditing(true)}
           onReanalyze={handleReanalyze}
+          onUnlockAll={handleUnlockAll}
           onExportPdf={handleExportPdf}
           onDelete={handleDelete}
         />
@@ -476,17 +588,26 @@ export default function SiteAnalyzerDetail() {
         )}
 
         {report.hasReport && !editing && (
-          <SectionTOC sections={tocSections} activeId={activeSection} />
+          <SectionTOC
+            sections={tocSections}
+            activeId={activeTab}
+            onSelect={setActiveTab}
+            onToggleLock={handleToggleLock}
+          />
         )}
 
-        {editing ? (
+        {editing && (
           <DetailEditForm
             site={site}
             saving={saving}
             onSave={handleSave}
             onCancel={() => setEditing(false)}
           />
-        ) : (
+        )}
+        {/* Site-details summary lives on the Overview tab once a report
+            exists; before the first run there are no tabs yet, so we show it
+            unconditionally so the user can review inputs before clicking Run. */}
+        {!editing && (!report.hasReport || activeTab === 'section-overview') && (
           <DetailSummary site={site} companyName={companyName} />
         )}
 
@@ -526,12 +647,12 @@ export default function SiteAnalyzerDetail() {
         )}
 
         {!editing && (report.hasReport || report.isGenerating) && report.inputs && (
-          <div className="space-y-5 mt-5">
-            <div id="section-overview">
+          <div className="mt-5">
+            {activeTab === 'section-overview' && (
               <SiteOverviewSection coordinates={report.inputs.coordinates} />
-            </div>
+            )}
 
-            <div id="section-valuation">
+            {activeTab === 'section-valuation' && (
               <LandValuationSection
                 section={report.appraisal}
                 inputs={report.inputs}
@@ -543,70 +664,66 @@ export default function SiteAnalyzerDetail() {
                 onLandCompsChange={setLandComps}
                 onFilteredCompsChange={handleFilteredCompsChange}
               />
-            </div>
+            )}
 
-            <div id="section-power">
-              <div className="flex items-center gap-2.5 mb-5">
-                <div className="h-8 w-8 rounded-lg bg-[#ED202B]/10 flex items-center justify-center">
-                  <svg
-                    className="h-4 w-4 text-[#ED202B]"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
+            {activeTab === 'section-power' && (
+              <div>
+                <div className="flex items-center gap-2.5 mb-5">
+                  <div className="h-8 w-8 rounded-lg bg-[#ED202B]/10 flex items-center justify-center">
+                    <svg
+                      className="h-4 w-4 text-[#ED202B]"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
+                    </svg>
+                  </div>
+                  <h2 className="font-heading text-base font-semibold text-[#201F1E]">
+                    Power Infrastructure
+                  </h2>
                 </div>
-                <h2 className="font-heading text-base font-semibold text-[#201F1E]">
-                  Power Infrastructure
-                </h2>
-              </div>
-              {report.infra.loading && (
-                <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
-                  <div className="flex items-center justify-center py-12">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#D8D5D0] border-t-[#ED202B]" />
-                      <span className="text-sm text-[#7A756E]">
-                        Analyzing power infrastructure…
-                      </span>
+                {report.infra.loading && (
+                  <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
+                    <div className="flex items-center justify-center py-12">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-[#D8D5D0] border-t-[#ED202B]" />
+                        <span className="text-sm text-[#7A756E]">
+                          Analyzing power infrastructure…
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {report.infra.error && (
-                <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
-                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                    {report.infra.error}
+                )}
+                {report.infra.error && (
+                  <div className="bg-white rounded-2xl border border-[#D8D5D0] p-5 md:p-6">
+                    <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                      {report.infra.error}
+                    </div>
                   </div>
-                </div>
-              )}
-              {report.infra.data && (
-                <InfrastructureResults
-                  data={report.infra.data}
-                  loading={false}
-                  hasRunAnalysis={true}
-                  collapsible={false}
-                  cardWrap
-                />
-              )}
-              <CountyQueueSection state={queueState} county={queueCounty} />
-            </div>
+                )}
+                {report.infra.data && (
+                  <InfrastructureResults
+                    data={report.infra.data}
+                    loading={false}
+                    hasRunAnalysis={true}
+                    collapsible={false}
+                    cardWrap
+                  />
+                )}
+                <CountyQueueSection state={queueState} county={queueCounty} />
+              </div>
+            )}
 
-            <div id="section-broadband">
-              <BroadbandSection section={report.broadband} />
-            </div>
-            <div id="section-transport">
-              <TransportSection section={report.transport} />
-            </div>
-            <div id="section-water">
-              <WaterSection section={report.water} />
-            </div>
-            <div id="section-gas">
+            {activeTab === 'section-broadband' && <BroadbandSection section={report.broadband} />}
+            {activeTab === 'section-transport' && <TransportSection section={report.transport} />}
+            {activeTab === 'section-water' && <WaterSection section={report.water} />}
+            {activeTab === 'section-gas' && (
               <GasSection
                 section={report.gas}
                 pipelineSuppliers={site.pipelineMarketers}
@@ -615,13 +732,11 @@ export default function SiteAnalyzerDetail() {
                   void updateSiteEntry(site.id, { pipelineMarketers: updated });
                 }}
               />
-            </div>
-            <div id="section-labor">
-              <LaborSection section={report.labor} />
-            </div>
-            <div id="section-political">
+            )}
+            {activeTab === 'section-labor' && <LaborSection section={report.labor} />}
+            {activeTab === 'section-political' && (
               <PoliticalRadarSection section={report.political} />
-            </div>
+            )}
           </div>
         )}
 

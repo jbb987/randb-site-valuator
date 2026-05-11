@@ -107,7 +107,9 @@ export default function BroadbandReport({ result }: { result: BroadbandResult })
                 : hasFiberOnRequest
                   ? 'On Request (~2 mi)'
                   : hasFiberInCounty
-                    ? `In County${result.nearestCountyFiberMi ? ` (~${result.nearestCountyFiberMi} mi)` : ''}`
+                    ? typeof result.nearestCountyFiberMi === 'number'
+                      ? `In County (~${result.nearestCountyFiberMi} mi)`
+                      : 'In County (distance unknown)'
                     : 'No'
             }
             accent={
@@ -128,7 +130,9 @@ export default function BroadbandReport({ result }: { result: BroadbandResult })
                 : hasCableOnRequest
                   ? 'On Request (~2 mi)'
                   : hasCableInCounty
-                    ? `In County${result.nearestCountyCableMi ? ` (~${result.nearestCountyCableMi} mi)` : ''}`
+                    ? typeof result.nearestCountyCableMi === 'number'
+                      ? `In County (~${result.nearestCountyCableMi} mi)`
+                      : 'In County (distance unknown)'
                     : 'No'
             }
             accent={
