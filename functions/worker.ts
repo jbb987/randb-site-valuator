@@ -12,6 +12,11 @@
 
 interface Env {
   ASSETS: Fetcher;
+  /** Census Data API key — injected server-side into /api/census/* requests
+   *  so it never appears in the client bundle. Set under the Worker's
+   *  Variables and Secrets in the Cloudflare dashboard. Optional: when
+   *  unset, Census requests run on the anonymous tier (rate-limited). */
+  VITE_CENSUS_API_KEY?: string;
 }
 
 const PROXY_ROUTES: Record<string, { origin: string; rewrite: (path: string) => string }> = {
@@ -58,7 +63,21 @@ export default {
         }
 
         const targetPath = config.rewrite(url.pathname);
-        const targetUrl = `${config.origin}${targetPath}${url.search}`;
+        const targetUrlObj = new URL(`${config.origin}${targetPath}${url.search}`);
+
+        // Server-side injection: the Census Data API requires a key for any
+        // meaningful quota. The key lives in the Worker's runtime env vars
+        // so it's never exposed in the client bundle. Only inject if the
+        // request didn't already supply one (dev sends it from .env.local).
+        if (
+          prefix === '/api/census' &&
+          env.VITE_CENSUS_API_KEY &&
+          !targetUrlObj.searchParams.has('key')
+        ) {
+          targetUrlObj.searchParams.set('key', env.VITE_CENSUS_API_KEY);
+        }
+
+        const targetUrl = targetUrlObj.toString();
 
         try {
           const res = await fetch(targetUrl, {

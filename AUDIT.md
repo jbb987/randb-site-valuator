@@ -55,12 +55,13 @@ _None recorded._
 
 ### H-9 — Labor Pool ACS demographic fetch blocked by CORS, MSA resolution stubbed null
 
-- **Status:** fixed (2026-05-12, v1.35.3, branch `fix/census-acs-cors-proxy`)
+- **Status:** fixed (2026-05-12, v1.35.3 + v1.35.4, branches `fix/census-acs-cors-proxy` and `fix/worker-side-census-key`)
 - **Files:** `functions/worker.ts`, `vite.config.ts`, `src/lib/laborAnalysis.ts`, `.env.example`
 - **Description:** `laborAnalysis.ts:534` fetched `https://api.census.gov/data/.../acs/acs5/profile` directly from the browser. Census ACS does not send CORS headers, so every analysis raised `Access-Control-Allow-Origin` errors in console and the ACS-derived fields (population, unemployment, education, age bands, commute) silently fell back to seed estimates with an `acsError` flag. Additionally, MSA resolution via `geocoding.geo.census.gov` was stubbed to return `null` (`resolvedMsa` never populated) for the same CORS reason, per the comment block at line 9 and `CLAUDE.md`.
 - **Impact:** Labor Pool section showed seed data + a partial-failure indicator for every site analyzed; `resolvedMsa` field unavailable in the browser since launch.
-- **Fix:** Added two routes to the Cloudflare Worker `PROXY_ROUTES` (`/api/census` → `api.census.gov` and `/api/census-geocoder` → `geocoding.geo.census.gov`) plus matching Vite dev proxies. `laborAnalysis.ts` now routes the ACS call through `/api/census/...` and resolves MSA via a new `resolveMsa()` helper that hits `/api/census-geocoder/geocoder/geographies/coordinates`. Documented `VITE_CENSUS_API_KEY` and `VITE_BLS_API_KEY` in `.env.example`.
-- **Production env:** Both `VITE_CENSUS_API_KEY` and `VITE_BLS_API_KEY` set in Cloudflare Pages env on 2026-05-12 (raises per-key quotas to 500/day each, vs. 25-50/day anonymous shared across all users on the proxy IP).
+- **Fix (v1.35.3):** Added two routes to the Cloudflare Worker `PROXY_ROUTES` (`/api/census` → `api.census.gov` and `/api/census-geocoder` → `geocoding.geo.census.gov`) plus matching Vite dev proxies. `laborAnalysis.ts` now routes the ACS call through `/api/census/...` and resolves MSA via a new `resolveMsa()` helper that hits `/api/census-geocoder/geocoder/geographies/coordinates`. Documented `VITE_CENSUS_API_KEY` and `VITE_BLS_API_KEY` in `.env.example`.
+- **Follow-up fix (v1.35.4):** v1.35.3 still failed in production because `VITE_CENSUS_API_KEY` was set under the Worker's runtime "Variables & Secrets" (not build-time), so it was never inlined into the client bundle and the proxied URL omitted the `&key=...` param — Census responded with the "Missing Key" HTML page. Moved key injection server-side: the Cloudflare Worker now reads `env.VITE_CENSUS_API_KEY` and appends it to forwarded `/api/census` requests when not already present. Side benefit: the key never appears in the client JS bundle.
+- **Production env:** `VITE_CENSUS_API_KEY` set in the Worker's runtime variables (server-side injection). `VITE_BLS_API_KEY` is build-time-only (Vite-inlined); future symmetric move to Worker-side injection would be a clean follow-up.
 - **Stale data:** Existing site docs with `acsError` cached in `laborResult` won't auto-heal. Users must unlock the Labor section and re-run analysis per affected site.
 
 ### H-8 — `detectIso` mislabeled Oklahoma sites as ERCOT
