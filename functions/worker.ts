@@ -2,8 +2,10 @@
  * Cloudflare Worker entrypoint.
  *
  * Handles CORS proxy routes for government APIs that don't support CORS:
- *   /api/fema/* → https://hazards.fema.gov/arcgis/*
- *   /api/nwi/*  → https://fwspublicservices.wim.usgs.gov/*
+ *   /api/fema/*            → https://hazards.fema.gov/arcgis/*
+ *   /api/nwi/*             → https://fwspublicservices.wim.usgs.gov/*
+ *   /api/census/*          → https://api.census.gov/*           (ACS demographics)
+ *   /api/census-geocoder/* → https://geocoding.geo.census.gov/* (MSA resolution)
  *
  * All other requests fall through to static assets (SPA).
  */
@@ -20,6 +22,16 @@ const PROXY_ROUTES: Record<string, { origin: string; rewrite: (path: string) => 
   '/api/nwi': {
     origin: 'https://fwspublicservices.wim.usgs.gov',
     rewrite: (path: string) => path.replace(/^\/api\/nwi/, ''),
+  },
+  // Order matters: longer prefixes must come before shorter ones so the
+  // startsWith() match in the dispatch loop picks the more specific route.
+  '/api/census-geocoder': {
+    origin: 'https://geocoding.geo.census.gov',
+    rewrite: (path: string) => path.replace(/^\/api\/census-geocoder/, ''),
+  },
+  '/api/census': {
+    origin: 'https://api.census.gov',
+    rewrite: (path: string) => path.replace(/^\/api\/census/, ''),
   },
 };
 

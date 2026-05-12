@@ -21,6 +21,19 @@ export default defineConfig({
         timeout: 30000,
         rewrite: (path) => path.replace(/^\/api\/nwi/, ''),
       },
+      // Vite matches longest prefix first, so /api/census-geocoder beats /api/census.
+      '/api/census-geocoder': {
+        target: 'https://geocoding.geo.census.gov',
+        changeOrigin: true,
+        timeout: 30000,
+        rewrite: (path) => path.replace(/^\/api\/census-geocoder/, ''),
+      },
+      '/api/census': {
+        target: 'https://api.census.gov',
+        changeOrigin: true,
+        timeout: 30000,
+        rewrite: (path) => path.replace(/^\/api\/census/, ''),
+      },
     },
   },
 });
