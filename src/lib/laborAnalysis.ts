@@ -3,10 +3,11 @@
  *
  * Live data sources:
  * - FCC Area API (coords → county FIPS + state) — no key, CORS-friendly
- * - Census ACS 5yr API — VITE_CENSUS_API_KEY optional (50/day without)
- *
- * MSA/CBSA resolution requires the Census Geocoder, which does not send
- * CORS headers; left null in the browser until a server-side proxy lands.
+ * - Census ACS 5yr API — VITE_CENSUS_API_KEY optional (50/day without).
+ *   Routed through /api/census (Cloudflare Worker + Vite dev proxy) to
+ *   bypass Census's lack of CORS headers.
+ * - Census Geocoder (coords → MSA / CBSA) — routed through
+ *   /api/census-geocoder for the same reason.
  *
  * Stubbed sources (mock until BLS key wired):
  * - BLS QCEW open-data CSV (industry employment + wages, county)
@@ -431,11 +432,11 @@ interface CensusGeoResolved {
 /**
  * FCC Area API: coords → county FIPS + state. No API key, CORS-enabled.
  * https://geo.fcc.gov/api/census/area
- *
- * MSA is not returned by the FCC API; left null. The Census Geocoder has it
- * but blocks browser fetches via CORS, so MSA resolution needs a server proxy.
  */
-async function resolveGeographies(lat: number, lng: number): Promise<CensusGeoResolved> {
+async function resolveCountyAndState(
+  lat: number,
+  lng: number,
+): Promise<{ county: ResolvedCounty | null; state: string | null }> {
   const url =
     `https://geo.fcc.gov/api/census/area` +
     `?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}` +
@@ -464,10 +465,63 @@ async function resolveGeographies(lat: number, lng: number): Promise<CensusGeoRe
         ? { fips: row.county_fips, name: row.county_name, state: row.state_code }
         : null;
 
-    return { county, msa: null, state: county?.state ?? null };
+    return { county, state: county?.state ?? null };
   } catch {
-    return { county: null, msa: null, state: null };
+    return { county: null, state: null };
   }
+}
+
+/**
+ * Census Geocoder: coords → MSA (CBSA) name + code. CORS-blocked, so routed
+ * through the Cloudflare Worker / Vite dev proxy at /api/census-geocoder.
+ *
+ * Returns null when the point isn't inside any CBSA (rural areas) or the
+ * lookup fails — the orchestrator falls back to county-level estimates.
+ */
+async function resolveMsa(lat: number, lng: number): Promise<ResolvedMsa | null> {
+  const url =
+    `/api/census-geocoder/geocoder/geographies/coordinates` +
+    `?x=${encodeURIComponent(lng)}&y=${encodeURIComponent(lat)}` +
+    `&benchmark=Public_AR_Current&vintage=Current_Current` +
+    `&layers=Metropolitan+Statistical+Areas&format=json`;
+
+  try {
+    const json = await cachedFetch<{
+      result?: {
+        geographies?: Record<string, Array<{ NAME?: string; BASENAME?: string; GEOID?: string }>>;
+      };
+    }>(
+      `labor:msa:${lat.toFixed(4)},${lng.toFixed(4)}`,
+      async () => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Census Geocoder HTTP ${res.status}`);
+        return res.json();
+      },
+      TTL_LOCATION,
+    );
+
+    // Census returns MSAs under a verbose layer key; find the first array
+    // whose key starts with "Metropolitan" to be resilient to vintage renames.
+    const geos = json.result?.geographies ?? {};
+    const msaKey = Object.keys(geos).find((k) => k.startsWith('Metropolitan'));
+    const entry = msaKey ? geos[msaKey]?.[0] : undefined;
+    if (!entry?.GEOID) return null;
+
+    return {
+      code: entry.GEOID,
+      name: entry.NAME ?? entry.BASENAME ?? entry.GEOID,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveGeographies(lat: number, lng: number): Promise<CensusGeoResolved> {
+  const [{ county, state }, msa] = await Promise.all([
+    resolveCountyAndState(lat, lng),
+    resolveMsa(lat, lng),
+  ]);
+  return { county, msa, state };
 }
 
 /**
@@ -530,8 +584,10 @@ async function fetchAcsCounty(fips: string): Promise<AcsCountyStats | null> {
     ?.VITE_CENSUS_API_KEY;
   const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
 
+  // Routed through the Cloudflare Worker / Vite dev proxy at /api/census so
+  // browser CORS doesn't block the call. See functions/worker.ts.
   const url =
-    `https://api.census.gov/data/${ACS_VINTAGE_YEAR}/acs/acs5/profile` +
+    `/api/census/data/${ACS_VINTAGE_YEAR}/acs/acs5/profile` +
     `?get=${vars}` +
     `&for=county:${countyFips}&in=state:${stateFips}${keyParam}`;
 
