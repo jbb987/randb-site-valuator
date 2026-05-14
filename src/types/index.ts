@@ -964,3 +964,127 @@ export interface JobPhoto {
   uploadedByEmail?: string; // Denormalized for the gallery hover label
   uploadedAt: number; // Unix ms
 }
+
+// ── Folder & Document System (v2 — supersedes flat-category crm-documents) ──
+
+/** Firestore collection names for the new folder/document system. Centralized
+ *  so a future rename (e.g., reclaiming the legacy `projects` collection name)
+ *  is a one-line change. */
+export const FOLDERS_COLLECTION = 'folders';
+export const DOCUMENTS_COLLECTION = 'documents';
+/** Named `customer-projects` (not `projects`) to avoid collision with the
+ *  legacy `projects` collection (AUDIT M-1, slated for deletion). Once that
+ *  legacy collection is purged we can flip this to `projects`. */
+export const CUSTOMER_PROJECTS_COLLECTION = 'customer-projects';
+
+/** System-provisioned folder roles. Auto-created on project provisioning. */
+export type SystemFolderRole =
+  | 'pre-con-root' // Customer-root container for all pre-con projects
+  | 'construction-root' // Customer-root container for all construction projects
+  | 'rep-root' // Customer-root container for all REP projects
+  | 'project-root'; // The project's own root folder (under one of the *-root folders above)
+
+export type ProjectType = 'pre-con' | 'construction' | 'rep';
+
+export const ALL_PROJECT_TYPES: ProjectType[] = ['pre-con', 'construction', 'rep'];
+
+export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
+  'pre-con': 'Pre-Construction',
+  construction: 'Construction',
+  rep: 'REP',
+};
+
+export type ProjectStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+
+export const ALL_PROJECT_STATUSES: ProjectStatus[] = [
+  'active',
+  'paused',
+  'completed',
+  'cancelled',
+];
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: 'Active',
+  paused: 'Paused',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+/** A folder in the customer-rooted folder tree. Every folder belongs to a
+ *  customer (`companyId`); a folder may additionally belong to a project
+ *  (`projectId`) when it lives inside that project's subtree. Nesting is
+ *  expressed via `parentFolderId`, with `ancestorFolderIds` denormalized for
+ *  efficient subtree queries and `array-contains` rule checks. */
+export interface Folder {
+  id: string;
+  companyId: string; // The customer this folder belongs to
+  projectId?: string; // Set if this folder lives inside a project subtree
+  parentFolderId: string | null; // null = customer root (or project root)
+  ancestorFolderIds: string[]; // Denormalized path, every ancestor folderId
+  name: string;
+  position: number; // Manual sort order within parent; sparse multiples of 1000
+  kind: 'system' | 'user'; // system = auto-provisioned, user = created by a person
+  systemRole?: SystemFolderRole;
+  templateOrigin?: string; // Future: id of the folder template that seeded this
+  createdAt: number;
+  createdBy: string; // Firebase UID
+  updatedAt: number;
+  updatedBy: string;
+  archivedAt?: number;
+  archivedBy?: string;
+  archivedReason?: string;
+  // Access control (see plan §7) — null/empty list inherits from parent;
+  // admins always pass regardless of list contents.
+  viewerUserIds?: string[];
+  editorUserIds?: string[];
+}
+
+/** A document filed in the new folder system. Replaces `crm-documents` and
+ *  `construction-jobs/{}/documents` over migration. Storage blob is immutable
+ *  once written — renames only touch the `name` field, not `storagePath`. */
+export interface DocumentRecord {
+  id: string;
+  companyId: string;
+  projectId?: string;
+  folderId: string | null; // null = at customer root (not inside any folder)
+  ancestorFolderIds: string[]; // Denormalized ancestry of the doc's folder
+  name: string; // User-visible filename
+  mimeType: string;
+  byteSize: number;
+  storagePath: string; // Immutable; format: `documents/{companyId}/{documentId}-{sanitized}`
+  storageGeneration?: string; // Firebase Storage generation hash, for safety
+  uploadedAt: number;
+  uploadedBy: string;
+  updatedAt: number;
+  updatedBy: string;
+  archivedAt?: number;
+  archivedBy?: string;
+  archivedReason?: string;
+  /** Pre-migration `category` value preserved as a chip in the UI when
+   *  meaningful. Null for docs created post-migration. */
+  legacyCategory?: DocumentCategory | JobDocumentCategory;
+  viewerUserIds?: string[];
+  editorUserIds?: string[];
+}
+
+/** Project lifecycle record. Each project auto-provisions a folder skeleton
+ *  under its customer. Construction Tracker jobs migrate into this shape with
+ *  `type='construction'`. */
+export interface Project {
+  id: string;
+  companyId: string; // The customer owning this project (v1: singular)
+  type: ProjectType;
+  name: string;
+  status: ProjectStatus;
+  rootFolderId: string; // The auto-provisioned `project-root` folder for this project
+  startDate?: number;
+  endDate?: number;
+  parentProjectId?: string; // pre-con → construction → REP lineage (ADR-003)
+  siteId?: string; // Optional Site Analyzer site linkage
+  createdAt: number;
+  createdBy: string;
+  updatedAt: number;
+  updatedBy: string;
+  archivedAt?: number;
+  archivedBy?: string;
+}
