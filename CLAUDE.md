@@ -318,13 +318,14 @@ scripts/
 
 ### Dashboard Organization
 
-Tools are grouped into 5 sections that mirror R&B Power's three business lines (Pre-Construction, Construction, REP) plus cross-cutting Company tools and admin Settings. Section headers only render if the signed-in user has at least one visible tool inside.
+Tools are grouped into 6 sections that mirror R&B Power's four business lines (Pre-Construction, Construction, Oil & Gas, REP) plus cross-cutting Company tools and admin Settings. Section headers only render if the signed-in user has at least one visible tool inside.
 
-1. **Company** — Directory, Documents _(cross-cutting)_
-2. **Pre-Construction** — Site Analyzer, Grid Power Analyzer, Well Finder _(admin-only)_
-3. **Construction** — Construction
-4. **REP** — Leads, Sales Dashboard _(admin-only)_
-5. **Settings** _(admin-only)_ — Activity Log, User Management
+1. **Company** — Directory, Documents, Bailey Project _(cross-cutting)_
+2. **Pre-Construction** — Site Analyzer, Grid Power Analyzer
+3. **Construction** — Construction Projects
+4. **Oil and Gas** — Well Finder _(admin-only)_
+5. **REP** — Leads, Sales Dashboard _(admin-only)_
+6. **Settings** _(admin-only)_ — Activity Log, User Management
 
 ### Adding a New Tool/Page
 

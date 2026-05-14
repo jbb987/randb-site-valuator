@@ -64,14 +64,6 @@ const toolSections: ToolSection[] = [
         path: '/grid-power-analyzer',
         icon: 'grid',
       },
-      {
-        id: 'well-finder',
-        name: 'Well Finder',
-        description: 'Texas oil & gas reactivation candidates, ranked by opportunity',
-        path: '/well-finder',
-        icon: 'flame',
-        adminOnly: true,
-      },
     ],
   },
   {
@@ -83,6 +75,19 @@ const toolSections: ToolSection[] = [
         description: 'Track active construction projects, tasks, photos, and documents',
         path: '/construction-projects',
         icon: 'hammer',
+      },
+    ],
+  },
+  {
+    title: 'Oil and Gas',
+    tools: [
+      {
+        id: 'well-finder',
+        name: 'Well Finder',
+        description: 'Texas oil & gas reactivation candidates, ranked by opportunity',
+        path: '/well-finder',
+        icon: 'flame',
+        adminOnly: true,
       },
     ],
   },
