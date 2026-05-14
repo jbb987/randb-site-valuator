@@ -1,68 +1,76 @@
-# HANDOFF — last updated 2026-05-08
+# HANDOFF — 2026-05-14
 
-> **For future Claude sessions:** read this first. It captures the state of the most recent meaningful work session and what should happen next. Replace this content (don't append) at the end of any non-trivial session.
+> SBAR-style summary of the most recent meaningful session. CLAUDE.md
+> instructs every new session to read this file first, so it's the canonical
+> starting point for the next Claude Code session in this repo. Replace this
+> content (don't append) at the end of any non-trivial session.
 
 ## Situation
 
-Workflow & tooling overhaul session. All work is merged to `main` and deployed (Cloudflare Pages auto-deploys on push to `main`). The repo is in a clean state — no uncommitted changes, no stale branches, only `main` exists locally and on the remote.
+End of a massive build session. Folder & Document system shipped end-to-end
+for its core promise (Phase 1 + Phase 2 + PR 3.1 + PR 4.1). 11 production
+deploys, a real data migration, and a full local Firestore + Storage backup
+to the user's iMac.
 
-Three PRs shipped in this session:
+App is on `main` at **v1.42.0**. Cloudflare Pages auto-deploys from main.
 
-- `chore: add Claude Code hooks, Prettier, and cleanup tooling` → v1.27.1
-- `chore: format whole repo with Prettier (baseline)` → v1.27.2
-- `docs: add HANDOFF.md` → v1.27.3 (this PR)
+## Background — what changed today
 
-## Background
+In rough order:
 
-User (Babi) opened the session asking how Claude Code hooks work after watching a video. Two underlying problems surfaced while exploring use cases:
+1. **v1.36.1** — Split the original Construction Tracker into two tools sharing one component tree via a `JobToolConfig` React context: **Bailey Project** (CEO's tool, kept on the original `construction-jobs` collection, moved to the Company dashboard section) and **Construction Projects** (team's tool, new `construction-projects-jobs` collection, in the Construction section). Cloud Functions cleanup + activity-log triggers duplicated for the new collection. CRM company panel surfaces linked jobs across both tools, tagged with origin.
+2. **v1.36.2 / v1.36.3** — Added a new **Oil and Gas** dashboard section, moved Well Finder into it, repositioned the section right before Settings.
+3. **v1.37.0** — Locked the role model to three tiers (admin/manager/labor). Renamed legacy `employee` → `manager`, `worker` → `labor` everywhere; `normalizeRole` translates legacy stored values on read so a missed user keeps working. Committed `docs/architecture/folder-system-plan.md` to the repo.
+4. **v1.38.0** — Added `Folder`, `DocumentRecord`, `Project` types + 3 lib files (`folders.ts`, `documentRecords.ts`, `projects.ts`) + 3 hooks. New Firestore collections: `folders`, `documents`, `customer-projects` (named to avoid the legacy `projects` collection collision; can be renamed once AUDIT M-1 cleanup happens).
+5. **Migration** — Ran `scripts/migrate-to-folder-system.mjs --confirm` against production. Created 44 folders + 10 Project records + 53 document records by walking the legacy `crm-documents` and `construction-jobs/*/documents` + `photos` subcollections. Zero errors, zero storage blob moves. Idempotent via deterministic ids.
+6. **v1.39.0** — Read-only `FolderBrowser` component mounted on CRM customer profile (above the legacy chip view for side-by-side comparison).
+7. **v1.39.1** — Same `FolderBrowser` mounted on the construction tracker detail page, scoped to a project's subtree via the `rootFolderId` prop. Works for both Bailey Project and Construction Projects.
+8. **v1.40.0** — Mutations: create folder, multi-file upload, rename, archive. Modal-based UX; kebab menu on every folder/doc tile.
+9. **v1.40.1** — Trash view (PR 2.3). Toggle on FolderBrowser header; flat list of archived items with original-parent labels and Restore buttons; scoped to project subtree when applicable.
+10. **v1.41.0** — Auto-provisioning. New construction jobs now create their `cust_*_construction-root` + `proj_*_root` folders + Project record on create, so the FolderBrowser is functional immediately.
+11. **v1.42.0** — Per-folder access lists (PR 4.1). Manage Access modal with two axes × three modes (inherit / admin-only / specific people). Admins always pass — they don't appear in the picker. **Enforcement is client-side only for v1; server-side Firestore rule walks of `ancestorFolderIds` are deferred.**
 
-1. **Style inconsistency.** `src/tools/SiteAnalyzerDetail.tsx` had 37 double-quoted + 38 single-quoted strings in the same file. The existing ESLint config didn't enforce style.
-2. **Workflow drift.** 69 local branches, 32 remote branches, 26 abandoned worktrees, and uncommitted changes directly on `main`. Root cause: starting work on `main` instead of a feature branch, never pruning merged work.
+Console-side work today:
+- Firestore rules added for `folders`, `documents`, `customer-projects` (permissive — `allow read, write: if isAuthed()`).
+- Storage rules added for the new `documents/{companyId}/{fileName}` prefix.
+- Two composite indexes created (`documents`: companyId + uploadedAt; `folders`: companyId + position).
 
-Scope expanded as we went: typecheck hook → Prettier → fix the workflow itself.
+User backed up locally to `~/randb-backups/firestore-2026-05-14/` (Firestore JSON-binary export, excluding well-finder/queue/infra caches) and `~/randb-backups/storage-2026-05-14/` (CRM + construction Storage prefixes, also excluding well-finder).
 
 ## Assessment
 
-**What works now:**
+The folder & document system is **functionally complete for its original user need**: Mike can build the 21-folder Asherton tree, nest folders, restrict access, archive + restore. New jobs auto-provision their skeleton. Migrated data is browsable on both the CRM customer profile and the construction tracker detail page.
 
-- **PreToolUse hook** (`.claude/hooks/block-main-edit.sh`) refuses Write/Edit when current branch is `main`. Forces Claude/user to branch first.
-- **PostToolUse hook** (`.claude/hooks/post-edit-check.sh`) runs `prettier --write` → `eslint --fix` → `tsc -p tsconfig.app.json --noEmit` after every `.ts`/`.tsx` edit in `src/`. Type errors are fed back to the same Claude turn as `additionalContext`.
-- **Prettier 3.8.3** installed with `.prettierrc.json` (single quotes for JS/TS, double for JSX, 100-col, 2-space, trailing commas). Whole repo formatted in baseline commit (170 files).
-- **`npm run cleanup`** prunes worktrees and local branches that are merged-and-gone-from-origin. Idempotent. Never touches `main` or unmerged branches.
-- All three are documented in `CLAUDE.md` under "Claude Code Hooks."
+Coexistence with legacy code is intentional and stable:
+- Legacy `crm-documents` and `construction-jobs/*/documents` collections still exist and the legacy `DocumentsSection` chip view still renders below the new `FolderBrowser` on customer profiles. The 30-day rollback window is intact.
+- Bailey Project (`construction-tracker` toolId) and Construction Projects (`construction-projects` toolId) coexist as parallel filtered views of the same underlying construction-tracker codebase.
 
-**Branch policy (decided this session):**
+Open risks:
+- **Client-side-only access enforcement**: any user with direct Firestore SDK access can read past the per-folder gate. Fine for internal R&B use; must tighten before external/guest access.
+- **The legacy `projects` collection still exists** (AUDIT M-1). Once deleted, we could rename `customer-projects` → `projects` to reclaim the natural name.
+- **Migration legacy categories**: a few CRM docs had non-standard `category` values (e.g. `"report"`) that didn't map to the canonical 6-category enum. Migration preserved them as raw values, so a folder is currently named `report` instead of `Deliverables`. Fixable via the Rename UI — not data-loss.
 
-- `main` is the only long-lived branch. `dev` was deleted (had drifted 177 commits behind, abandoned).
-- Cloudflare Pages deploys from `main`. Feature branches → `main` directly.
-- The PreToolUse hook enforces "branch before editing" mechanically.
+## Recommendation — what to do next session
 
-**Open risk to verify:**
+In rough priority order:
 
-- The Prettier baseline pass touched 170 files. Logic shouldn't have changed (formatting only) but the deployed app on Cloudflare hasn't been clicked through post-deploy. Recommend visual smoke-test on Site Analyzer, CRM, Dashboard before relying on production.
+1. **Have Mike user-test the deployed app** end-to-end on Asherton. Watch for friction in folder creation, access management, and the chip-view ↔ folder-view duality.
+2. **PR 3.2** — Pre-Con and REP project types. Create flows for the other two business dimensions (pre-con linked to a Site Analyzer site; REP for maintenance/work-orders). Mount the FolderBrowser on those project profiles too.
+3. **PR 3.3** — Dedicated `/projects/:id` route. Decouples the project view from the construction tracker; lets us mount the FolderBrowser on a clean URL.
+4. **PR 4.2** — Repurpose the existing `/documents` tool as a cross-customer search across the new `documents` collection. Drop the My Documents and Company Drive Drive shortcuts; keep Templates.
+5. **Tighten Firestore rules** to enforce per-folder access server-side (ancestor-walk via `ancestorFolderIds`). Once this is in, client-side filtering becomes a UX nicety rather than the security boundary.
+6. **Commit Firestore + Storage rules to the repo** (`firestore.rules`, `storage.rules`, wire into `firebase.json`). Today they're managed in Firebase Console; moving them under git removes the manual "paste this snippet" friction.
+7. **Phase 5 paperwork**: ADRs 018–020 (folder/doc model, 3-role model, no-deletion guarantee), update ERD with the three new collections, retire stale parts of CLAUDE.md.
+8. **Delete the legacy `projects` collection** (AUDIT M-1) and rename `customer-projects` → `projects` if desired.
 
-**Auto-memory was outdated and has been corrected:**
+## Where things live
 
-- Old memory claimed `feature/water-analysis-phase1` and `feature/gas-analysis-phase1` were pending merges; both were merged weeks ago.
-- Old memory claimed Construction Tracker was mid-PR-2; it's fully shipped (foundation + tasks + photos + docs on `main`). Only a JobTimelineSection appears to not exist yet.
-
-## Recommendation
-
-**Next session (today / tomorrow per Babi's stated plan):**
-
-1. Use Claude normally on small tasks. See how the typecheck + Prettier hooks feel in practice.
-2. Visually verify the deployed app at the production Cloudflare URL — confirm nothing regressed from the Prettier baseline reformat.
-3. Daily flow:
-   ```bash
-   git pull                              # sync main
-   npm run cleanup                       # prune yesterday's cruft
-   git checkout -b feat/whatever-today   # branch BEFORE editing — hook will refuse otherwise
-   ```
-
-**Deferred from this session (when Babi is ready):**
-
-- **SBAR / handoff system design.** This `HANDOFF.md` is the first manual instance, written at the user's request. The full system would automate writing/finding these per session and per research topic, with a `/sbar` slash command, an `INDEX.md` for past research, and possibly a Stop hook to nag if not updated. Revisit after living with the new hooks for a couple of days.
-
-**Don't suggest unless asked:**
-
-- Reviving the `dev` branch — explicitly rejected this session.
+- **Folder system component**: `src/components/crm-directory/FolderBrowser.tsx` (mounted on `CompanyDetailTool` and `ConstructionTrackerDetail`)
+- **Manage Access modal**: `src/components/crm-directory/ManageAccessModal.tsx`
+- **Access helpers**: `src/lib/folderAccess.ts`
+- **Auto-provisioning**: `src/lib/projectProvisioning.ts`
+- **Data layer**: `src/lib/folders.ts`, `src/lib/documentRecords.ts`, `src/lib/projects.ts`
+- **Hooks**: `src/hooks/useFolders.ts`, `src/hooks/useDocumentRecords.ts`, `src/hooks/useProjects.ts`
+- **Types + collection-name constants**: bottom of `src/types/index.ts` (`FOLDERS_COLLECTION`, `DOCUMENTS_COLLECTION`, `CUSTOMER_PROJECTS_COLLECTION`)
+- **Migration script**: `scripts/migrate-to-folder-system.mjs`
+- **Plan doc**: `docs/architecture/folder-system-plan.md`
