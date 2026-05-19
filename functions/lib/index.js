@@ -33,11 +33,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onAuthUserCreated = exports.onUserSignedIn = exports.onUserHistoryWrite = exports.onUserWrite = exports.onLeadWrite = exports.onTaskWrite = exports.onJobWrite = exports.onSiteWrite = exports.onDocumentWrite = exports.onContactWrite = exports.onCompanyWrite = exports.refreshFederalOfficials = exports.refreshFederalBills = exports.detectStatusChanges = exports.triggerPdqIngest = exports.triggerRrcBulksIngest = exports.triggerPmtilesBuild = exports.fetchRrcWells = exports.processUserDeletion = exports.cleanupConstructionJob = void 0;
+exports.onAuthUserCreated = exports.onUserSignedIn = exports.onUserHistoryWrite = exports.onUserWrite = exports.onLeadWrite = exports.onConstructionProjectsTaskWrite = exports.onConstructionProjectsJobWrite = exports.onTaskWrite = exports.onJobWrite = exports.onPreConSiteWrite = exports.onSiteWrite = exports.onDocumentWrite = exports.onContactWrite = exports.onCompanyWrite = exports.refreshFederalOfficials = exports.refreshFederalBills = exports.detectStatusChanges = exports.triggerPdqIngest = exports.triggerRrcBulksIngest = exports.triggerPmtilesBuild = exports.fetchRrcWells = exports.processUserDeletion = exports.cleanupConstructionProjectsJob = exports.cleanupConstructionJob = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 var cleanupConstructionJob_1 = require("./cleanupConstructionJob");
 Object.defineProperty(exports, "cleanupConstructionJob", { enumerable: true, get: function () { return cleanupConstructionJob_1.cleanupConstructionJob; } });
+Object.defineProperty(exports, "cleanupConstructionProjectsJob", { enumerable: true, get: function () { return cleanupConstructionJob_1.cleanupConstructionProjectsJob; } });
 var deleteUserAccount_1 = require("./deleteUserAccount");
 Object.defineProperty(exports, "processUserDeletion", { enumerable: true, get: function () { return deleteUserAccount_1.processUserDeletion; } });
 var wellFinder_1 = require("./wellFinder");
@@ -54,8 +55,11 @@ Object.defineProperty(exports, "onCompanyWrite", { enumerable: true, get: functi
 Object.defineProperty(exports, "onContactWrite", { enumerable: true, get: function () { return activity_1.onContactWrite; } });
 Object.defineProperty(exports, "onDocumentWrite", { enumerable: true, get: function () { return activity_1.onDocumentWrite; } });
 Object.defineProperty(exports, "onSiteWrite", { enumerable: true, get: function () { return activity_1.onSiteWrite; } });
+Object.defineProperty(exports, "onPreConSiteWrite", { enumerable: true, get: function () { return activity_1.onPreConSiteWrite; } });
 Object.defineProperty(exports, "onJobWrite", { enumerable: true, get: function () { return activity_1.onJobWrite; } });
 Object.defineProperty(exports, "onTaskWrite", { enumerable: true, get: function () { return activity_1.onTaskWrite; } });
+Object.defineProperty(exports, "onConstructionProjectsJobWrite", { enumerable: true, get: function () { return activity_1.onConstructionProjectsJobWrite; } });
+Object.defineProperty(exports, "onConstructionProjectsTaskWrite", { enumerable: true, get: function () { return activity_1.onConstructionProjectsTaskWrite; } });
 Object.defineProperty(exports, "onLeadWrite", { enumerable: true, get: function () { return activity_1.onLeadWrite; } });
 Object.defineProperty(exports, "onUserWrite", { enumerable: true, get: function () { return activity_1.onUserWrite; } });
 Object.defineProperty(exports, "onUserHistoryWrite", { enumerable: true, get: function () { return activity_1.onUserHistoryWrite; } });

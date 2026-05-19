@@ -33,41 +33,37 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cleanupConstructionJob = void 0;
+exports.cleanupConstructionProjectsJob = exports.cleanupConstructionJob = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const v2_1 = require("firebase-functions/v2");
-/** When a construction job document is deleted, wipe its sub-collections
- *  (tasks, photos, documents) and the Storage prefixes that hold the binary
- *  blobs. Without this, deleting a job leaves orphan data behind forever:
- *  Firestore rules can't reach sub-docs once the parent is gone, and Storage
- *  blobs accumulate cost indefinitely.
- *
- *  Trigger: Firestore document delete on construction-jobs/{jobId}.
- *  Region: us-central1 (default — matches the database location). */
-exports.cleanupConstructionJob = (0, firestore_1.onDocumentDeleted)('construction-jobs/{jobId}', async (event) => {
-    const { jobId } = event.params;
-    v2_1.logger.info(`[cleanup] starting for job ${jobId}`);
+/** Shared cleanup body. When a job doc is deleted, wipe its sub-collections
+ *  (tasks, photos, documents) and the matching Storage prefixes. Without this,
+ *  deleting a job leaves orphan data behind forever: Firestore rules can't
+ *  reach sub-docs once the parent is gone, and Storage blobs accumulate cost
+ *  indefinitely. */
+async function cleanupJob(jobId, jobsCollection, photosPrefix, documentsPrefix) {
+    v2_1.logger.info(`[cleanup] starting for ${jobsCollection}/${jobId}`);
     const firestore = admin.firestore();
     const storage = admin.storage().bucket();
-    // Sub-collections — recursiveDelete handles arbitrary nesting and uses
-    // bulkWriter under the hood, well-suited for large task/photo/doc lists.
     const subCollections = ['tasks', 'photos', 'documents'];
-    const subCollectionResults = await Promise.allSettled(subCollections.map((sub) => firestore.recursiveDelete(firestore.collection('construction-jobs').doc(jobId).collection(sub))));
+    const subCollectionResults = await Promise.allSettled(subCollections.map((sub) => firestore.recursiveDelete(firestore.collection(jobsCollection).doc(jobId).collection(sub))));
     subCollectionResults.forEach((r, i) => {
         if (r.status === 'rejected') {
-            v2_1.logger.error(`[cleanup] failed to delete sub-collection ${subCollections[i]} for ${jobId}`, r.reason);
+            v2_1.logger.error(`[cleanup] failed to delete sub-collection ${subCollections[i]} for ${jobsCollection}/${jobId}`, r.reason);
         }
     });
-    // Storage blob prefixes. deleteFiles returns once all matching objects are
-    // deleted; there's no batch limit on the client (the SDK paginates).
-    const blobPrefixes = [`construction-photos/${jobId}/`, `construction-documents/${jobId}/`];
+    const blobPrefixes = [`${photosPrefix}/${jobId}/`, `${documentsPrefix}/${jobId}/`];
     const blobResults = await Promise.allSettled(blobPrefixes.map((prefix) => storage.deleteFiles({ prefix })));
     blobResults.forEach((r, i) => {
         if (r.status === 'rejected') {
-            v2_1.logger.error(`[cleanup] failed to delete Storage prefix ${blobPrefixes[i]} for ${jobId}`, r.reason);
+            v2_1.logger.error(`[cleanup] failed to delete Storage prefix ${blobPrefixes[i]} for ${jobsCollection}/${jobId}`, r.reason);
         }
     });
-    v2_1.logger.info(`[cleanup] complete for job ${jobId}`);
-});
+    v2_1.logger.info(`[cleanup] complete for ${jobsCollection}/${jobId}`);
+}
+/** Bailey Project — original collection, kept for the CEO's existing data. */
+exports.cleanupConstructionJob = (0, firestore_1.onDocumentDeleted)('construction-jobs/{jobId}', async (event) => cleanupJob(event.params.jobId, 'construction-jobs', 'construction-photos', 'construction-documents'));
+/** Construction Projects — fresh duplicate for the construction team. */
+exports.cleanupConstructionProjectsJob = (0, firestore_1.onDocumentDeleted)('construction-projects-jobs/{jobId}', async (event) => cleanupJob(event.params.jobId, 'construction-projects-jobs', 'construction-projects-photos', 'construction-projects-documents'));
 //# sourceMappingURL=cleanupConstructionJob.js.map

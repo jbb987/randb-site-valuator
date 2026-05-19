@@ -13,6 +13,7 @@ Internal tool suite for R&B Power. The **CRM** is the central database (companie
 ### Tools
 
 - **CRM (Directory)** — Cross-cutting directory of Customers (companies) and People (contacts), shared across Pre-Construction, Construction, and REP dimensions. Toggle between Customers and People, search, add/edit/delete. Fixed-enum tags (`REP` / `Construction` / `Pre Construction` / `Utility`) classify each customer. Each customer has a Documents section (PDFs + images) categorized as Legal / Invoices / Deliverables / Reports / Photos / Other, and a collapsible License Numbers section with free-text fields for the 5 tracked states (OK, TX, AZ, NM, TN). One person can be linked to multiple customers via `Contact.affiliations[]`, each carrying its own title; the Person detail page lets you add/remove/set-primary, and a merge UI on that page combines duplicate people. Mobile-first UI.
+- **Pre-Construction** — End-to-end workflow for evaluating a coordinate from "raw site" to "LOA executed". Pick or create a customer, drop coordinates + acreage/MW/$/acre, and the tool runs the financial appraisal, auto-suggests a GO / CONDITIONAL GO / NO GO grade (overridable), opens a request-for-engineer-review with assignment, and drives a utility-aware LOA timeline (Oncor / AEP / Coop / Other — single shared template in v1, per-utility variants drop into `LOA_TIMELINES` in `src/lib/preConWorkflow.ts`). Documents live in the existing folder system via auto-provisioned `cust_{companyId}_precon-root` + `precon_{siteId}_root` system folders + a `Project` record (type='pre-con'). Sites stored in `preconstruction-sites`; the linked appraisal lives on the existing `sites-registry` entry — opening "View site report" deep-links into Site Analyzer for the full multi-source analysis.
 - **Site Analyzer** — Site analysis tool. Enter coordinates → runs land valuation, power, broadband, transport, water, gas, labor, and political radar analyses in parallel. Saves results to the site registry, optionally linked to a CRM company. PDF export. Three routes: index (`/site-analyzer`) lists all sites with search; new (`/site-analyzer/new`) is the entry form; detail (`/site-analyzer/:siteId`) is a tabbed view with one section visible at a time. **Per-section locks:** each lockable tab (Power, Broadband, Transport, Water, Gas, Labor, Political) has a lock icon. After a successful run a section auto-locks; "Re-analyze" then skips locked sections and only re-runs the unlocked ones. "Unlock all" clears every lock; the Re-analyze button is disabled when every section is locked. Stored as `sectionLocks` on `SiteRegistryEntry`. Political Radar ingest pipeline (federal layer): `refreshFederalBills` (daily, Congress.gov bills + joint resolutions filtered by threat keywords) and `refreshFederalOfficials` (weekly, all 535 current Congress members) Cloud Functions write to `political-radar-tracked-bills` and `political-radar-federal-officials` Firestore collections; the client reads from those collections — no Congress.gov API key in the browser bundle.
 - **Grid Power Analyzer** — Interactive MapLibre GL map showing power generators, transmission lines, substations, and available capacity with heat map overlay. Coordinate search with gold diamond pin.
 - **Labor Pool (Site Analyzer section only)** — County-anchored workforce data: population, labor force, unemployment, education, commute, industry mix, occupational wages, with state/national benchmarks. Live: FCC Area API (county FIPS, CORS-friendly), Census ACS 5yr (population/labor/education/commute), BLS QCEW (private-sector industries by NAICS supersector, county-level), BLS OEWS (occupations + hourly wage percentiles, state-level). MSA resolution requires a server-side proxy (Census Geocoder is CORS-blocked); `resolvedMsa` is null in the browser today. Optional `VITE_BLS_API_KEY` raises the BLS quota from 25 → 500 requests/day.
@@ -138,6 +139,13 @@ src/
     admin/                    # Admin-only components
       InfraRefreshPanel.tsx   # Infrastructure data cache refresh panel
     PowerSlider.tsx           # MW slider input (used in Site Analyzer land valuation)
+    precon/                   # Pre-Construction tool components
+      PreConGradePill.tsx       # Colored pill: GO / CONDITIONAL GO / NO GO
+      PreConHeader.tsx          # Detail-page header card (name, company link, coordinates, grade)
+      PreConAppraisalSummary.tsx # Site analysis section status checklist (8 sections) + appraisal metric cards when populated
+      PreConStatusCard.tsx      # Merged Site Status card: assigned engineer + verified MW + GO/CONDITIONAL/NO GO grade in one save
+      PreConUtilityPicker.tsx   # Oncor / AEP / Coop / Other picker (with coop name)
+      PreConLoaTimeline.tsx     # Vertical LOA step list driven by LOA_TIMELINES + advance buttons
   pages/
     Dashboard.tsx             # Tool grid (root page "/") — grouped by section
     LoginPage.tsx             # Firebase auth login
@@ -155,6 +163,9 @@ src/
     ConstructionTrackerIndex.tsx  # Construction Projects index — list of projects with search + status filter ("/construction-tracker")
     ConstructionTrackerNew.tsx    # New construction project form ("/construction-tracker/new"; reads ?companyId)
     ConstructionTrackerDetail.tsx # Construction project detail page with view/edit toggle ("/construction-tracker/:jobId")
+    PreConIndex.tsx           # Pre-Construction index — sites grouped by grade + LOA status ("/precon")
+    PreConNew.tsx             # New pre-con site form ("/precon/new"; pick/create company, drop coords, runs appraisal)
+    PreConDetail.tsx          # Pre-con site dashboard: appraisal, grade, engineer review, LOA timeline, folders ("/precon/:siteId")
     WellFinderTool.tsx        # Well Finder ("/well-finder") — admin-only map of TX oil & gas wells
     DocumentsTool.tsx         # Documents ("/documents") — admin-only embedded Google Drive folder
   hooks/
@@ -179,6 +190,8 @@ src/
     useConstructionJobs.ts    # Construction Tracker: list, single-job, by-company hooks
     useJobPermissions.ts      # Per-job permission level (admin/pm/worker/none) derived from membership
     useJobTasks.ts            # Construction Tracker: tasks sub-collection list + CRUD
+    usePreConSites.ts         # Pre-Construction: list, by-company, single-site live subscriptions
+    usePreConPermissions.ts   # Pre-Construction: per-site permission flags (grade, engineer review, LOA)
     useAnimatedNumber.ts      # Number animation utility
   lib/
     firebase.ts               # Firebase config + legacy site CRUD
@@ -194,6 +207,11 @@ src/
     queueLoad.ts              # Read substation_queue_load doc by HIFLD ID (one-shot getDoc; refreshed weekly by scripts/queue-ingestion)
     constructionJobs.ts       # Construction Tracker Firestore CRUD (collection: construction-jobs). Maintains linkedCompanyIds mirror for array-contains queries.
     constructionTasks.ts      # Construction Tracker Firestore CRUD for tasks sub-collection (construction-jobs/{jobId}/tasks)
+    preConSites.ts            # Pre-Construction Firestore CRUD (collection: preconstruction-sites). Auto-provisions Project + folder skeleton on create; ships LOA/engineer workflow helpers.
+    preConWorkflow.ts         # Pure helpers: suggestGradeFromAppraisal, LOA_TIMELINES (per-utility), nextLoaStatuses, appendLoaStep
+    appraisal.ts              # Shared pure computeAppraisal() — used by both Site Analyzer and Pre-Construction
+    projectProvisioning.ts    # Idempotent folder + Project record provisioning (provisionProjectFolders for construction, provisionPreConFolders for pre-con)
+    projects.ts               # Customer-projects collection CRUD (type='pre-con'|'construction'|'rep')
     broadbandLookup.ts        # FCC Census Block + ArcGIS BDC API
     waterAnalysis.ts          # Water analysis (FEMA, USGS, NWI, groundwater, drought, NPDES)
     waterAnalysis.types.ts    # Water analysis type definitions
@@ -260,6 +278,9 @@ scripts/
 | `/construction-tracker`        | `ConstructionTrackerIndex`  | toolId: `construction-tracker` | List of construction projects (labor sees only their assigned projects)                                                |
 | `/construction-tracker/new`    | `ConstructionTrackerNew`    | toolId: `construction-tracker` | New project form (accepts `?companyId` pre-fill)                                                                       |
 | `/construction-tracker/:jobId` | `ConstructionTrackerDetail` | toolId: `construction-tracker` | Project detail (view/edit toggle; permissions per Admin/Supervisor/Labor membership)                                   |
+| `/precon`                      | `PreConIndex`               | toolId: `pre-construction`     | Pre-Construction sites index — search + grade filter                                                                   |
+| `/precon/new`                  | `PreConNew`                 | toolId: `pre-construction`     | New pre-con site (picks or creates company, drops coordinates, computes appraisal)                                     |
+| `/precon/:siteId`              | `PreConDetail`              | toolId: `pre-construction`     | Pre-con dashboard: appraisal, grade, engineer review, utility-aware LOA timeline, documents                            |
 | `/user-management`             | `UserManagement`            | role: `admin`                  | Manage users and roles                                                                                                 |
 | `/admin/activity`              | `AdminActivity`             | role: `admin`                  | Activity log — every CRUD + tool run, newest first                                                                     |
 | `/well-finder`                 | `WellFinderTool`            | role: `admin`                  | Texas oil & gas wells map (reactivation candidates)                                                                    |
@@ -334,7 +355,7 @@ scripts/
 Tools are grouped into 6 sections that mirror R&B Power's four business lines (Pre-Construction, Construction, Oil & Gas, REP) plus cross-cutting Company tools and admin Settings. Section headers only render if the signed-in user has at least one visible tool inside.
 
 1. **Company** — Directory, Documents, Bailey Project _(cross-cutting)_
-2. **Pre-Construction** — Site Analyzer, Grid Power Analyzer
+2. **Pre-Construction** — Pre-Construction, Site Analyzer, Grid Power Analyzer
 3. **Construction** — Construction Projects
 4. **REP** — Leads, Sales Dashboard _(admin-only)_
 5. **Oil and Gas** — Well Finder _(admin-only)_

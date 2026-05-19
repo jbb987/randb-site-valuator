@@ -15,6 +15,7 @@ export type ActivityResourceType =
   | 'contact'
   | 'document'
   | 'site'
+  | 'precon-site'
   | 'job'
   | 'task'
   | 'lead'

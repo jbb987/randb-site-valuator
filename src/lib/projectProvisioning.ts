@@ -91,3 +91,76 @@ async function ensureFolder(id: string, build: () => Folder): Promise<void> {
   if (snap.exists()) return;
   await setDoc(ref, build());
 }
+
+/** Pre-Construction folder + Project record auto-provisioning. Mirrors
+ *  `provisionProjectFolders` but creates the pre-con folder skeleton:
+ *    cust_{companyId}_precon-root  — customer-level container
+ *    precon_{siteId}_root          — per-site root folder
+ *    customer-projects/{siteId}    — Project record (type='pre-con')
+ *
+ *  Idempotent: each create is guarded so re-running for an already-provisioned
+ *  site is a no-op. */
+export async function provisionPreConFolders(input: {
+  companyId: string;
+  siteId: string;
+  siteName: string;
+  createdBy: string;
+}): Promise<{ rootFolderId: string; projectId: string }> {
+  const { companyId, siteId, siteName, createdBy } = input;
+  const now = Date.now();
+
+  const preconRootId = `cust_${companyId}_precon-root`;
+  const siteRootId = `precon_${siteId}_root`;
+
+  await ensureFolder(preconRootId, () => ({
+    id: preconRootId,
+    companyId,
+    parentFolderId: null,
+    ancestorFolderIds: [],
+    name: 'Pre-Construction Sites',
+    position: now,
+    kind: 'system',
+    systemRole: 'pre-con-root',
+    createdAt: now,
+    createdBy,
+    updatedAt: now,
+    updatedBy: createdBy,
+  }));
+
+  await ensureFolder(siteRootId, () => ({
+    id: siteRootId,
+    companyId,
+    projectId: siteId,
+    parentFolderId: preconRootId,
+    ancestorFolderIds: [preconRootId],
+    name: siteName || '(unnamed pre-con site)',
+    position: now,
+    kind: 'system',
+    systemRole: 'project-root',
+    createdAt: now,
+    createdBy,
+    updatedAt: now,
+    updatedBy: createdBy,
+  }));
+
+  const projectRef = doc(db, CUSTOMER_PROJECTS_COLLECTION, siteId);
+  const projectSnap = await getDoc(projectRef);
+  if (!projectSnap.exists()) {
+    const project: Project = {
+      id: siteId,
+      companyId,
+      type: 'pre-con',
+      name: siteName || '(unnamed pre-con site)',
+      status: 'active',
+      rootFolderId: siteRootId,
+      siteId,
+      createdAt: now,
+      createdBy,
+      updatedAt: now,
+      updatedBy: createdBy,
+    };
+    await setDoc(projectRef, project);
+  }
+
+  return { rootFolderId: siteRootId, projectId: siteId };
+}

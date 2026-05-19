@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useInfraLookup } from './useInfraLookup';
 import { useBroadbandLookup } from './useBroadbandLookup';
 import type { AppraisalResult, BroadbandResult } from '../types';
+import { computeAppraisal } from '../lib/appraisal';
 import type { InfrastructureData } from '../components/power-calculator/InfrastructureResults';
 import { analyzeWater } from '../lib/waterAnalysis';
 import { analyzeGasInfrastructure } from '../lib/gasAnalysis';
@@ -49,25 +50,6 @@ export interface ExistingResults {
   gas?: Record<string, unknown> | null;
   labor?: Record<string, unknown> | null;
   political?: Record<string, unknown> | null;
-}
-
-const VALUE_PER_MW = 3_000_000;
-
-function computeAppraisal(inputs: AnalysisInputs): AppraisalResult {
-  const currentValueLow = inputs.acreage * inputs.ppaLow;
-  const currentValueHigh = inputs.acreage * inputs.ppaHigh;
-  const currentValueMid = (currentValueLow + currentValueHigh) / 2;
-  const energizedValue = inputs.mw * VALUE_PER_MW;
-  const valueCreated = energizedValue - currentValueMid;
-  const returnMultiple = currentValueMid > 0 ? energizedValue / currentValueMid : 0;
-
-  return {
-    currentValueLow,
-    currentValueHigh,
-    energizedValue,
-    valueCreated,
-    returnMultiple,
-  };
 }
 
 export function useSiteAnalysis() {

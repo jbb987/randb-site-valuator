@@ -19,6 +19,14 @@
 - [ ] Custom daily Firestore export to separate GCP project (optional)
 - [ ] Annual restore drill
 
+**Pre-Construction tool (v1 shipped 2026-05-19 — follow-ups)**
+- [ ] Per-utility LOA templates (Oncor / AEP / each major coop) — drop into `LOA_TIMELINES` in `src/lib/preConWorkflow.ts` (source: conversation 2026-05-19)
+- [ ] Notifications/email when engineer review is requested for an assigned user (source: conversation 2026-05-19)
+- [ ] "Promote to Construction Job" handoff button on PreCon detail page (source: conversation 2026-05-19)
+- [ ] Bulk grading / bulk LOA actions on PreCon index (source: conversation 2026-05-19)
+- [ ] Tighten engineer assignment: filter the assignment dropdown to users tagged as engineers (today: any platform user) (source: conversation 2026-05-19)
+- [ ] Pre-Con: when site company changes via edit mode, migrate the linked folder skeleton (`cust_{oldCompanyId}_precon-root` → `cust_{newCompanyId}_precon-root`) and update the `customer-projects` Project record (source: conversation 2026-05-19)
+
 **Platform debt**
 - [ ] Delete legacy collections `site-requests`, legacy `sites`, legacy `projects` (AUDIT M-1)
 - [ ] Decide API data strategy: live vs Postgres+PostGIS for OK/TX/AZ/NM/TN

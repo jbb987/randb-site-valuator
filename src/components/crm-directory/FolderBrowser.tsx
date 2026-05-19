@@ -351,11 +351,13 @@ export default function FolderBrowser({
           <h3 className="font-heading font-semibold text-[#201F1E]">
             {trashMode ? `${title} · Trash` : title}
           </h3>
-          <p className="text-xs text-[#7A756E] mt-0.5">
-            {trashMode
-              ? 'Archived folders + documents. Click Restore to bring an item back to its original location.'
-              : description}
-          </p>
+          {(trashMode || description) && (
+            <p className="text-xs text-[#7A756E] mt-0.5">
+              {trashMode
+                ? 'Archived folders + documents. Click Restore to bring an item back to its original location.'
+                : description}
+            </p>
+          )}
         </div>
         {trashMode ? (
           <div className="flex items-center gap-2 shrink-0">

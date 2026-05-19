@@ -12,11 +12,11 @@ const ACTION_VERB = {
     export: 'exported',
 };
 const RESOURCE_NOUN = {
-    company: 'company',
-    contact: 'contact',
+    company: 'customer',
+    contact: 'person',
     document: 'document',
     site: 'site',
-    job: 'construction job',
+    job: 'construction project',
     task: 'task',
     lead: 'lead',
     user: 'user',

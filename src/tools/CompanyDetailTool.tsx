@@ -10,6 +10,8 @@ import { useCompany, useCompanies } from '../hooks/useCompanies';
 import { useContactsByCompany, useContacts } from '../hooks/useContacts';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
 import { useConstructionJobsByCompany, type JobWithOrigin } from '../hooks/useConstructionJobs';
+import { usePreConSitesByCompany } from '../hooks/usePreConSites';
+import PreConGradePill from '../components/precon/PreConGradePill';
 import { CONSTRUCTION_PROJECTS_CONFIG } from '../lib/jobToolConfig';
 import { useAuth } from '../hooks/useAuth';
 import { logView } from '../lib/userHistory';
@@ -18,10 +20,12 @@ import {
   ALL_COMPANY_TAGS,
   LICENSE_STATES,
   LICENSE_STATE_LABELS,
+  PRECON_LOA_STATUS_LABELS,
   type Company,
   type CompanyTag,
   type ConstructionJob,
   type LicenseState,
+  type PreConSite,
   type SiteRegistryEntry,
 } from '../types';
 
@@ -101,11 +105,24 @@ export default function CompanyDetailTool() {
     }
   }
   const { sites: allSites } = useSiteRegistry();
-  const linkedSites = useMemo(
-    () => (isNew || !id ? [] : allSites.filter((s) => s.companyId === id)),
-    [allSites, id, isNew],
-  );
   const { jobs: linkedJobs } = useConstructionJobsByCompany(isNew ? undefined : id);
+  const { sites: linkedPreConSites } = usePreConSitesByCompany(isNew ? undefined : id);
+  // Hide sites that are already wrapped by a PreConSite — they show in the
+  // Pre-Construction sites section below and re-rendering them as a plain
+  // Site row duplicates the same physical location.
+  const preConTrackedSiteRegistryIds = useMemo(
+    () => new Set(linkedPreConSites.map((p) => p.siteRegistryId)),
+    [linkedPreConSites],
+  );
+  const linkedSites = useMemo(
+    () =>
+      isNew || !id
+        ? []
+        : allSites.filter(
+            (s) => s.companyId === id && !preConTrackedSiteRegistryIds.has(s.id),
+          ),
+    [allSites, id, isNew, preConTrackedSiteRegistryIds],
+  );
 
   const [editing, setEditing] = useState(isNew);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -391,6 +408,12 @@ export default function CompanyDetailTool() {
         {!isNew && !editing && id && (
           <div className="mt-5">
             <SitesSection sites={linkedSites} companyId={id} />
+          </div>
+        )}
+
+        {!isNew && !editing && id && (
+          <div className="mt-5">
+            <PreConSitesSection sites={linkedPreConSites} companyId={id} />
           </div>
         )}
 
@@ -899,5 +922,67 @@ function AddPersonModal({
         </button>
       </div>
     </div>
+  );
+}
+
+function PreConSitesSection({ sites, companyId }: { sites: PreConSite[]; companyId: string }) {
+  const navigate = useNavigate();
+  return (
+    <section className="bg-white rounded-xl border border-[#D8D5D0] shadow-sm p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h3 className="font-heading font-semibold text-[#201F1E]">
+          Pre-Construction sites{' '}
+          {sites.length > 0 && (
+            <span className="text-[#7A756E] font-normal">· {sites.length}</span>
+          )}
+        </h3>
+        <button
+          onClick={() => navigate(`/precon/new?companyId=${companyId}`)}
+          className="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[#ED202B] border border-[#ED202B] px-3 py-1.5 rounded-lg hover:bg-[#ED202B]/5 transition"
+        >
+          <svg
+            className="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          <span className="hidden sm:inline">New pre-con site</span>
+          <span className="sm:hidden">New</span>
+        </button>
+      </div>
+      {sites.length === 0 ? (
+        <p className="text-sm text-[#7A756E]">
+          No pre-con sites yet. Click <span className="font-medium">New pre-con site</span> to
+          add one.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[#D8D5D0]">
+          {sites.map((s) => (
+            <li key={s.id}>
+              <button
+                onClick={() => navigate(`/precon/${s.id}`)}
+                className="group w-full text-left py-3 px-2 -mx-2 rounded-lg flex items-center justify-between gap-3 hover:bg-stone-50 transition"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-[#201F1E] truncate group-hover:text-[#ED202B] transition-colors">
+                    {s.name}
+                  </div>
+                  <div className="text-xs text-[#7A756E] mt-0.5 truncate">
+                    {s.coordinates.lat.toFixed(5)}, {s.coordinates.lng.toFixed(5)} · LOA:{' '}
+                    {PRECON_LOA_STATUS_LABELS[s.loaStatus]}
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  <PreConGradePill grade={s.grade} />
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

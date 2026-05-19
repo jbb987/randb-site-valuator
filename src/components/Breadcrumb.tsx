@@ -4,6 +4,7 @@ import { useCompany, useCompanies } from '../hooks/useCompanies';
 import { useContact } from '../hooks/useContacts';
 import { useSiteRegistry } from '../hooks/useSiteRegistry';
 import { useConstructionJob } from '../hooks/useConstructionJobs';
+import { usePreConSite } from '../hooks/usePreConSites';
 import {
   BAILEY_PROJECT_CONFIG,
   CONSTRUCTION_PROJECTS_CONFIG,
@@ -43,7 +44,9 @@ export default function Breadcrumb() {
     pathname === BAILEY_PROJECT_CONFIG.routeBase ||
     pathname.startsWith(`${BAILEY_PROJECT_CONFIG.routeBase}/`) ||
     pathname === CONSTRUCTION_PROJECTS_CONFIG.routeBase ||
-    pathname.startsWith(`${CONSTRUCTION_PROJECTS_CONFIG.routeBase}/`);
+    pathname.startsWith(`${CONSTRUCTION_PROJECTS_CONFIG.routeBase}/`) ||
+    pathname === '/precon' ||
+    pathname.startsWith('/precon/');
   // Resolve which job-tool config (if any) applies to this URL — the inner
   // `useConstructionJob` runs unconditionally, so we wrap the data variant in
   // the matching provider so the hook reads from the right Firestore
@@ -151,6 +154,20 @@ function BreadcrumbWithData({ jobConfig }: { jobConfig: JobToolConfig }) {
     ? companies.find((c) => c.id === newJobCompanyId)
     : undefined;
 
+  // Pre-Construction site detail / new-from-company.
+  const preConIndexMatch = useMatch('/precon');
+  const preConNewMatch = useMatch('/precon/new');
+  const preConDetailMatch = useMatch('/precon/:siteId');
+  const preConSiteIdParam =
+    preConDetailMatch && preConDetailMatch.params.siteId !== 'new'
+      ? preConDetailMatch.params.siteId
+      : undefined;
+  const { site: preConSiteOnPage } = usePreConSite(preConSiteIdParam);
+  const newPreConCompanyId = preConNewMatch ? searchParams.get('companyId') : null;
+  const newPreConCompany = newPreConCompanyId
+    ? companies.find((c) => c.id === newPreConCompanyId)
+    : undefined;
+
   // Always start the trail at Dashboard so there's a text path back to home
   // from anywhere in the app — not just the navbar logo.
   const segments: Segment[] = [{ label: 'Dashboard', path: '/' }];
@@ -193,6 +210,28 @@ function BreadcrumbWithData({ jobConfig }: { jobConfig: JobToolConfig }) {
       segments.push({ label: jobConfig.label, path: jobConfig.routeBase });
       segments.push({ label: jobOnPage?.name || '…' });
     }
+  } else if (preConIndexMatch || preConNewMatch || preConSiteIdParam) {
+    // Pre-Construction. Detail page returns to the tool index (not the company)
+    // so the back arrow lands on /precon — matching Construction Tracker's
+    // pattern. New-from-company keeps the Directory › Company parent so the
+    // back arrow returns the user to the company profile they came from.
+    if (preConIndexMatch) {
+      segments.push({ label: 'Pre-Construction' });
+    } else if (preConNewMatch) {
+      if (newPreConCompany) {
+        segments.push({ label: 'Directory', path: '/crm' });
+        segments.push({
+          label: newPreConCompany.name,
+          path: `/crm/companies/${newPreConCompany.id}`,
+        });
+      } else {
+        segments.push({ label: 'Pre-Construction', path: '/precon' });
+      }
+      segments.push({ label: 'New Site' });
+    } else if (preConSiteIdParam) {
+      segments.push({ label: 'Pre-Construction', path: '/precon' });
+      segments.push({ label: preConSiteOnPage?.name || '…' });
+    }
   } else if (siteIndexMatch || siteNewMatch || siteIdParam) {
     // Site detail/new pages use their linked company as the canonical parent
     // when one exists, so the back arrow returns to the company profile the
@@ -220,11 +259,15 @@ function BreadcrumbWithData({ jobConfig }: { jobConfig: JobToolConfig }) {
   // Other tool routes: breadcrumb stays as just "‹ Dashboard". The tool's
   // own h2 already names the page, so we don't duplicate it here.
 
-  // Back button destination: the last segment in the trail that has a path
-  // (i.e. the immediate parent of the current page). This is always "up one
-  // level" regardless of trail depth, and is what most users instinctively
-  // reach for on the left of the screen.
-  const backTarget = [...segments].reverse().find((s) => s.path);
+  // Back button destination: when the caller passed `?returnTo=<path>`,
+  // honor that as an explicit override — useful when a page is reached from
+  // somewhere other than its canonical parent (e.g. opening the Site Analyzer
+  // from a pre-con site). Otherwise fall back to the last segment in the
+  // trail that has a path — i.e. the canonical "up one level".
+  const returnTo = searchParams.get('returnTo');
+  const backTarget = returnTo
+    ? { label: 'Back', path: returnTo }
+    : [...segments].reverse().find((s) => s.path);
 
   return (
     <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-3 flex-wrap">

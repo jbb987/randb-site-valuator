@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onUserHistoryWrite = exports.onUserWrite = exports.onLeadWrite = exports.onTaskWrite = exports.onJobWrite = exports.onSiteWrite = exports.onDocumentWrite = exports.onContactWrite = exports.onCompanyWrite = void 0;
+exports.onUserHistoryWrite = exports.onUserWrite = exports.onLeadWrite = exports.onConstructionProjectsTaskWrite = exports.onConstructionProjectsJobWrite = exports.onTaskWrite = exports.onJobWrite = exports.onPreConSiteWrite = exports.onSiteWrite = exports.onDocumentWrite = exports.onContactWrite = exports.onCompanyWrite = void 0;
 const admin = __importStar(require("firebase-admin"));
 const v2_1 = require("firebase-functions/v2");
 const firestore_1 = require("firebase-functions/v2/firestore");
@@ -115,7 +115,7 @@ exports.onContactWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('crm-
         const first = (d.firstName ?? '');
         const last = (d.lastName ?? '');
         const full = `${first} ${last}`.trim();
-        return full || '(unnamed contact)';
+        return full || '(unnamed person)';
     },
     getParent: async (d) => fetchCompanyParent(d.companyId),
 }, 'contactId'));
@@ -129,14 +129,28 @@ exports.onSiteWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('sites-r
     getLabel: (d) => String(d.name ?? '(unnamed site)'),
     getParent: async (d) => fetchCompanyParent(d.companyId),
 }, 'siteId'));
+exports.onPreConSiteWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('preconstruction-sites/{siteId}', buildHandler({
+    type: 'precon-site',
+    getLabel: (d) => String(d.name ?? '(unnamed pre-con site)'),
+    getParent: async (d) => fetchCompanyParent(d.companyId),
+}, 'siteId'));
 exports.onJobWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('construction-jobs/{jobId}', buildHandler({
     type: 'job',
-    getLabel: (d) => String(d.name ?? '(unnamed job)'),
+    getLabel: (d) => String(d.name ?? '(unnamed project)'),
 }, 'jobId'));
 exports.onTaskWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('construction-jobs/{jobId}/tasks/{taskId}', buildHandler({
     type: 'task',
     getLabel: (d) => String(d.title ?? '(untitled task)'),
-    getParent: async (_d, params) => fetchJobParent(params.jobId),
+    getParent: async (_d, params) => fetchJobParent('construction-jobs', params.jobId),
+}, 'taskId'));
+exports.onConstructionProjectsJobWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('construction-projects-jobs/{jobId}', buildHandler({
+    type: 'job',
+    getLabel: (d) => String(d.name ?? '(unnamed project)'),
+}, 'jobId'));
+exports.onConstructionProjectsTaskWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('construction-projects-jobs/{jobId}/tasks/{taskId}', buildHandler({
+    type: 'task',
+    getLabel: (d) => String(d.title ?? '(untitled task)'),
+    getParent: async (_d, params) => fetchJobParent('construction-projects-jobs', params.jobId),
 }, 'taskId'));
 exports.onLeadWrite = (0, firestore_1.onDocumentWrittenWithAuthContext)('leads/{leadId}', buildHandler({
     type: 'lead',
@@ -265,11 +279,11 @@ async function fetchCompanyParent(companyId) {
         return { id: companyId, label: companyId };
     }
 }
-async function fetchJobParent(jobId) {
+async function fetchJobParent(collection, jobId) {
     if (!jobId)
         return undefined;
     try {
-        const snap = await admin.firestore().doc(`construction-jobs/${jobId}`).get();
+        const snap = await admin.firestore().doc(`${collection}/${jobId}`).get();
         const name = snap.data()?.name;
         return { id: jobId, label: typeof name === 'string' ? name : jobId };
     }
@@ -289,7 +303,8 @@ const TOOL_LABELS = {
     'sales-crm': 'Leads',
     'sales-admin': 'Sales Dashboard',
     crm: 'Directory',
-    'construction-tracker': 'Construction',
+    'construction-tracker': 'Bailey Project',
+    'construction-projects': 'Construction Projects',
     'well-finder': 'Well Finder',
     piddr: 'Site Analyzer',
 };

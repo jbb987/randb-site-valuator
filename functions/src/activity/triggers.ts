@@ -159,6 +159,18 @@ export const onSiteWrite = onDocumentWrittenWithAuthContext(
   ),
 );
 
+export const onPreConSiteWrite = onDocumentWrittenWithAuthContext(
+  'preconstruction-sites/{siteId}',
+  buildHandler<{ siteId: string }>(
+    {
+      type: 'precon-site',
+      getLabel: (d) => String(d.name ?? '(unnamed pre-con site)'),
+      getParent: async (d) => fetchCompanyParent(d.companyId),
+    },
+    'siteId',
+  ),
+);
+
 export const onJobWrite = onDocumentWrittenWithAuthContext(
   'construction-jobs/{jobId}',
   buildHandler<{ jobId: string }>(

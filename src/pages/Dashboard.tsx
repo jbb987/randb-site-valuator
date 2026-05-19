@@ -51,6 +51,13 @@ const toolSections: ToolSection[] = [
     title: 'Pre-Construction',
     tools: [
       {
+        id: 'pre-construction',
+        name: 'Pre-Construction',
+        description: 'Grade sites, run engineer review, and track the LOA process',
+        path: '/precon',
+        icon: 'report',
+      },
+      {
         id: 'site-analyzer',
         name: 'Site Analyzer',
         description: '',

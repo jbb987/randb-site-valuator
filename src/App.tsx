@@ -16,6 +16,9 @@ import ContactDetailTool from './tools/ContactDetailTool';
 import ConstructionTrackerIndex from './tools/ConstructionTrackerIndex';
 import ConstructionTrackerNew from './tools/ConstructionTrackerNew';
 import ConstructionTrackerDetail from './tools/ConstructionTrackerDetail';
+import PreConIndex from './tools/PreConIndex';
+import PreConNew from './tools/PreConNew';
+import PreConDetail from './tools/PreConDetail';
 import WellFinderTool from './tools/WellFinderTool';
 import DocumentsTool from './tools/DocumentsTool';
 import AdminActivity from './pages/AdminActivity';
@@ -188,6 +191,30 @@ export default function App() {
                 <JobToolConfigProvider config={CONSTRUCTION_PROJECTS_CONFIG}>
                   <ConstructionTrackerDetail />
                 </JobToolConfigProvider>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/precon"
+            element={
+              <ProtectedRoute toolId="pre-construction">
+                <PreConIndex />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/precon/new"
+            element={
+              <ProtectedRoute toolId="pre-construction">
+                <PreConNew />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/precon/:siteId"
+            element={
+              <ProtectedRoute toolId="pre-construction">
+                <PreConDetail />
               </ProtectedRoute>
             }
           />

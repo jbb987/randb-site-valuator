@@ -132,6 +132,7 @@ export type ToolId =
   | 'crm'
   | 'construction-tracker'
   | 'construction-projects'
+  | 'pre-construction'
   | 'well-finder'
   | 'documents';
 
@@ -143,6 +144,7 @@ export const ALL_TOOL_IDS: ToolId[] = [
   'crm',
   'construction-tracker',
   'construction-projects',
+  'pre-construction',
   'well-finder',
   'documents',
 ];
@@ -155,6 +157,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   crm: 'Directory',
   'construction-tracker': 'Bailey Project',
   'construction-projects': 'Construction Projects',
+  'pre-construction': 'Pre-Construction',
   'well-finder': 'Well Finder',
   documents: 'Documents',
 };
@@ -1087,4 +1090,127 @@ export interface Project {
   updatedBy: string;
   archivedAt?: number;
   archivedBy?: string;
+}
+
+// ── Pre-Construction Tool ────────────────────────────────────────────────
+
+/** Firestore collection for Pre-Construction sites. */
+export const PRECON_SITES_COLLECTION = 'preconstruction-sites';
+
+/** GO / CONDITIONAL GO / NO GO grade for a pre-con site. */
+export type PreConGrade = 'go' | 'conditional-go' | 'no-go';
+
+export const ALL_PRECON_GRADES: PreConGrade[] = ['go', 'conditional-go', 'no-go'];
+
+export const PRECON_GRADE_LABELS: Record<PreConGrade, string> = {
+  go: 'GO',
+  'conditional-go': 'CONDITIONAL GO',
+  'no-go': 'NO GO',
+};
+
+export const PRECON_GRADE_COLORS: Record<PreConGrade, string> = {
+  go: '#10B981', // emerald
+  'conditional-go': '#F59E0B', // amber
+  'no-go': '#EF4444', // red
+};
+
+/** Engineer review lifecycle. */
+export type PreConEngineerStatus = 'not-requested' | 'requested' | 'approved' | 'rejected';
+
+export const PRECON_ENGINEER_STATUS_LABELS: Record<PreConEngineerStatus, string> = {
+  'not-requested': 'Not requested',
+  requested: 'Awaiting engineer',
+  approved: 'Engineer approved',
+  rejected: 'Engineer rejected',
+};
+
+/** LOA process status. Generic template for v1; per-utility templates may be
+ *  added later by overlaying additional statuses in `LOA_TIMELINES`. */
+export type PreConLoaStatus =
+  | 'not-started'
+  | 'contact-utility'
+  | 'project-manager'
+  | 'engineer-packet'
+  | 'packet-to-ercot'
+  | 'letter-of-allocation'
+  | 'rejected';
+
+export const ALL_PRECON_LOA_STATUSES: PreConLoaStatus[] = [
+  'not-started',
+  'contact-utility',
+  'project-manager',
+  'engineer-packet',
+  'packet-to-ercot',
+  'letter-of-allocation',
+  'rejected',
+];
+
+export const PRECON_LOA_STATUS_LABELS: Record<PreConLoaStatus, string> = {
+  'not-started': 'Not started',
+  'contact-utility': 'Contact utility',
+  'project-manager': 'Project manager assigned',
+  'engineer-packet': 'Engineer packet',
+  'packet-to-ercot': 'Packet sent to grid operator',
+  'letter-of-allocation': 'Letter of Allocation',
+  rejected: 'Rejected',
+};
+
+/** Serving utility for LOA. Free-form name in `loaUtilityName` when the user
+ *  picks `coop` or `other`. */
+export type PreConUtility = 'oncor' | 'aep' | 'coop' | 'other';
+
+export const ALL_PRECON_UTILITIES: PreConUtility[] = ['oncor', 'aep', 'coop', 'other'];
+
+export const PRECON_UTILITY_LABELS: Record<PreConUtility, string> = {
+  oncor: 'Oncor',
+  aep: 'AEP',
+  coop: 'Cooperative',
+  other: 'Other',
+};
+
+/** Single entry in the LOA audit trail. */
+export interface PreConLoaStep {
+  status: PreConLoaStatus;
+  enteredAt: number; // Unix ms
+  enteredBy: string; // Firebase UID
+}
+
+/** Pre-construction site record. One per coordinate + customer combination. */
+export interface PreConSite {
+  id: string;
+  companyId: string; // FK → crm-companies
+  name: string;
+  coordinates: { lat: number; lng: number };
+  siteRegistryId: string; // FK → sites-registry (where the appraisal lives)
+  projectId?: string; // FK → customer-projects (type='pre-con')
+  rootFolderId?: string; // FK → folders (system, kind='system')
+
+  // Grading
+  grade?: PreConGrade;
+  gradeSuggested?: PreConGrade; // auto-suggested from appraisal metrics
+  gradedAt?: number;
+  gradedBy?: string;
+
+  // Engineer review
+  engineerReviewStatus: PreConEngineerStatus;
+  engineerReviewerId?: string; // Firebase UID of assigned engineer
+  engineerVerifiedMW?: number;
+  engineerRequestedAt?: number;
+  engineerCompletedAt?: number;
+
+  // LOA — utility-specific templates are a future addition; today everyone
+  // uses the generic timeline so we don't store a utility selection.
+  loaStatus: PreConLoaStatus;
+  loaSteps: PreConLoaStep[];
+
+  // External links
+  /** Optional URL to the utility's customer portal / project-tracking page.
+   *  Rendered as "Access utility platform" hyperlink on the site header. */
+  utilityPlatformUrl?: string;
+
+  // Metadata
+  createdAt: number;
+  createdBy: string;
+  updatedAt: number;
+  archivedAt?: number;
 }
